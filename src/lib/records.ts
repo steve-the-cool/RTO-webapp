@@ -17,7 +17,7 @@ export interface RegistryRecord {
   co: string; // c/o
 }
 
-export type Bucket = "clients" | "leads";
+export type Bucket = "clients" | "leads" | "applications" | "customers";
 
 const keyFor = (b: Bucket) => `registry-${b}`;
 
