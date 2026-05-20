@@ -17,7 +17,7 @@ export interface RegistryRecord {
   co: string; // c/o
 }
 
-export type Bucket = "clients" | "leads";
+export type Bucket = "clients" | "leads" | "applications" | "customers";
 
 const keyFor = (b: Bucket) => `registry-${b}`;
 
@@ -32,11 +32,17 @@ const seedLeads: RegistryRecord[] = [
   { id: "l2", srNo: 2, date: "2026-05-16", mvNo: "MH02EF3344", application: "Inquiry", work: "Insurance renewal", name: "Sandeep Kulkarni", status: "In Progress", mo: "9123456780", insurance: "2026-06-30", fitness: "—", tax: "—", co: "—" },
 ];
 
+const seedFor = (b: Bucket): RegistryRecord[] => {
+  if (b === "clients") return seedClients;
+  if (b === "leads") return seedLeads;
+  return [];
+};
+
 export function loadRecords(bucket: Bucket): RegistryRecord[] {
   if (typeof window === "undefined") return [];
   const raw = localStorage.getItem(keyFor(bucket));
   if (!raw) {
-    const seed = bucket === "clients" ? seedClients : seedLeads;
+    const seed = seedFor(bucket);
     localStorage.setItem(keyFor(bucket), JSON.stringify(seed));
     return seed;
   }
