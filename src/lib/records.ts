@@ -10,26 +10,33 @@ export interface RegistryRecord {
   work: string;
   name: string;
   status: RecordStatus;
-  mo: string; // mobile
-  insurance: string; // expiry date or status
+  mo: string;
+  insurance: string;
   fitness: string;
   tax: string;
-  co: string; // c/o
+  co: string;
+  assignee?: string; // staff username
 }
 
-export type Bucket = "clients" | "leads" | "applications" | "customers";
+export type Bucket = "clients" | "leads" | "customers";
 
 const keyFor = (b: Bucket) => `registry-${b}`;
 
+export const STAFF_USERS: { username: string; name: string }[] = [
+  { username: "staff", name: "Front Desk" },
+  { username: "priya", name: "Priya Nair" },
+  { username: "rahul", name: "Rahul Verma" },
+];
+
 const seedClients: RegistryRecord[] = [
-  { id: "c1", srNo: 1, date: "2026-05-02", mvNo: "MH12AB1234", application: "Renewal", work: "Insurance + Fitness", name: "Vikram Malhotra", status: "Completed", mo: "9876501234", insurance: "2027-05-01", fitness: "2027-04-20", tax: "Paid", co: "Rajesh M." },
-  { id: "c2", srNo: 2, date: "2026-05-09", mvNo: "MH14XY7788", application: "Transfer", work: "Ownership transfer", name: "Anita Desai", status: "In Progress", mo: "9876512345", insurance: "2026-11-12", fitness: "2026-09-30", tax: "Due", co: "—" },
-  { id: "c3", srNo: 3, date: "2026-05-14", mvNo: "MH04CD9090", application: "Permit", work: "Commercial permit", name: "Karan Deshmukh", status: "Pending", mo: "9876523456", insurance: "2026-08-21", fitness: "2026-12-15", tax: "Paid", co: "Logistics Co." },
+  { id: "c1", srNo: 1, date: "2026-05-02", mvNo: "MH12AB1234", application: "Renewal", work: "Insurance + Fitness", name: "Vikram Malhotra", status: "Completed", mo: "9876501234", insurance: "2027-05-01", fitness: "2027-04-20", tax: "Paid", co: "Rajesh M.", assignee: "staff" },
+  { id: "c2", srNo: 2, date: "2026-05-09", mvNo: "MH14XY7788", application: "Transfer", work: "Ownership transfer", name: "Anita Desai", status: "In Progress", mo: "9876512345", insurance: "2026-11-12", fitness: "2026-09-30", tax: "Due", co: "—", assignee: "priya" },
+  { id: "c3", srNo: 3, date: "2026-05-14", mvNo: "MH04CD9090", application: "Permit", work: "Commercial permit", name: "Karan Deshmukh", status: "Pending", mo: "9876523456", insurance: "2026-08-21", fitness: "2026-12-15", tax: "Paid", co: "Logistics Co.", assignee: "rahul" },
 ];
 
 const seedLeads: RegistryRecord[] = [
-  { id: "l1", srNo: 1, date: "2026-05-15", mvNo: "—", application: "Inquiry", work: "New registration", name: "Priya Shah", status: "Pending", mo: "9988776655", insurance: "—", fitness: "—", tax: "—", co: "—" },
-  { id: "l2", srNo: 2, date: "2026-05-16", mvNo: "MH02EF3344", application: "Inquiry", work: "Insurance renewal", name: "Sandeep Kulkarni", status: "In Progress", mo: "9123456780", insurance: "2026-06-30", fitness: "—", tax: "—", co: "—" },
+  { id: "l1", srNo: 1, date: "2026-05-15", mvNo: "—", application: "Inquiry", work: "New registration", name: "Priya Shah", status: "Pending", mo: "9988776655", insurance: "—", fitness: "—", tax: "—", co: "—", assignee: "staff" },
+  { id: "l2", srNo: 2, date: "2026-05-16", mvNo: "MH02EF3344", application: "Inquiry", work: "Insurance renewal", name: "Sandeep Kulkarni", status: "In Progress", mo: "9123456780", insurance: "2026-06-30", fitness: "—", tax: "—", co: "—", assignee: "priya" },
 ];
 
 const seedFor = (b: Bucket): RegistryRecord[] => {
@@ -51,6 +58,7 @@ export function loadRecords(bucket: Bucket): RegistryRecord[] {
 
 export function saveRecords(bucket: Bucket, records: RegistryRecord[]) {
   localStorage.setItem(keyFor(bucket), JSON.stringify(records));
+  window.dispatchEvent(new Event("records-change"));
 }
 
 export function emptyRecord(srNo: number): RegistryRecord {
@@ -68,7 +76,11 @@ export function emptyRecord(srNo: number): RegistryRecord {
     fitness: "",
     tax: "",
     co: "",
+    assignee: "",
   };
 }
 
 export const STATUS_OPTIONS: RecordStatus[] = ["Pending", "In Progress", "Completed", "On Hold"];
+
+export const staffLabel = (username?: string) =>
+  STAFF_USERS.find((s) => s.username === username)?.name ?? "";
