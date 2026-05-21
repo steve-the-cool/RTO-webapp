@@ -64,9 +64,9 @@
   --border: oklch(0.92 0.01 80);
   --input: oklch(0.94 0.008 80);
   --ring: oklch(0.68 0.19 45);
-  --sidebar: oklch(0.22 0.02 260);
-  --sidebar-foreground: oklch(0.88 0.01 80);
-  --sidebar-border: oklch(0.3 0.02 260);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.22 0.02 260);
+  --sidebar-border: oklch(0.92 0.01 80);
 }
 
 .dark {
