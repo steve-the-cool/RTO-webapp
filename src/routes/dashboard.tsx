@@ -1,9 +1,9 @@
 import { createFileRoute, redirect, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  LayoutDashboard, FileText, UserPlus, CheckSquare,
+  LayoutDashboard, Users, UserPlus, CheckSquare,
   UserCircle, FolderOpen, BarChart3,
-  Settings as SettingsIcon, LogOut, Menu, Globe, Users,
+  Settings as SettingsIcon, LogOut, Menu, Globe,
 } from "lucide-react";
 import { getSession, logout, type StaffUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ const GROUPS: NavGroup[] = [
     heading: "Operational",
     items: [
       { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
-      { to: "/dashboard/applications", label: "Applications", icon: FileText },
+      { to: "/dashboard/clients", label: "Clients", icon: Users },
       { to: "/dashboard/leads", label: "Leads", icon: UserPlus },
       { to: "/dashboard/tasks", label: "Tasks", icon: CheckSquare },
     ],
@@ -34,7 +34,6 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Database",
     items: [
-      { to: "/dashboard/clients", label: "Clients", icon: Users },
       { to: "/dashboard/customers", label: "Customers", icon: UserCircle },
       { to: "/dashboard/documents", label: "Documents", icon: FolderOpen },
       { to: "/dashboard/reports", label: "Reports", icon: BarChart3 },
