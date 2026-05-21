@@ -43,7 +43,7 @@ function LoginPage() {
 
   return (
     <main className="min-h-screen grid lg:grid-cols-2">
-      <section className="hidden lg:flex flex-col justify-between p-12 bg-sidebar text-sidebar-foreground">
+      <section className="hidden lg:flex flex-col justify-between p-12 bg-foreground text-background">
         <div className="flex items-center gap-3">
           <div className="size-10 rounded-lg bg-primary grid place-items-center font-bold text-primary-foreground">R</div>
           <span className="font-semibold tracking-tight">REGISTRY PRO</span>
@@ -52,11 +52,11 @@ function LoginPage() {
           <h1 className="text-4xl font-bold leading-tight">
             The office <span className="text-primary">command center</span> for RTO operations.
           </h1>
-          <p className="text-sidebar-foreground/70 max-w-md">
+          <p className="text-background/70 max-w-md">
             Track every application, renewal and document — from first inquiry to final delivery.
           </p>
         </div>
-        <div className="text-xs text-sidebar-foreground/50">© {new Date().getFullYear()} Registry Pro</div>
+        <div className="text-xs text-background/50">© {new Date().getFullYear()} Registry Pro</div>
       </section>
 
       <section className="flex items-center justify-center p-6 sm:p-12">
