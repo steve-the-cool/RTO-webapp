@@ -19,7 +19,6 @@ import { Route as DashboardLeadsRouteImport } from './routes/dashboard.leads'
 import { Route as DashboardDocumentsRouteImport } from './routes/dashboard.documents'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
 import { Route as DashboardClientsRouteImport } from './routes/dashboard.clients'
-import { Route as DashboardApplicationsRouteImport } from './routes/dashboard.applications'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -71,16 +70,10 @@ const DashboardClientsRoute = DashboardClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardApplicationsRoute = DashboardApplicationsRouteImport.update({
-  id: '/applications',
-  path: '/applications',
-  getParentRoute: () => DashboardRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
-  '/dashboard/applications': typeof DashboardApplicationsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/documents': typeof DashboardDocumentsRoute
@@ -92,7 +85,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard/applications': typeof DashboardApplicationsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/documents': typeof DashboardDocumentsRoute
@@ -106,7 +98,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
-  '/dashboard/applications': typeof DashboardApplicationsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/documents': typeof DashboardDocumentsRoute
@@ -121,7 +112,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
-    | '/dashboard/applications'
     | '/dashboard/clients'
     | '/dashboard/customers'
     | '/dashboard/documents'
@@ -133,7 +123,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/dashboard/applications'
     | '/dashboard/clients'
     | '/dashboard/customers'
     | '/dashboard/documents'
@@ -146,7 +135,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
-    | '/dashboard/applications'
     | '/dashboard/clients'
     | '/dashboard/customers'
     | '/dashboard/documents'
@@ -234,18 +222,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardClientsRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/applications': {
-      id: '/dashboard/applications'
-      path: '/applications'
-      fullPath: '/dashboard/applications'
-      preLoaderRoute: typeof DashboardApplicationsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
   }
 }
 
 interface DashboardRouteChildren {
-  DashboardApplicationsRoute: typeof DashboardApplicationsRoute
   DashboardClientsRoute: typeof DashboardClientsRoute
   DashboardCustomersRoute: typeof DashboardCustomersRoute
   DashboardDocumentsRoute: typeof DashboardDocumentsRoute
@@ -257,7 +237,6 @@ interface DashboardRouteChildren {
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
-  DashboardApplicationsRoute: DashboardApplicationsRoute,
   DashboardClientsRoute: DashboardClientsRoute,
   DashboardCustomersRoute: DashboardCustomersRoute,
   DashboardDocumentsRoute: DashboardDocumentsRoute,

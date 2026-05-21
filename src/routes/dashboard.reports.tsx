@@ -4,10 +4,10 @@ import { loadRecords, type RegistryRecord, type Bucket } from "@/lib/records";
 
 export const Route = createFileRoute("/dashboard/reports")({ component: ReportsPage });
 
-const BUCKETS: Bucket[] = ["clients", "leads", "applications", "customers"];
+const BUCKETS: Bucket[] = ["clients", "leads", "customers"];
 
 function ReportsPage() {
-  const [data, setData] = useState<Record<Bucket, RegistryRecord[]>>({ clients: [], leads: [], applications: [], customers: [] });
+  const [data, setData] = useState<Record<Bucket, RegistryRecord[]>>({ clients: [], leads: [], customers: [] });
 
   useEffect(() => {
     const next = {} as Record<Bucket, RegistryRecord[]>;

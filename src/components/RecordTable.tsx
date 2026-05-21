@@ -5,10 +5,14 @@ import {
   saveRecords,
   emptyRecord,
   STATUS_OPTIONS,
+  STAFF_USERS,
+  staffLabel,
   type Bucket,
   type RegistryRecord,
   type RecordStatus,
 } from "@/lib/records";
+import { syncTaskFromRecord } from "@/lib/tasks";
+import { getSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,9 +55,14 @@ export function RecordTable({ bucket, title, description }: Props) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<RegistryRecord | null>(null);
   const [open, setOpen] = useState(false);
+  const session = getSession();
+  const isAdmin = session?.role === "admin";
 
   useEffect(() => {
     setRecords(loadRecords(bucket));
+    const handler = () => setRecords(loadRecords(bucket));
+    window.addEventListener("records-change", handler);
+    return () => window.removeEventListener("records-change", handler);
   }, [bucket]);
 
   const filtered = useMemo(() => {
@@ -89,6 +98,7 @@ export function RecordTable({ bucket, title, description }: Props) {
     if (!editing) return;
     const exists = records.some((r) => r.id === editing.id);
     persist(exists ? records.map((r) => (r.id === editing.id ? editing : r)) : [...records, editing]);
+    syncTaskFromRecord(bucket, editing, session?.username ?? "system");
     setOpen(false);
   };
 
@@ -116,12 +126,13 @@ export function RecordTable({ bucket, title, description }: Props) {
                 {COLS.map((c) => (
                   <th key={c.key} className="text-left font-semibold px-3 py-3 whitespace-nowrap">{c.label}</th>
                 ))}
+                <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">ASSIGNEE</th>
                 <th className="px-3 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={COLS.length + 1} className="px-3 py-12 text-center text-muted-foreground">No records yet.</td></tr>
+                <tr><td colSpan={COLS.length + 2} className="px-3 py-12 text-center text-muted-foreground">No records yet.</td></tr>
               )}
               {filtered.map((r) => (
                 <tr key={r.id} className="border-t hover:bg-muted/30">
@@ -141,6 +152,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                   <td className="px-3 py-3 whitespace-nowrap">{r.fitness || "—"}</td>
                   <td className="px-3 py-3 whitespace-nowrap">{r.tax || "—"}</td>
                   <td className="px-3 py-3">{r.co || "—"}</td>
+                  <td className="px-3 py-3 whitespace-nowrap text-xs">{staffLabel(r.assignee) || <span className="text-muted-foreground">Unassigned</span>}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(r)}><Pencil className="size-4" /></Button>
@@ -155,7 +167,7 @@ export function RecordTable({ bucket, title, description }: Props) {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing && records.some((r) => r.id === editing.id) ? "Edit record" : "New record"}</DialogTitle>
           </DialogHeader>
@@ -180,6 +192,20 @@ export function RecordTable({ bucket, title, description }: Props) {
               <Field label="FITNESS"><Input value={editing.fitness} onChange={(e) => setEditing({ ...editing, fitness: e.target.value })} placeholder="Expiry / status" /></Field>
               <Field label="TAX"><Input value={editing.tax} onChange={(e) => setEditing({ ...editing, tax: e.target.value })} placeholder="Paid / Due" /></Field>
               <Field label="C/O"><Input value={editing.co} onChange={(e) => setEditing({ ...editing, co: e.target.value })} /></Field>
+              <Field label={isAdmin ? "ASSIGN TO STAFF" : "ASSIGNED TO"} full>
+                <Select
+                  value={editing.assignee || "__none"}
+                  onValueChange={(v) => setEditing({ ...editing, assignee: v === "__none" ? "" : v })}
+                  disabled={!isAdmin}
+                >
+                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Unassigned</SelectItem>
+                    {STAFF_USERS.map((s) => <SelectItem key={s.username} value={s.username}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {isAdmin && <p className="text-xs text-muted-foreground">A task is auto-created for the assignee and stays in sync with the record status.</p>}
+              </Field>
             </div>
           )}
           <DialogFooter>
