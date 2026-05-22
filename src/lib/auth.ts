@@ -1,12 +1,38 @@
 // Mock staff auth backed by localStorage. Replace with real auth when ready.
+import { STAFF_USERS } from "./records";
+
 const KEY = "registry-staff-session";
 
 export type StaffUser = { username: string; name: string; role: "admin" | "staff" };
 
-const STAFF: Record<string, { password: string; user: StaffUser }> = {
+type Entry = { password: string; user: StaffUser };
+
+// Admin account
+const ACCOUNTS: Record<string, Entry> = {
   admin: { password: "admin123", user: { username: "admin", name: "Office Admin", role: "admin" } },
-  staff: { password: "staff123", user: { username: "staff", name: "Front Desk", role: "staff" } },
 };
+
+// Default passwords for each staff member (username -> password)
+const STAFF_PASSWORDS: Record<string, string> = {
+  staff: "staff123",
+  priya: "priya123",
+  rahul: "rahul123",
+};
+
+// Auto-register every staff user from records.ts so admin-assigned tasks
+// always have a matching login.
+for (const s of STAFF_USERS) {
+  ACCOUNTS[s.username] = {
+    password: STAFF_PASSWORDS[s.username] ?? `${s.username}123`,
+    user: { username: s.username, name: s.name, role: "staff" },
+  };
+}
+
+export const STAFF_CREDENTIALS = STAFF_USERS.map((s) => ({
+  username: s.username,
+  name: s.name,
+  password: ACCOUNTS[s.username].password,
+}));
 
 export function getSession(): StaffUser | null {
   if (typeof window === "undefined") return null;
@@ -16,7 +42,7 @@ export function getSession(): StaffUser | null {
 }
 
 export function login(username: string, password: string): StaffUser {
-  const entry = STAFF[username.trim().toLowerCase()];
+  const entry = ACCOUNTS[username.trim().toLowerCase()];
   if (!entry || entry.password !== password) throw new Error("Invalid credentials");
   localStorage.setItem(KEY, JSON.stringify(entry.user));
   window.dispatchEvent(new Event("auth-change"));
