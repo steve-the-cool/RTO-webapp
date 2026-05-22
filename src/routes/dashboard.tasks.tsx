@@ -7,20 +7,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Trash2, Plus, Link2 } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { STAFF_USERS, staffLabel } from "@/lib/records";
-import { loadTasks, createManualTask, setTaskDone, removeTask, type Task } from "@/lib/tasks";
+import { loadTasks, createManualTask, setTaskDone, removeTask, type Task, type TaskStatus } from "@/lib/tasks";
+import { saveTasks } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard/tasks")({ component: TasksPage });
 
 function TasksPage() {
-  const session = getSession();
-  const isAdmin = session?.role === "admin";
+  const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
-  const [assignee, setAssignee] = useState<string>(session?.username ?? "staff");
-  const [filter, setFilter] = useState<string>(isAdmin ? "all" : (session?.username ?? "staff"));
+  const [assignee, setAssignee] = useState<string>(STAFF_USERS[0]?.username ?? "staff");
+  const [filter, setFilter] = useState<string>("all");
 
   useEffect(() => {
+    setSession(getSession());
     setTasks(loadTasks());
     const handler = () => setTasks(loadTasks());
     window.addEventListener("tasks-change", handler);
@@ -31,18 +32,36 @@ function TasksPage() {
     };
   }, []);
 
+  const isAdmin = session?.role === "admin";
+
   const visible = useMemo(() => {
-    if (!isAdmin) return tasks.filter((t) => t.assignee === session?.username);
+    if (!session) return [];
+    if (!isAdmin) return tasks.filter((t) => t.assignee === session.username);
     if (filter === "all") return tasks;
     return tasks.filter((t) => t.assignee === filter);
-  }, [tasks, isAdmin, filter, session?.username]);
+  }, [tasks, isAdmin, filter, session]);
 
   const pending = visible.filter((t) => !t.done).length;
 
   const add = () => {
-    if (!title.trim()) return;
-    createManualTask({ title: title.trim(), assignee, createdBy: session?.username ?? "system" });
+    if (!isAdmin) return;
+    const trimmed = title.trim();
+    if (!trimmed || !assignee) return;
+    createManualTask({ title: trimmed, assignee, createdBy: session?.username ?? "admin" });
     setTitle("");
+  };
+
+  const updateStatus = (task: Task, status: TaskStatus) => {
+    if (status === "Completed") {
+      setTaskDone(task.id, true);
+    } else {
+      // update status without toggling record completion unless going from done -> not done
+      if (task.done) {
+        setTaskDone(task.id, false);
+      }
+      const all = loadTasks().map((t) => t.id === task.id ? { ...t, status, done: false } : t);
+      saveTasks(all);
+    }
   };
 
   return (
@@ -52,7 +71,7 @@ function TasksPage() {
           <h2 className="text-2xl font-bold tracking-tight">Tasks</h2>
           <p className="text-sm text-muted-foreground">
             {pending} pending • {visible.length} total
-            {isAdmin ? " • Admin view" : " • Your assigned tasks"}
+            {isAdmin ? " • Admin view (all staff)" : " • Your assigned tasks"}
           </p>
         </div>
         {isAdmin && (
@@ -66,21 +85,32 @@ function TasksPage() {
         )}
       </div>
 
-      <div className="rounded-xl border bg-card p-4 space-y-3">
-        <div className="text-sm font-semibold">{isAdmin ? "Assign new task" : "Add a personal task"}</div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title…" onKeyDown={(e) => e.key === "Enter" && add()} />
-          {isAdmin && (
+      {isAdmin ? (
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="text-sm font-semibold">Assign new task to staff</div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Task title…"
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+            />
             <Select value={assignee} onValueChange={setAssignee}>
-              <SelectTrigger className="sm:w-56"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="sm:w-56"><SelectValue placeholder="Choose staff" /></SelectTrigger>
               <SelectContent>
                 {STAFF_USERS.map((s) => <SelectItem key={s.username} value={s.username}>{s.name}</SelectItem>)}
               </SelectContent>
             </Select>
-          )}
-          <Button onClick={add}><Plus className="size-4 mr-1" />Add</Button>
+            <Button type="button" onClick={add} disabled={!title.trim() || !assignee}>
+              <Plus className="size-4 mr-1" />Add task
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground">
+          Tasks are assigned by your admin. Update the status as you progress — completing a linked client/lead automatically marks the task done.
+        </div>
+      )}
 
       <div className="rounded-xl border bg-card divide-y">
         {visible.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">No tasks yet.</div>}
@@ -99,16 +129,17 @@ function TasksPage() {
                     <span className="inline-flex items-center gap-1 text-primary"><Link2 className="size-3" />auto from {t.bucket}</span>
                   </>
                 )}
-                <span>•</span>
-                <span className={cn(
-                  "inline-flex items-center rounded-full border px-2 py-0.5",
-                  t.status === "Completed" ? "border-success/40 text-success bg-success/10" :
-                  t.status === "In Progress" ? "border-primary/40 text-primary bg-primary/10" :
-                  "border-border text-muted-foreground",
-                )}>{t.status}</span>
               </div>
             </div>
-            {(isAdmin || t.manual) && (
+            <Select value={t.status} onValueChange={(v) => updateStatus(t, v as TaskStatus)}>
+              <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Pending">Pending</SelectItem>
+                <SelectItem value="In Progress">In Progress</SelectItem>
+                <SelectItem value="Completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+            {isAdmin && (
               <Button variant="ghost" size="icon" onClick={() => removeTask(t.id)}><Trash2 className="size-4 text-destructive" /></Button>
             )}
           </div>
