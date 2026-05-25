@@ -2,7 +2,7 @@ import { createFileRoute, redirect, Outlet, Link, useRouterState, useNavigate } 
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, UserPlus, CheckSquare,
-  UserCircle, FolderOpen, BarChart3,
+  UserCircle, BarChart3,
   Settings as SettingsIcon, LogOut, Menu, Globe,
 } from "lucide-react";
 import { getSession, logout, type StaffUser } from "@/lib/auth";
@@ -35,7 +35,6 @@ const GROUPS: NavGroup[] = [
     heading: "Database",
     items: [
       { to: "/dashboard/customers", label: "Customers", icon: UserCircle },
-      { to: "/dashboard/documents", label: "Documents", icon: FolderOpen },
       { to: "/dashboard/reports", label: "Reports", icon: BarChart3 },
     ],
   },
