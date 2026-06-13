@@ -25,7 +25,7 @@ import { getSession } from "@/lib/auth";
 import { STAFF_USERS, staffLabel, subscribeToRecords, type Bucket, type RegistryRecord } from "@/lib/records";
 import {
   subscribeToTasks, createManualTask, setTaskDone, softDeleteTask, updateTask,
-  addComment, addAttachment, toggleSubtask, addSubtask, reassignTask,
+  addComment, addAttachment, toggleSubtask, addSubtask, reassignTask, markTaskAsRead, removeTask,
   PRIORITY_OPTIONS, TASK_STATUS_OPTIONS,
   type Task, type TaskStatus, type TaskPriority, type AssociationType, type TaskAttachment,
 } from "@/lib/tasks";
@@ -60,6 +60,20 @@ function formatDate(iso?: string) {
 
 function isOverdue(t: Task) {
   return !!t.dueDate && !t.done && new Date(t.dueDate).getTime() < Date.now();
+}
+
+function getStatusCounts(tasks: Task[]): Record<TaskStatus, number> {
+  const counts: Record<TaskStatus, number> = {
+    "Assigned": 0,
+    "Read": 0,
+    "In Progress": 0,
+    "Completed": 0,
+    "On Hold": 0,
+  };
+  for (const task of tasks) {
+    counts[task.status]++;
+  }
+  return counts;
 }
 
 function TasksPage() {
@@ -164,6 +178,7 @@ function TasksPage() {
     pending: visible.filter((t) => !t.done).length,
     overdue: visible.filter(isOverdue).length,
     completed: visible.filter((t) => t.done).length,
+    statusCounts: getStatusCounts(visible),
   }), [visible, myTasks, allTasks]);
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
@@ -253,6 +268,42 @@ function TasksPage() {
             </div>
           </div>
 
+          {/* Status counts */}
+          <div className="rounded-xl border bg-card p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge className="bg-orange-100 text-orange-700 border-orange-200">
+                  {stats.statusCounts["Assigned"]}
+                </Badge>
+                <span className="text-muted-foreground">Assigned</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200">
+                  {stats.statusCounts["Read"]}
+                </Badge>
+                <span className="text-muted-foreground">Read</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">
+                  {stats.statusCounts["In Progress"]}
+                </Badge>
+                <span className="text-muted-foreground">In Progress</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                  {stats.statusCounts["Completed"]}
+                </Badge>
+                <span className="text-muted-foreground">Completed</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-zinc-100 text-zinc-700 border-zinc-200">
+                  {stats.statusCounts["On Hold"]}
+                </Badge>
+                <span className="text-muted-foreground">On Hold</span>
+              </div>
+            </div>
+          </div>
+
           {/* Task list */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {visible.length === 0 && (
@@ -331,6 +382,42 @@ function TasksPage() {
                   <SelectItem value="due">Due date (soonest)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Status counts */}
+          <div className="rounded-xl border bg-card p-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge className="bg-orange-100 text-orange-700 border-orange-200">
+                  {stats.statusCounts["Assigned"]}
+                </Badge>
+                <span className="text-muted-foreground">Assigned</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200">
+                  {stats.statusCounts["Read"]}
+                </Badge>
+                <span className="text-muted-foreground">Read</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">
+                  {stats.statusCounts["In Progress"]}
+                </Badge>
+                <span className="text-muted-foreground">In Progress</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                  {stats.statusCounts["Completed"]}
+                </Badge>
+                <span className="text-muted-foreground">Completed</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-zinc-100 text-zinc-700 border-zinc-200">
+                  {stats.statusCounts["On Hold"]}
+                </Badge>
+                <span className="text-muted-foreground">On Hold</span>
+              </div>
             </div>
           </div>
 
@@ -467,7 +554,7 @@ function TaskFormDialog({ open, onClose, editing, clients, leads, actor, isAdmin
   const [description, setDescription] = useState("");
   const [assignee, setAssignee] = useState<string>(STAFF_USERS[0]?.username ?? "");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
-  const [status, setStatus] = useState<TaskStatus>("Pending");
+  const [status, setStatus] = useState<TaskStatus>("Assigned");
   const [associationType, setAssociationType] = useState<AssociationType>("none");
   const [recordId, setRecordId] = useState<string>("");
   const [recordSearch, setRecordSearch] = useState("");
@@ -495,7 +582,7 @@ function TaskFormDialog({ open, onClose, editing, clients, leads, actor, isAdmin
     } else {
       setTitle(""); setDescription("");
       setAssignee(STAFF_USERS[0]?.username ?? "");
-      setPriority("Medium"); setStatus("Pending");
+      setPriority("Medium"); setStatus("Assigned");
       setAssociationType("none"); setRecordId(""); setRecordSearch("");
       setDueDate(""); setDueTime(""); setReminderMinutes("0");
     }
@@ -676,15 +763,12 @@ function TaskDetailsSheet({ task, open, onClose, clients, leads, actor, isAdmin,
 
   // Auto-mark task as Read when opened by assignee
   useEffect(() => {
-    if (task && task.status === "Assigned" && task.assignee === actor && !task.readBy) {
-      updateTask(
-        task.id,
-        { status: "Read", readBy: actor, readAt: new Date().toISOString() },
-        actor,
-        "Task opened"
-      );
+    if (!task) return;
+    if (task.status === "Assigned" && task.assignee === actor && !task.readBy) {
+      const userDisplayName = staffLabel(actor) || actor;
+      markTaskAsRead(task.id, actor, userDisplayName);
     }
-  }, [task?.id, task?.status, actor, task?.readBy]);
+  }, [task?.id, task?.status, task?.assignee, task?.readBy, actor]);
 
   if (!task) return null;
   const linked = task.recordId

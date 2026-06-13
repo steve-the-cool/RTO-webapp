@@ -15,7 +15,8 @@ import { db } from "./firebase";
 import { saveRecord, type Bucket, type RegistryRecord, type DeleteReason } from "./records";
 import { createActivity, type ActivityLog } from "./activity";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Re-exports ──────────────────────────────────────────────────────────────
+export type { DeleteReason };
 
 export type TaskStatus = "Assigned" | "Read" | "In Progress" | "Completed" | "On Hold";
 export type TaskPriority = "Low" | "Medium" | "High" | "Urgent";
@@ -70,6 +71,7 @@ export interface Task {
   manual: boolean;
   readBy?: string;
   readAt?: string;
+  acknowledged?: boolean;
   subtasks?: TaskSubtask[];
   progress?: number;
   comments?: TaskComment[];
@@ -253,6 +255,40 @@ export async function reassignTask(
   const now = new Date().toISOString();
   await updateDoc(doc(db, COL, taskId), {
     assignee: newAssignee,
+    lastUpdatedBy: actor,
+    lastUpdatedAt: now,
+    activity: arrayUnion(entry),
+    activityLogs: arrayUnion(actLog),
+  });
+}
+
+/**
+ * Mark a task as read by the current assignee.
+ * Automatically called when the assignee opens the task for the first time.
+ */
+export async function markTaskAsRead(
+  taskId: string,
+  actor: string,
+  userName: string, // Full name for display in activity log
+): Promise<void> {
+  const { getDoc } = await import("firebase/firestore");
+  const taskDoc = await getDoc(doc(db, COL, taskId));
+  if (!taskDoc.exists()) throw new Error("Task not found");
+
+  const task = taskDoc.data() as Task;
+
+  // Only mark as read if not already read
+  if (task.readBy) return;
+
+  const now = new Date().toISOString();
+  const message = `Task viewed by ${userName}`;
+  const entry = activityEntry(actor, message);
+  const actLog = createActivity(actor, message, "read", "", userName);
+
+  await updateDoc(doc(db, COL, taskId), {
+    readBy: actor,
+    readAt: now,
+    status: "Read",
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
