@@ -1,11 +1,11 @@
 {
-  "buildCommand": "bun run build",
-  "outputDirectory": "dist/public/client",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/client",
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/assets/:path*",
-      "destination": "/assets/:path*"
+      "source": "/assets/*",
+      "destination": "/assets/*"
     },
     {
       "source": "/(.*)",
