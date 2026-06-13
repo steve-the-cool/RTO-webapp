@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2 } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Download, Printer } from "lucide-react";
 import { subscribeToRecords, type RegistryRecord, type Bucket } from "@/lib/records";
+import { generateAccountingPDF, printWindow } from "@/lib/pdfGenerator";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard/accounting")({
@@ -69,9 +71,32 @@ function AccountingDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Accounting & Revenue</h2>
-        <p className="text-sm text-muted-foreground">Financial overview and payment tracking</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Accounting & Revenue</h2>
+          <p className="text-sm text-muted-foreground">Financial overview and payment tracking</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateAccountingPDF(allRecords, {
+              totalServiceAmount: metrics.totalServiceAmount,
+              totalAmountReceived: metrics.totalAmountReceived,
+              totalPendingAmount: metrics.totalPendingAmount,
+              collectionRate: metrics.collectionRate,
+            })}
+          >
+            <Download className="size-4 mr-1" />Export PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={printWindow}
+          >
+            <Printer className="size-4 mr-1" />Print
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}

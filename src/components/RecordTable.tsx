@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Download, Printer } from "lucide-react";
 import {
   subscribeToRecords,
   saveRecord,
@@ -19,6 +19,7 @@ import {
 import { syncTaskFromRecord } from "@/lib/tasks";
 import { getSession } from "@/lib/auth";
 import { transformInput, getForceCapsSetting } from "@/lib/capitalize-settings";
+import { generateRecordPDF, printWindow } from "@/lib/pdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -363,9 +364,33 @@ export function RecordTable({ bucket, title, description }: Props) {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
-            <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <div className="flex gap-2 flex-1">
+              {editing && !records.some((r) => r.id === editing.id) ? null : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => generateRecordPDF(editing || emptyRecord(1), bucket)}
+                    disabled={saving}
+                  >
+                    <Download className="size-4 mr-1" />Export PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={printWindow}
+                    disabled={saving}
+                  >
+                    <Printer className="size-4 mr-1" />Print
+                  </Button>
+                </>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+              <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

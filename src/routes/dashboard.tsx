@@ -2,7 +2,7 @@ import { createFileRoute, redirect, Outlet, Link, useRouterState, useNavigate } 
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, UserPlus, CheckSquare,
-  UserCircle, BarChart3, DollarSign,
+  UserCircle, BarChart3, DollarSign, LineChart,
   Settings as SettingsIcon, LogOut, Menu, Globe,
 } from "lucide-react";
 import { getSession, logout, type StaffUser } from "@/lib/auth";
@@ -42,6 +42,7 @@ const GROUPS: NavGroup[] = [
     heading: "Financial",
     items: [
       { to: "/dashboard/accounting", label: "Accounting", icon: DollarSign },
+      { to: "/dashboard/analytics", label: "Analytics", icon: LineChart },
     ],
   },
   {

@@ -19,6 +19,7 @@ import { Route as DashboardLeadsRouteImport } from './routes/dashboard.leads'
 import { Route as DashboardDocumentsRouteImport } from './routes/dashboard.documents'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
 import { Route as DashboardClientsRouteImport } from './routes/dashboard.clients'
+import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
 import { Route as DashboardAccountingRouteImport } from './routes/dashboard.accounting'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -71,6 +72,11 @@ const DashboardClientsRoute = DashboardClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardAccountingRoute = DashboardAccountingRouteImport.update({
   id: '/accounting',
   path: '/accounting',
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/accounting': typeof DashboardAccountingRoute
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/documents': typeof DashboardDocumentsRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/accounting': typeof DashboardAccountingRoute
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/documents': typeof DashboardDocumentsRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/accounting': typeof DashboardAccountingRoute
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/documents': typeof DashboardDocumentsRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/accounting'
+    | '/dashboard/analytics'
     | '/dashboard/clients'
     | '/dashboard/customers'
     | '/dashboard/documents'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard/accounting'
+    | '/dashboard/analytics'
     | '/dashboard/clients'
     | '/dashboard/customers'
     | '/dashboard/documents'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/accounting'
+    | '/dashboard/analytics'
     | '/dashboard/clients'
     | '/dashboard/customers'
     | '/dashboard/documents'
@@ -234,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardClientsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/analytics': {
+      id: '/dashboard/analytics'
+      path: '/analytics'
+      fullPath: '/dashboard/analytics'
+      preLoaderRoute: typeof DashboardAnalyticsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/accounting': {
       id: '/dashboard/accounting'
       path: '/accounting'
@@ -246,6 +265,7 @@ declare module '@tanstack/react-router' {
 
 interface DashboardRouteChildren {
   DashboardAccountingRoute: typeof DashboardAccountingRoute
+  DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardClientsRoute: typeof DashboardClientsRoute
   DashboardCustomersRoute: typeof DashboardCustomersRoute
   DashboardDocumentsRoute: typeof DashboardDocumentsRoute
@@ -258,6 +278,7 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAccountingRoute: DashboardAccountingRoute,
+  DashboardAnalyticsRoute: DashboardAnalyticsRoute,
   DashboardClientsRoute: DashboardClientsRoute,
   DashboardCustomersRoute: DashboardCustomersRoute,
   DashboardDocumentsRoute: DashboardDocumentsRoute,

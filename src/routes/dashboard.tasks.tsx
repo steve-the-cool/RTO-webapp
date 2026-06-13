@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import {
   Trash2, Plus, Link2, Search, Pencil, CheckCircle2, Eye, Paperclip, Send,
-  Calendar as CalIcon, Clock, AlertTriangle, Loader2, ExternalLink, Users,
+  Calendar as CalIcon, Clock, AlertTriangle, Loader2, ExternalLink, Users, Download, Printer,
 } from "lucide-react";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
@@ -29,6 +29,7 @@ import {
   PRIORITY_OPTIONS, TASK_STATUS_OPTIONS,
   type Task, type TaskStatus, type TaskPriority, type AssociationType, type TaskAttachment,
 } from "@/lib/tasks";
+import { generateTaskPDF, printWindow } from "@/lib/pdfGenerator";
 import { cn } from "@/lib/utils";
 import { DeleteTaskDialog } from "@/components/DeleteTaskDialog";
 
@@ -830,7 +831,24 @@ function TaskDetailsSheet({ task, open, onClose, clients, leads, actor, isAdmin,
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-6 mt-4">
+        <div className="flex gap-2 mt-4 mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateTaskPDF(task)}
+          >
+            <Download className="size-4 mr-1" />Export PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={printWindow}
+          >
+            <Printer className="size-4 mr-1" />Print
+          </Button>
+        </div>
+
+        <div className="space-y-6">
           {/* Quick status & reassignment */}
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
