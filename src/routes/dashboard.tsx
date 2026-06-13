@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, UserPlus, CheckSquare,
   UserCircle, BarChart3, DollarSign, LineChart,
-  Settings as SettingsIcon, LogOut, Menu, Globe, Target,
+  Settings as SettingsIcon, LogOut, Menu, Globe, Target, Users2,
+  Shield, CheckCircle, Lightbulb, FileText, Zap,
 } from "lucide-react";
 import { getSession, logout, type StaffUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -34,8 +35,25 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Database",
     items: [
+      { to: "/dashboard/all-clients", label: "All Clients", icon: Users2 },
       { to: "/dashboard/customers", label: "Customers", icon: UserCircle },
       { to: "/dashboard/reports", label: "Reports", icon: BarChart3 },
+    ],
+  },
+  {
+    heading: "Services",
+    items: [
+      { to: "/dashboard/service/insurance", label: "Insurance", icon: Shield },
+      { to: "/dashboard/service/fitness", label: "Fitness", icon: CheckCircle },
+      { to: "/dashboard/service/permit", label: "Permit", icon: FileText },
+      { to: "/dashboard/service/gujarat-permit", label: "Gujarat Permit", icon: FileText },
+      { to: "/dashboard/service/national-permit", label: "National Permit", icon: FileText },
+      { to: "/dashboard/service/tax", label: "Tax", icon: DollarSign },
+      { to: "/dashboard/service/puc", label: "PUC", icon: Lightbulb },
+      { to: "/dashboard/service/license", label: "License", icon: FileText },
+      { to: "/dashboard/service/rc-transfer", label: "RC Transfer", icon: Zap },
+      { to: "/dashboard/service/hp-addition", label: "HP Addition", icon: Zap },
+      { to: "/dashboard/service/hp-termination", label: "HP Termination", icon: Zap },
     ],
   },
   {

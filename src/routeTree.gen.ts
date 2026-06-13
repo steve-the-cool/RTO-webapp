@@ -21,7 +21,9 @@ import { Route as DashboardDocumentsRouteImport } from './routes/dashboard.docum
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
 import { Route as DashboardClientsRouteImport } from './routes/dashboard.clients'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
+import { Route as DashboardAllClientsRouteImport } from './routes/dashboard.all-clients'
 import { Route as DashboardAccountingRouteImport } from './routes/dashboard.accounting'
+import { Route as DashboardServiceServiceTypeRouteImport } from './routes/dashboard.service.$serviceType'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -83,16 +85,28 @@ const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardAllClientsRoute = DashboardAllClientsRouteImport.update({
+  id: '/all-clients',
+  path: '/all-clients',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardAccountingRoute = DashboardAccountingRouteImport.update({
   id: '/accounting',
   path: '/accounting',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardServiceServiceTypeRoute =
+  DashboardServiceServiceTypeRouteImport.update({
+    id: '/service/$serviceType',
+    path: '/service/$serviceType',
+    getParentRoute: () => DashboardRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/accounting': typeof DashboardAccountingRoute
+  '/dashboard/all-clients': typeof DashboardAllClientsRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
@@ -103,10 +117,12 @@ export interface FileRoutesByFullPath {
   '/dashboard/targets': typeof DashboardTargetsRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/accounting': typeof DashboardAccountingRoute
+  '/dashboard/all-clients': typeof DashboardAllClientsRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
@@ -117,12 +133,14 @@ export interface FileRoutesByTo {
   '/dashboard/targets': typeof DashboardTargetsRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/accounting': typeof DashboardAccountingRoute
+  '/dashboard/all-clients': typeof DashboardAllClientsRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/clients': typeof DashboardClientsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
@@ -133,6 +151,7 @@ export interface FileRoutesById {
   '/dashboard/targets': typeof DashboardTargetsRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -140,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/dashboard/accounting'
+    | '/dashboard/all-clients'
     | '/dashboard/analytics'
     | '/dashboard/clients'
     | '/dashboard/customers'
@@ -150,10 +170,12 @@ export interface FileRouteTypes {
     | '/dashboard/targets'
     | '/dashboard/tasks'
     | '/dashboard/'
+    | '/dashboard/service/$serviceType'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/dashboard/accounting'
+    | '/dashboard/all-clients'
     | '/dashboard/analytics'
     | '/dashboard/clients'
     | '/dashboard/customers'
@@ -164,11 +186,13 @@ export interface FileRouteTypes {
     | '/dashboard/targets'
     | '/dashboard/tasks'
     | '/dashboard'
+    | '/dashboard/service/$serviceType'
   id:
     | '__root__'
     | '/'
     | '/dashboard'
     | '/dashboard/accounting'
+    | '/dashboard/all-clients'
     | '/dashboard/analytics'
     | '/dashboard/clients'
     | '/dashboard/customers'
@@ -179,6 +203,7 @@ export interface FileRouteTypes {
     | '/dashboard/targets'
     | '/dashboard/tasks'
     | '/dashboard/'
+    | '/dashboard/service/$serviceType'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -272,6 +297,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAnalyticsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/all-clients': {
+      id: '/dashboard/all-clients'
+      path: '/all-clients'
+      fullPath: '/dashboard/all-clients'
+      preLoaderRoute: typeof DashboardAllClientsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/accounting': {
       id: '/dashboard/accounting'
       path: '/accounting'
@@ -279,11 +311,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAccountingRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/service/$serviceType': {
+      id: '/dashboard/service/$serviceType'
+      path: '/service/$serviceType'
+      fullPath: '/dashboard/service/$serviceType'
+      preLoaderRoute: typeof DashboardServiceServiceTypeRouteImport
+      parentRoute: typeof DashboardRoute
+    }
   }
 }
 
 interface DashboardRouteChildren {
   DashboardAccountingRoute: typeof DashboardAccountingRoute
+  DashboardAllClientsRoute: typeof DashboardAllClientsRoute
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardClientsRoute: typeof DashboardClientsRoute
   DashboardCustomersRoute: typeof DashboardCustomersRoute
@@ -294,10 +334,12 @@ interface DashboardRouteChildren {
   DashboardTargetsRoute: typeof DashboardTargetsRoute
   DashboardTasksRoute: typeof DashboardTasksRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardServiceServiceTypeRoute: typeof DashboardServiceServiceTypeRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAccountingRoute: DashboardAccountingRoute,
+  DashboardAllClientsRoute: DashboardAllClientsRoute,
   DashboardAnalyticsRoute: DashboardAnalyticsRoute,
   DashboardClientsRoute: DashboardClientsRoute,
   DashboardCustomersRoute: DashboardCustomersRoute,
@@ -308,6 +350,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardTargetsRoute: DashboardTargetsRoute,
   DashboardTasksRoute: DashboardTasksRoute,
   DashboardIndexRoute: DashboardIndexRoute,
+  DashboardServiceServiceTypeRoute: DashboardServiceServiceTypeRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
