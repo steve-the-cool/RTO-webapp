@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, UserPlus, CheckSquare,
   UserCircle, BarChart3, DollarSign, LineChart,
-  Settings as SettingsIcon, LogOut, Menu, Globe,
+  Settings as SettingsIcon, LogOut, Menu, Globe, Target,
 } from "lucide-react";
 import { getSession, logout, type StaffUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { to: "/dashboard/accounting", label: "Accounting", icon: DollarSign },
       { to: "/dashboard/analytics", label: "Analytics", icon: LineChart },
+      { to: "/dashboard/targets", label: "Target Management", icon: Target },
     ],
   },
   {
