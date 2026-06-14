@@ -125,7 +125,20 @@ export const SERVICE_CONFIGS: Record<ServiceType, ServiceConfig> = {
  * Example: "rc-transfer" -> "RC Transfer"
  */
 export function normalizeServiceType(slug: string): ServiceType | null {
-  // Convert slug to title case
+  // Special mappings for acronyms
+  const acronymMap: Record<string, ServiceType> = {
+    "puc": "PUC",
+    "rc-transfer": "RC Transfer",
+    "hp-addition": "HP Addition",
+    "hp-termination": "HP Termination",
+  };
+
+  // Check for exact acronym match first
+  if (acronymMap[slug.toLowerCase()]) {
+    return acronymMap[slug.toLowerCase()];
+  }
+
+  // Convert slug to title case for other service types
   const normalized = slug
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())

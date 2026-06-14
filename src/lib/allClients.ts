@@ -224,18 +224,45 @@ export function subscribeToAllClients(
     customers: [],
   };
   let allCustomers: CustomerProfile[] = [];
-  let readyCount = 0;
+
+  // Track readiness for each data source
+  let ready = {
+    clients: false,
+    leads: false,
+    customers: false,
+    profiles: false,
+  };
+
+  let initialLoadComplete = false;
 
   const unsubscribers: Array<() => void> = [];
+
+  /**
+   * Check if all data sources are ready and trigger update if so
+   */
+  const checkAndUpdate = () => {
+    const allReady = ready.clients && ready.leads && ready.customers && ready.profiles;
+
+    if (allReady) {
+      initialLoadComplete = true;
+      const clients = aggregateAllClients(recordsByBucket, allCustomers);
+      callback(clients);
+    }
+  };
 
   // Subscribe to records
   buckets.forEach((bucket) => {
     const unsub = subscribeToRecords(bucket, (records) => {
       recordsByBucket[bucket] = records;
-      if (readyCount === 4) {
-        // All subscriptions ready
+      ready[bucket] = true;
+
+      // After initial load, always update
+      if (initialLoadComplete) {
         const clients = aggregateAllClients(recordsByBucket, allCustomers);
         callback(clients);
+      } else {
+        // During initial load, wait for all sources
+        checkAndUpdate();
       }
     });
     unsubscribers.push(unsub);
@@ -244,10 +271,15 @@ export function subscribeToAllClients(
   // Subscribe to customers
   const unsub = subscribeToCustomers((customers) => {
     allCustomers = customers;
-    readyCount += 1;
-    if (readyCount === 4) {
+    ready.profiles = true;
+
+    // After initial load, always update
+    if (initialLoadComplete) {
       const clients = aggregateAllClients(recordsByBucket, allCustomers);
       callback(clients);
+    } else {
+      // During initial load, wait for all sources
+      checkAndUpdate();
     }
   });
   unsubscribers.push(unsub);
