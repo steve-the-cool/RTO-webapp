@@ -24,6 +24,81 @@ export type DeleteReason = "Duplicate Entry" | "Wrong Customer" | "Testing Data"
 
 export type PaymentStatus = "Paid" | "Partially Paid" | "Unpaid";
 
+export type ServiceType = 
+  | "Insurance"
+  | "Fitness"
+  | "Permit"
+  | "Gujarat Permit"
+  | "National Permit"
+  | "Tax"
+  | "PUC"
+  | "License"
+  | "RC Transfer"
+  | "HP Addition"
+  | "HP Termination";
+
+export type ServiceStatus = "Pending" | "In Progress" | "Completed" | "On Hold" | "Renewal Due";
+
+export const SERVICE_TYPES: ServiceType[] = [
+  "Insurance",
+  "Fitness",
+  "Permit",
+  "Gujarat Permit",
+  "National Permit",
+  "Tax",
+  "PUC",
+  "License",
+  "RC Transfer",
+  "HP Addition",
+  "HP Termination",
+];
+
+/**
+ * Maps URL-safe route parameters (lowercase/dash-separated) to proper ServiceType names.
+ * Used to resolve service types from dynamic routes like /dashboard/service/{serviceType}
+ */
+export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
+  insurance: "Insurance",
+  fitness: "Fitness",
+  permit: "Permit",
+  "gujarat-permit": "Gujarat Permit",
+  "national-permit": "National Permit",
+  tax: "Tax",
+  puc: "PUC",
+  license: "License",
+  "rc-transfer": "RC Transfer",
+  "hp-addition": "HP Addition",
+  "hp-termination": "HP Termination",
+};
+
+/**
+ * CRITICAL: Normalize any service type value to canonical form.
+ * Handles: "insurance" → "Insurance", "INSURANCE" → "Insurance", "Insurance" → "Insurance"
+ * MUST be called before every Firestore write to maintain data consistency.
+ */
+export function normalizeServiceType(value: any): ServiceType | null {
+  if (!value || typeof value !== "string") return null;
+  
+  const trimmed = value.trim();
+  
+  // Check if already canonical (in SERVICE_TYPES)
+  if (SERVICE_TYPES.includes(trimmed as ServiceType)) {
+    return trimmed as ServiceType;
+  }
+  
+  // Try mapping from route parameter format
+  const mapped = SERVICE_ROUTE_MAP[trimmed.toLowerCase()];
+  if (mapped) return mapped;
+  
+  // Try converting from lowercase slug format
+  const asSlug = trimmed.toLowerCase().replace(/\s+/g, "-");
+  const mapped2 = SERVICE_ROUTE_MAP[asSlug];
+  if (mapped2) return mapped2;
+  
+  console.warn("[normalizeServiceType] Unknown service type:", value, "- not in SERVICE_TYPES or SERVICE_ROUTE_MAP");
+  return null;
+}
+
 export interface RegistryRecord {
   id: string;
   srNo: number;
@@ -52,6 +127,10 @@ export interface RegistryRecord {
   amountReceived?: number; // Amount paid
   paymentDate?: string; // Date of last payment
   paymentStatus?: PaymentStatus; // Calculated: Paid | Partially Paid | Unpaid
+  // Service Management fields
+  serviceType?: ServiceType; // Type of service (Insurance, Fitness, Permit, etc.)
+  serviceStatus?: ServiceStatus; // Service-specific status
+  serviceDueDate?: string; // ISO date string for service renewal
 }
 
 export type Bucket = "clients" | "leads" | "customers";
@@ -66,6 +145,55 @@ export const STAFF_USERS: { username: string; name: string }[] = [
 
 export const staffLabel = (username?: string) =>
   STAFF_USERS.find((s) => s.username === username)?.name ?? "";
+
+// ─── Service helpers ──────────────────────────────────────────────────────────
+
+export const serviceLabel = (type?: ServiceType): string => {
+  if (!type) return "";
+  const labels: Record<ServiceType, string> = {
+    "Insurance": "🛡️ Insurance",
+    "Fitness": "💪 Fitness",
+    "Permit": "📜 Permit",
+    "Gujarat Permit": "📍 Gujarat Permit",
+    "National Permit": "🇮🇳 National Permit",
+    "Tax": "💰 Tax",
+    "PUC": "🌍 PUC",
+    "License": "🔖 License",
+    "RC Transfer": "🔄 RC Transfer",
+    "HP Addition": "➕ HP Addition",
+    "HP Termination": "❌ HP Termination",
+  };
+  return labels[type] ?? type;
+};
+
+export const serviceColor = (type?: ServiceType): string => {
+  if (!type) return "bg-gray-500";
+  const colors: Record<ServiceType, string> = {
+    "Insurance": "bg-blue-500",
+    "Fitness": "bg-green-500",
+    "Permit": "bg-purple-500",
+    "Gujarat Permit": "bg-purple-600",
+    "National Permit": "bg-purple-700",
+    "Tax": "bg-yellow-500",
+    "PUC": "bg-emerald-500",
+    "License": "bg-cyan-500",
+    "RC Transfer": "bg-orange-500",
+    "HP Addition": "bg-pink-500",
+    "HP Termination": "bg-red-500",
+  };
+  return colors[type] ?? "bg-gray-500";
+};
+
+/**
+ * Convert ServiceType to URL-safe route parameter (lowercase, dash-separated).
+ * Used for generating service dashboard URLs.
+ */
+export const serviceToUrlParam = (type?: ServiceType): string => {
+  if (!type) return "";
+  return type
+    .toLowerCase()
+    .replace(/\s+/g, "-"); // Replace spaces with dashes
+};
 
 // ─── Accounting helpers ────────────────────────────────────────────────────────
 
@@ -135,6 +263,9 @@ export async function saveRecord(
     "amountReceived",
     "paymentDate",
     "paymentStatus",
+    "serviceType",
+    "serviceStatus",
+    "serviceDueDate",
   ];
   const activities: ActivityLog[] = [];
 
@@ -156,10 +287,52 @@ export async function saveRecord(
     }
   }
 
+  // CRITICAL: Normalize serviceType before saving
+  const normalized = {
+    ...record,
+    serviceType: record.serviceType ? normalizeServiceType(record.serviceType) : undefined,
+  };
+  
+  // Validation: Ensure serviceType is properly normalized
+  if (record.serviceType) {
+    if (!normalized.serviceType) {
+      console.error(
+        "[saveRecord] ERROR: Invalid serviceType provided - normalization failed!",
+        {
+          inputServiceType: record.serviceType,
+          normalizedServiceType: normalized.serviceType,
+          validServiceTypes: SERVICE_TYPES,
+        },
+      );
+      throw new Error(
+        `Invalid serviceType: "${record.serviceType}". Valid types are: ${SERVICE_TYPES.join(", ")}`
+      );
+    }
+    
+    console.log(
+      `[saveRecord] ${existing ? "UPDATE" : "CREATE"}: Normalizing serviceType`,
+      {
+        bucket,
+        recordId: record.id,
+        clientName: record.name,
+        inputServiceType: record.serviceType,
+        normalizedServiceType: normalized.serviceType,
+        match: record.serviceType === normalized.serviceType,
+      },
+    );
+
+    // Validation: Check if normalization changed the value
+    if (record.serviceType !== normalized.serviceType) {
+      console.warn(
+        `[saveRecord] WARNING: serviceType was normalized from "${record.serviceType}" to "${normalized.serviceType}"`,
+      );
+    }
+  }
+
   // Prepare data with updated metadata
   const now = new Date().toISOString();
   const data = {
-    ...record,
+    ...normalized,
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activityLogs: existing?.activityLogs

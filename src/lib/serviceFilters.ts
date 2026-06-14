@@ -1,34 +1,5 @@
 // Service Filters — Service type definitions and filtering utilities.
-import { subscribeToRecords, type RegistryRecord, type Bucket } from "./records";
-
-// ─── Service Type Definitions ──────────────────────────────────────────────────
-
-export type ServiceType =
-  | "Insurance"
-  | "Fitness"
-  | "Permit"
-  | "Gujarat Permit"
-  | "National Permit"
-  | "Tax"
-  | "PUC"
-  | "License"
-  | "RC Transfer"
-  | "HP Addition"
-  | "HP Termination";
-
-export const SERVICE_TYPES: ServiceType[] = [
-  "Insurance",
-  "Fitness",
-  "Permit",
-  "Gujarat Permit",
-  "National Permit",
-  "Tax",
-  "PUC",
-  "License",
-  "RC Transfer",
-  "HP Addition",
-  "HP Termination",
-];
+import { subscribeToRecords, normalizeServiceType, SERVICE_TYPES, type RegistryRecord, type Bucket, type ServiceType } from "./records";
 
 export interface ServiceConfig {
   type: ServiceType;
@@ -118,38 +89,7 @@ export const SERVICE_CONFIGS: Record<ServiceType, ServiceConfig> = {
   },
 };
 
-// ─── Normalization helper ─────────────────────────────────────────────────────
-
-/**
- * Normalize a service slug to a ServiceType.
- * Example: "rc-transfer" -> "RC Transfer"
- */
-export function normalizeServiceType(slug: string): ServiceType | null {
-  // Special mappings for acronyms
-  const acronymMap: Record<string, ServiceType> = {
-    "puc": "PUC",
-    "rc-transfer": "RC Transfer",
-    "hp-addition": "HP Addition",
-    "hp-termination": "HP Termination",
-  };
-
-  // Check for exact acronym match first
-  if (acronymMap[slug.toLowerCase()]) {
-    return acronymMap[slug.toLowerCase()];
-  }
-
-  // Convert slug to title case for other service types
-  const normalized = slug
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-
-  if (SERVICE_TYPES.includes(normalized as ServiceType)) {
-    return normalized as ServiceType;
-  }
-
-  return null;
-}
+// ─── Slug conversion helper ────────────────────────────────────────────────────
 
 /**
  * Convert ServiceType to slug.

@@ -11,6 +11,8 @@ import {
   STATUS_OPTIONS,
   STAFF_USERS,
   staffLabel,
+  SERVICE_TYPES,
+  serviceLabel,
   type Bucket,
   type RegistryRecord,
   type RecordStatus,
@@ -356,6 +358,30 @@ export function RecordTable({ bucket, title, description }: Props) {
                   </SelectContent>
                 </Select>
                 {isAdmin && <p className="text-xs text-muted-foreground">A task is auto-created for the assignee and stays in sync with the record status.</p>}
+              </Field>
+
+              {/* Service Management Fields */}
+              <div className="sm:col-span-2 border-t pt-4 mt-2">
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">Service Management</h3>
+              </div>
+              <Field label="Service Type" full>
+                <Select
+                  value={editing.serviceType || ""}
+                  onValueChange={(v) => setEditing({ ...editing, serviceType: v as any })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select a service type..." /></SelectTrigger>
+                  <SelectContent>
+                    {SERVICE_TYPES.map((s) => <SelectItem key={s} value={s}>{serviceLabel(s)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Service type must be selected for service management.</p>
+              </Field>
+              <Field label="Service Due Date">
+                <Input
+                  type="date"
+                  value={editing.serviceDueDate || ""}
+                  onChange={(e) => setEditing({ ...editing, serviceDueDate: e.target.value })}
+                />
               </Field>
 
               {/* WhatsApp Quick Actions */}

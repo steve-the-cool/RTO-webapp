@@ -1,10 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { getForceCapsSetting, setForceCapsSetting } from "@/lib/capitalize-settings";
+import { getMigrationStatus } from "@/lib/migration";
+import { ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface Settings {
   officeName: string;
@@ -21,6 +23,7 @@ function SettingsPage() {
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [forceCaps, setForceCapsState] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<{ unmigratedRecords: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -28,6 +31,11 @@ function SettingsPage() {
       if (raw) setS({ ...DEFAULTS, ...JSON.parse(raw) });
     } catch {}
     setForceCapsState(getForceCapsSetting());
+    
+    // Load migration status
+    getMigrationStatus()
+      .then(status => setMigrationStatus({ unmigratedRecords: status.unmigratedRecords }))
+      .catch(err => console.error("Error loading migration status:", err));
   }, []);
 
   const save = () => {
@@ -87,6 +95,42 @@ function SettingsPage() {
         <p className="text-sm text-muted-foreground">Permanently delete all locally stored records and tasks.</p>
         <Button variant="destructive" onClick={reset}>Clear all data</Button>
       </div>
+
+      {migrationStatus && migrationStatus.unmigratedRecords > 0 && (
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-6 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="size-5 text-orange-600 mt-0.5 flex-shrink-0" />
+            <div className="space-y-3 flex-1">
+              <div>
+                <h3 className="font-semibold text-orange-700">Service Type Migration Required</h3>
+                <p className="text-sm text-orange-600 mt-1">
+                  {migrationStatus.unmigratedRecords} record(s) need to be migrated to support service module filtering.
+                </p>
+              </div>
+              <Link to="/dashboard/settings/migration" className="inline-block">
+                <Button variant="default" size="sm">
+                  <ArrowRight className="size-4 mr-2" />
+                  Go to Migration Tool
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {migrationStatus && migrationStatus.unmigratedRecords === 0 && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-6 space-y-3">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="size-5 text-green-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-green-700">All Records Migrated</h3>
+              <p className="text-sm text-green-600 mt-1">
+                All records have been successfully migrated and are ready for service module filtering.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ import { Route as DashboardClientsRouteImport } from './routes/dashboard.clients
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
 import { Route as DashboardAllClientsRouteImport } from './routes/dashboard.all-clients'
 import { Route as DashboardAccountingRouteImport } from './routes/dashboard.accounting'
+import { Route as DashboardSettingsMigrationRouteImport } from './routes/dashboard.settings.migration'
 import { Route as DashboardServiceServiceTypeRouteImport } from './routes/dashboard.service.$serviceType'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -95,6 +96,12 @@ const DashboardAccountingRoute = DashboardAccountingRouteImport.update({
   path: '/accounting',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardSettingsMigrationRoute =
+  DashboardSettingsMigrationRouteImport.update({
+    id: '/migration',
+    path: '/migration',
+    getParentRoute: () => DashboardSettingsRoute,
+  } as any)
 const DashboardServiceServiceTypeRoute =
   DashboardServiceServiceTypeRouteImport.update({
     id: '/service/$serviceType',
@@ -113,11 +120,12 @@ export interface FileRoutesByFullPath {
   '/dashboard/documents': typeof DashboardDocumentsRoute
   '/dashboard/leads': typeof DashboardLeadsRoute
   '/dashboard/reports': typeof DashboardReportsRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/settings': typeof DashboardSettingsRouteWithChildren
   '/dashboard/targets': typeof DashboardTargetsRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
+  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -129,11 +137,12 @@ export interface FileRoutesByTo {
   '/dashboard/documents': typeof DashboardDocumentsRoute
   '/dashboard/leads': typeof DashboardLeadsRoute
   '/dashboard/reports': typeof DashboardReportsRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/settings': typeof DashboardSettingsRouteWithChildren
   '/dashboard/targets': typeof DashboardTargetsRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard': typeof DashboardIndexRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
+  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -147,11 +156,12 @@ export interface FileRoutesById {
   '/dashboard/documents': typeof DashboardDocumentsRoute
   '/dashboard/leads': typeof DashboardLeadsRoute
   '/dashboard/reports': typeof DashboardReportsRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/settings': typeof DashboardSettingsRouteWithChildren
   '/dashboard/targets': typeof DashboardTargetsRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
+  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/dashboard/tasks'
     | '/dashboard/'
     | '/dashboard/service/$serviceType'
+    | '/dashboard/settings/migration'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/dashboard/tasks'
     | '/dashboard'
     | '/dashboard/service/$serviceType'
+    | '/dashboard/settings/migration'
   id:
     | '__root__'
     | '/'
@@ -204,6 +216,7 @@ export interface FileRouteTypes {
     | '/dashboard/tasks'
     | '/dashboard/'
     | '/dashboard/service/$serviceType'
+    | '/dashboard/settings/migration'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAccountingRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/settings/migration': {
+      id: '/dashboard/settings/migration'
+      path: '/migration'
+      fullPath: '/dashboard/settings/migration'
+      preLoaderRoute: typeof DashboardSettingsMigrationRouteImport
+      parentRoute: typeof DashboardSettingsRoute
+    }
     '/dashboard/service/$serviceType': {
       id: '/dashboard/service/$serviceType'
       path: '/service/$serviceType'
@@ -321,6 +341,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DashboardSettingsRouteChildren {
+  DashboardSettingsMigrationRoute: typeof DashboardSettingsMigrationRoute
+}
+
+const DashboardSettingsRouteChildren: DashboardSettingsRouteChildren = {
+  DashboardSettingsMigrationRoute: DashboardSettingsMigrationRoute,
+}
+
+const DashboardSettingsRouteWithChildren =
+  DashboardSettingsRoute._addFileChildren(DashboardSettingsRouteChildren)
+
 interface DashboardRouteChildren {
   DashboardAccountingRoute: typeof DashboardAccountingRoute
   DashboardAllClientsRoute: typeof DashboardAllClientsRoute
@@ -330,7 +361,7 @@ interface DashboardRouteChildren {
   DashboardDocumentsRoute: typeof DashboardDocumentsRoute
   DashboardLeadsRoute: typeof DashboardLeadsRoute
   DashboardReportsRoute: typeof DashboardReportsRoute
-  DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardSettingsRoute: typeof DashboardSettingsRouteWithChildren
   DashboardTargetsRoute: typeof DashboardTargetsRoute
   DashboardTasksRoute: typeof DashboardTasksRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -346,7 +377,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardDocumentsRoute: DashboardDocumentsRoute,
   DashboardLeadsRoute: DashboardLeadsRoute,
   DashboardReportsRoute: DashboardReportsRoute,
-  DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardSettingsRoute: DashboardSettingsRouteWithChildren,
   DashboardTargetsRoute: DashboardTargetsRoute,
   DashboardTasksRoute: DashboardTasksRoute,
   DashboardIndexRoute: DashboardIndexRoute,
