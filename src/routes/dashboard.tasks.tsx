@@ -608,20 +608,28 @@ function TaskFormDialog({ open, onClose, editing, clients, leads, actor, isAdmin
       const rec = associationType === "none" ? undefined : recordId || undefined;
 
       if (editing) {
+        console.log("📝 Updating task:", editing.id);
         await updateTask(editing.id, {
           title: title.trim(), description, assignee, priority, status,
           done: status === "Completed",
           dueDate: dueIso, reminderMinutes: Number(reminderMinutes) || 0,
           associationType, bucket, recordId: rec,
         }, actor, "Task edited");
+        console.log("✅ Task updated successfully");
       } else {
-        await createManualTask({
+        console.log("📝 Creating task:", title.trim());
+        const task = await createManualTask({
           title: title.trim(), description, assignee, priority, status,
           dueDate: dueIso, reminderMinutes: Number(reminderMinutes) || 0,
           associationType, bucket, recordId: rec, createdBy: actor,
         });
+        console.log("✅ Task created successfully:", task.id);
       }
       onClose();
+    } catch (error) {
+      console.error("❌ Task operation failed:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert(`Failed to ${editing ? "update" : "create"} task:\n\n${message}`);
     } finally {
       setSaving(false);
     }
@@ -896,6 +904,12 @@ function TaskDetailsSheet({ task, open, onClose, clients, leads, actor, isAdmin,
                   <Meta label="Read On" value={task.readAt ? new Date(task.readAt).toLocaleString() : "—"} />
                 </>
               )}
+              {task.lastUpdatedBy && task.lastUpdatedAt && (
+                <>
+                  <Meta label="Last Updated By" value={staffLabel(task.lastUpdatedBy) || task.lastUpdatedBy} />
+                  <Meta label="Last Updated At" value={new Date(task.lastUpdatedAt).toLocaleString()} />
+                </>
+              )}
             </dl>
           </Section>
 
@@ -974,14 +988,31 @@ function TaskDetailsSheet({ task, open, onClose, clients, leads, actor, isAdmin,
           {/* Activity */}
           <Section title="Activity timeline">
             <ol className="relative border-l pl-4 space-y-3">
-              {(task.activity ?? []).map((a) => (
-                <li key={a.id} className="text-sm">
-                  <span className="absolute -left-1.5 mt-1.5 w-2.5 h-2.5 rounded-full bg-primary" />
-                  <div>{a.message}</div>
-                  <div className="text-xs text-muted-foreground">{staffLabel(a.actor) || a.actor} • {new Date(a.at).toLocaleString()}</div>
-                </li>
-              ))}
-              {(task.activity ?? []).length === 0 && <p className="text-sm text-muted-foreground">No activity yet.</p>}
+              {/* Show detailed activity logs with field changes */}
+              {(task.activityLogs ?? []).length > 0 ? (
+                (task.activityLogs ?? []).map((log) => (
+                  <li key={log.id} className="text-sm">
+                    <span className="absolute -left-1.5 mt-1.5 w-2.5 h-2.5 rounded-full bg-primary" />
+                    <div className="font-medium">{log.message}</div>
+                    {log.before !== undefined && log.after !== undefined && (
+                      <div className="text-xs text-muted-foreground">{log.before} → {log.after}</div>
+                    )}
+                    <div className="text-xs text-muted-foreground">{staffLabel(log.actor) || log.actor} • {new Date(log.at).toLocaleString()}</div>
+                  </li>
+                ))
+              ) : (
+                // Fallback to simple activity messages if no detailed logs
+                (task.activity ?? []).map((a) => (
+                  <li key={a.id} className="text-sm">
+                    <span className="absolute -left-1.5 mt-1.5 w-2.5 h-2.5 rounded-full bg-primary" />
+                    <div>{a.message}</div>
+                    <div className="text-xs text-muted-foreground">{staffLabel(a.actor) || a.actor} • {new Date(a.at).toLocaleString()}</div>
+                  </li>
+                ))
+              )}
+              {(task.activityLogs ?? []).length === 0 && (task.activity ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">No activity yet.</p>
+              )}
             </ol>
           </Section>
         </div>
@@ -1021,8 +1052,14 @@ function SubtasksSection({ task, actor }: { task: Task; actor: string }) {
     if (!newSubtaskTitle.trim()) return;
     setAdding(true);
     try {
+      console.log("➕ Adding subtask:", newSubtaskTitle);
       await addSubtask(task.id, newSubtaskTitle.trim(), actor);
+      console.log("✅ Subtask added successfully");
       setNewSubtaskTitle("");
+    } catch (error) {
+      console.error("❌ Failed to add subtask:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert(`Failed to add subtask:\n\n${message}`);
     } finally {
       setAdding(false);
     }
@@ -1030,9 +1067,13 @@ function SubtasksSection({ task, actor }: { task: Task; actor: string }) {
 
   const onToggleSubtask = async (subtaskId: string) => {
     try {
+      console.log("🔄 Toggling subtask:", subtaskId);
       await toggleSubtask(task.id, subtaskId, actor);
+      console.log("✅ Subtask toggled successfully");
     } catch (error) {
-      console.error("Failed to toggle subtask:", error);
+      console.error("❌ Failed to toggle subtask:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert(`Failed to toggle subtask:\n\n${message}`);
     }
   };
 
@@ -1103,10 +1144,13 @@ function ReassignmentSection({ task, actor }: { task: Task; actor: string }) {
   const onReassign = async (newAssignee: string) => {
     setReassigning(true);
     try {
+      console.log("👤 Reassigning task to:", newAssignee);
       await reassignTask(task.id, newAssignee, actor);
+      console.log("✅ Task reassigned successfully");
     } catch (error) {
-      console.error("Failed to reassign task:", error);
-      alert("Failed to reassign task");
+      console.error("❌ Failed to reassign task:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert(`Failed to reassign task:\n\n${message}`);
     } finally {
       setReassigning(false);
     }

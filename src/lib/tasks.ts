@@ -90,6 +90,32 @@ export interface Task {
 
 const COL = "registry_tasks";
 
+/**
+ * CRITICAL: Remove all undefined values from objects and arrays recursively.
+ * Firestore does NOT allow undefined values, even in nested objects or arrays.
+ * This utility ensures data is safe to send to Firestore.
+ */
+export function removeUndefined<T>(obj: T): T {
+  // Handle arrays: filter out undefined items and recurse
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((item) => item !== undefined)
+      .map((item) => removeUndefined(item)) as T;
+  }
+
+  // Handle objects: filter out undefined properties and recurse
+  if (obj && typeof obj === "object" && obj.constructor === Object) {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, removeUndefined(v)])
+    ) as T;
+  }
+
+  // Return primitives and other types as-is
+  return obj;
+}
+
 function activityEntry(actor: string, message: string): TaskActivity {
   return { id: crypto.randomUUID(), at: new Date().toISOString(), actor, message };
 }
@@ -119,15 +145,19 @@ export async function updateSubtasks(
   const actLog = createActivity(actor, "Updated subtasks");
 
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
+  const cleanLog = removeUndefined(actLog);
+  const updates = removeUndefined({
     subtasks,
     progress,
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     ...(isCompleted ? { status: "Completed", done: true } : { done: false }),
     activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("🔄 updateSubtasks raw:", { subtasks, progress, actLog });
+  console.log("🔄 updateSubtasks clean:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 /**
@@ -138,6 +168,8 @@ export async function toggleSubtask(
   subtaskId: string,
   actor: string,
 ): Promise<void> {
+  console.log("🔄 Toggling subtask:", subtaskId, "in task:", taskId);
+
   // Fetch current task to get all subtasks
   const { getDoc } = await import("firebase/firestore");
   const taskDoc = await getDoc(doc(db, COL, taskId));
@@ -173,19 +205,35 @@ export async function toggleSubtask(
 
   // Auto-complete task when all subtasks done
   if (isCompleted && !task.done) {
+    console.log("✅ All subtasks completed - marking task as complete");
     updates.status = "Completed";
     updates.done = true;
   }
   // Mark as In Progress if any subtask becomes incomplete
   else if (!isCompleted && task.done) {
+    console.log("🔄 Subtask reopened - marking task as in progress");
     updates.status = "In Progress";
     updates.done = false;
   } else if (!isCompleted && task.status === "Completed") {
+    console.log("🔄 Subtask reopened - marking task as in progress");
     updates.status = "In Progress";
     updates.done = false;
   }
 
-  await updateDoc(doc(db, COL, taskId), updates);
+  try {
+    const cleanLog = removeUndefined(actLog);
+    const cleanUpdates = removeUndefined({
+      ...updates,
+      activityLogs: arrayUnion(cleanLog),
+    });
+    console.log("🔄 toggleSubtask raw:", { updates, actLog });
+    console.log("🔄 toggleSubtask clean:", cleanUpdates);
+    await updateDoc(doc(db, COL, taskId), cleanUpdates);
+    console.log("✅ Subtask toggled successfully, progress:", progress);
+  } catch (error) {
+    console.error("❌ Failed to toggle subtask:", error);
+    throw error;
+  }
 }
 
 /**
@@ -196,6 +244,8 @@ export async function addSubtask(
   title: string,
   actor: string,
 ): Promise<void> {
+  console.log("➕ Adding subtask to task:", taskId, "title:", title);
+
   const { getDoc } = await import("firebase/firestore");
   const taskDoc = await getDoc(doc(db, COL, taskId));
   if (!taskDoc.exists()) throw new Error("Task not found");
@@ -215,13 +265,23 @@ export async function addSubtask(
   const actLog = createActivity(actor, `Added subtask`, "subtask", "", title);
 
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
-    subtasks,
-    lastUpdatedBy: actor,
-    lastUpdatedAt: now,
-    activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
-  });
+  try {
+    const cleanLog = removeUndefined(actLog);
+    const updates = removeUndefined({
+      subtasks,
+      lastUpdatedBy: actor,
+      lastUpdatedAt: now,
+      activity: arrayUnion(entry),
+      activityLogs: arrayUnion(cleanLog),
+    });
+    console.log("➕ addSubtask raw:", { subtasks, actLog });
+    console.log("➕ addSubtask clean:", updates);
+    await updateDoc(doc(db, COL, taskId), updates);
+    console.log("✅ Subtask added successfully");
+  } catch (error) {
+    console.error("❌ Failed to add subtask:", error);
+    throw error;
+  }
 }
 
 /**
@@ -253,13 +313,17 @@ export async function reassignTask(
   );
 
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
+  const cleanLog = removeUndefined(actLog);
+  const updates = removeUndefined({
     assignee: newAssignee,
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("👤 reassignTask raw:", { newAssignee, actLog });
+  console.log("👤 reassignTask clean:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 /**
@@ -284,16 +348,19 @@ export async function markTaskAsRead(
   const message = `Task viewed by ${userName}`;
   const entry = activityEntry(actor, message);
   const actLog = createActivity(actor, message, "read", "", userName);
-
-  await updateDoc(doc(db, COL, taskId), {
+  const cleanLog = removeUndefined(actLog);
+  const updates = removeUndefined({
     readBy: actor,
     readAt: now,
     status: "Read",
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("📖 markTaskAsRead raw:", { readBy: actor, actLog });
+  console.log("📖 markTaskAsRead clean:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 /**
@@ -325,6 +392,19 @@ export interface CreateTaskInput {
 }
 
 export async function createManualTask(input: CreateTaskInput): Promise<Task> {
+  // Validate required fields
+  if (!input.title?.trim()) {
+    throw new Error("Task title is required");
+  }
+  if (!input.assignee?.trim()) {
+    throw new Error("Assignee is required");
+  }
+  if (input.associationType !== "none" && !input.recordId) {
+    throw new Error(`Record ID is required when linking to a ${input.associationType}`);
+  }
+
+  console.log("📋 Creating task with input:", input);
+
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const initActivity = createActivity(input.createdBy, "Task created");
@@ -353,9 +433,51 @@ export async function createManualTask(input: CreateTaskInput): Promise<Task> {
     lastUpdatedAt: now,
     activityLogs: [initActivity],
   };
-  const { id: _id, ...data } = task;
-  await setDoc(doc(db, COL, id), data);
-  return task;
+
+  try {
+    // Build data object, excluding undefined fields (Firestore doesn't allow undefined)
+    const data = {
+      title: task.title,
+      description: task.description,
+      assignee: task.assignee,
+      status: task.status,
+      priority: task.priority,
+      done: task.done,
+      createdAt: task.createdAt,
+      createdBy: task.createdBy,
+      associationType: task.associationType,
+      manual: task.manual,
+      subtasks: task.subtasks,
+      progress: task.progress,
+      comments: task.comments,
+      attachments: task.attachments,
+      activity: task.activity,
+      lastUpdatedBy: task.lastUpdatedBy,
+      lastUpdatedAt: task.lastUpdatedAt,
+      activityLogs: task.activityLogs,
+      // Conditionally include optional fields only if they have values
+      ...(task.dueDate ? { dueDate: task.dueDate } : {}),
+      ...(task.reminderMinutes !== undefined ? { reminderMinutes: task.reminderMinutes } : {}),
+      ...(task.bucket ? { bucket: task.bucket } : {}),
+      ...(task.recordId ? { recordId: task.recordId } : {}),
+    };
+    
+    // CRITICAL: Remove all undefined values recursively before sending to Firestore
+    const cleanData = removeUndefined(data);
+    console.log("📋 createManualTask RAW DATA:", data);
+    console.log("📋 createManualTask CLEAN DATA:", cleanData);
+    console.log("📋 createManualTask REMOVED FIELDS:", Object.keys(data).filter(k => !(k in cleanData)));
+    
+    await setDoc(doc(db, COL, id), cleanData);
+    console.log("✅ Task created successfully:", id);
+    return task;
+  } catch (error) {
+    console.error("❌ Failed to create task:", error);
+    if (error instanceof Error) {
+      throw new Error(`Firestore error: ${error.message}`);
+    }
+    throw error;
+  }
 }
 
 export async function updateTask(
@@ -364,6 +486,8 @@ export async function updateTask(
   actor: string,
   note?: string,
 ): Promise<void> {
+  console.log("📝 Updating task:", taskId, "with patch:", patch);
+
   const { getDoc } = await import("firebase/firestore");
   const taskDoc = await getDoc(doc(db, COL, taskId));
   if (!taskDoc.exists()) throw new Error("Task not found");
@@ -378,6 +502,7 @@ export async function updateTask(
     const oldVal = (existing as any)[field];
     const newVal = (patch as any)[field];
     if (newVal !== undefined && oldVal !== newVal) {
+      console.log(`  Changed ${field}: ${oldVal} → ${newVal}`);
       activities.push(
         createActivity(
           actor,
@@ -394,28 +519,48 @@ export async function updateTask(
   const mainEntry = activityEntry(actor, note ?? "Task updated");
 
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
+  const updates: any = {
     ...patch,
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activity: arrayUnion(mainEntry),
-    activityLogs: arrayUnion(...activities),
-  });
+  };
+
+  // Add tracked activities one by one
+  for (const activity of activities) {
+    const cleanActivity = removeUndefined(activity);
+    updates.activityLogs = arrayUnion(cleanActivity);
+  }
+
+  try {
+    const cleanUpdates = removeUndefined(updates);
+    console.log("📝 updateTask RAW:", updates);
+    console.log("📝 updateTask CLEAN:", cleanUpdates);
+    await updateDoc(doc(db, COL, taskId), cleanUpdates);
+    console.log("✅ Task updated successfully");
+  } catch (error) {
+    console.error("❌ Failed to update task:", error);
+    throw error;
+  }
 }
 
 export async function setTaskDone(taskId: string, done: boolean, actor = "system"): Promise<void> {
   const entry = activityEntry(actor, done ? "Marked complete" : "Reopened");
-  const actLog = createActivity(actor, done ? "Marked complete" : "Reopened", "status", done ? "Pending" : "Completed", done ? "Completed" : "Pending");
+  const actLog = createActivity(actor, done ? "Marked complete" : "Reopened", "status", done ? "Assigned" : "Completed", done ? "Completed" : "Assigned");
+  const cleanLog = removeUndefined(actLog);
   
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
+  const updates = removeUndefined({
     done,
-    status: done ? "Completed" : "Pending",
+    status: done ? "Completed" : "Assigned",
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("✓ setTaskDone RAW:", { done, actLog });
+  console.log("✓ setTaskDone CLEAN:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 export async function addComment(taskId: string, author: string, text: string): Promise<void> {
@@ -427,29 +572,37 @@ export async function addComment(taskId: string, author: string, text: string): 
   };
   const entry = activityEntry(author, "Added comment");
   const actLog = createActivity(author, "Added comment", "comment", "", text);
+  const cleanLog = removeUndefined(actLog);
   
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
+  const updates = removeUndefined({
     comments: arrayUnion(comment),
     lastUpdatedBy: author,
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("💬 addComment RAW:", { comment, actLog });
+  console.log("💬 addComment CLEAN:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 export async function addAttachment(taskId: string, file: TaskAttachment): Promise<void> {
   const entry = activityEntry(file.addedBy, `Attached ${file.name}`);
   const actLog = createActivity(file.addedBy, "Added attachment", "attachment", "", file.name);
+  const cleanLog = removeUndefined(actLog);
   
   const now = new Date().toISOString();
-  await updateDoc(doc(db, COL, taskId), {
+  const updates = removeUndefined({
     attachments: arrayUnion(file),
     lastUpdatedBy: file.addedBy,
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
-    activityLogs: arrayUnion(actLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("📎 addAttachment RAW:", { file, actLog });
+  console.log("📎 addAttachment CLEAN:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 export async function removeTask(taskId: string): Promise<void> {
@@ -470,14 +623,18 @@ export async function softDeleteTask(
     "",
     reason,
   );
+  const cleanLog = removeUndefined(deleteLog);
 
-  await updateDoc(doc(db, COL, taskId), {
+  const updates = removeUndefined({
     isDeleted: true,
     deletedAt: now,
     deletedBy: actor,
     deleteReason: reason,
-    activityLogs: arrayUnion(deleteLog),
+    activityLogs: arrayUnion(cleanLog),
   });
+  console.log("🗑️ softDeleteTask RAW:", { isDeleted: true, deleteLog });
+  console.log("🗑️ softDeleteTask CLEAN:", updates);
+  await updateDoc(doc(db, COL, taskId), updates);
 }
 
 /** Auto-sync a task from a record save — creates or updates the linked task. */
@@ -505,16 +662,20 @@ export async function syncTaskFromRecord(
     // Update existing linked task
     const taskDoc = snap.docs[0];
     const entry = activityEntry(actor, `Auto-synced from ${bucket}`);
-    await updateDoc(taskDoc.ref, {
+    const updates = removeUndefined({
       title,
       status: mappedStatus,
       done: record.status === "Completed",
       ...(record.assignee ? { assignee: record.assignee } : {}),
       activity: arrayUnion(entry),
     });
+    console.log("🔄 syncTaskFromRecord UPDATE RAW:", { title, status: mappedStatus, done: record.status === "Completed", assignee: record.assignee });
+    console.log("🔄 syncTaskFromRecord UPDATE CLEAN:", updates);
+    await updateDoc(taskDoc.ref, updates);
   } else if (record.assignee) {
     // Create a new linked task
     const id = crypto.randomUUID();
+    const now = new Date().toISOString();
     const task: Task = {
       id,
       title,
@@ -523,7 +684,7 @@ export async function syncTaskFromRecord(
       status: mappedStatus,
       priority: "Medium",
       done: record.status === "Completed",
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       createdBy: actor,
       associationType: bucket === "leads" ? "lead" : "client",
       recordId: record.id,
@@ -534,9 +695,39 @@ export async function syncTaskFromRecord(
       comments: [],
       attachments: [],
       activity: [activityEntry(actor, `Created from ${bucket}`)],
+      lastUpdatedBy: actor,
+      lastUpdatedAt: now,
+      activityLogs: [],
     };
-    const { id: _id, ...data } = task;
-    await setDoc(doc(db, COL, id), data);
+    
+    // Build data object, excluding undefined fields (Firestore doesn't allow undefined)
+    const data = {
+      title: task.title,
+      description: task.description,
+      assignee: task.assignee,
+      status: task.status,
+      priority: task.priority,
+      done: task.done,
+      createdAt: task.createdAt,
+      createdBy: task.createdBy,
+      associationType: task.associationType,
+      recordId: task.recordId,
+      bucket: task.bucket,
+      manual: task.manual,
+      subtasks: task.subtasks,
+      progress: task.progress,
+      comments: task.comments,
+      attachments: task.attachments,
+      activity: task.activity,
+      lastUpdatedBy: task.lastUpdatedBy,
+      lastUpdatedAt: task.lastUpdatedAt,
+      activityLogs: task.activityLogs,
+    };
+    
+    const cleanData = removeUndefined(data);
+    console.log("📋 syncTaskFromRecord CREATE RAW:", data);
+    console.log("📋 syncTaskFromRecord CREATE CLEAN:", cleanData);
+    await setDoc(doc(db, COL, id), cleanData);
   }
 }
 

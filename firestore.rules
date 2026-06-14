@@ -39,7 +39,7 @@ service cloud.firestore {
     // ── Tasks ─────────────────────────────────────────────────────────────────
     match /registry_tasks/{id} {
       allow read: if isAuth();
-      allow create: if isAdmin();
+      allow create: if isAuth();             // Any authenticated user can create tasks
       allow update: if isAuth();             // staff can add comments, mark done
       allow delete: if isAdmin();
     }
