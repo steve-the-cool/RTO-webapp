@@ -27,9 +27,9 @@ export interface CustomerDoc {
   type: string;
   addedAt: string;
   /** Present when a real file was uploaded to Firebase Storage. */
-  storageKey?: string;
+  storagePath?: string;
   /** Firebase Storage download URL (if file uploaded). */
-  downloadUrl?: string;
+  downloadURL?: string;
   /** Original file MIME type. */
   mimeType?: string;
   /** File size in bytes. */
@@ -85,21 +85,22 @@ export async function addDoc(
   console.log("[addDoc] Starting upload for customer:", customerId, "name:", name, "type:", type, "file:", file?.name);
   
   const id = crypto.randomUUID();
-  let storageKey: string | undefined;
-  let downloadUrl: string | undefined;
+  let storagePath: string | undefined;
+  let downloadURL: string | undefined;
   let mimeType: string | undefined;
   let fileSize: number | undefined;
 
   if (file) {
-    storageKey = `customers/${customerId}/docs/${id}_${file.name}`;
-    const storageRef = ref(storage, storageKey);
+    // Use required path: customers/{customerId}/attachments/{fileName}
+    storagePath = `customers/${customerId}/attachments/${file.name}`;
+    const storageRef = ref(storage, storagePath);
     
-    console.log("[addDoc] Uploading file to:", storageKey);
+    console.log("[addDoc] Uploading file to:", storagePath);
     
     // Upload with better error handling and timeout
     try {
-      downloadUrl = await uploadFileWithRetry(storageRef, file, onProgress);
-      console.log("[addDoc] File uploaded successfully, URL:", downloadUrl?.substring(0, 50) + "...");
+      downloadURL = await uploadFileWithRetry(storageRef, file, onProgress);
+      console.log("[addDoc] File uploaded successfully, URL:", downloadURL?.substring(0, 50) + "...");
       mimeType = file.type;
       fileSize = file.size;
     } catch (error) {
@@ -120,7 +121,7 @@ export async function addDoc(
     name,
     type,
     addedAt: new Date().toISOString(),
-    ...(storageKey ? { storageKey, downloadUrl, mimeType, fileSize } : {}),
+    ...(storagePath ? { storagePath, downloadURL, mimeType, fileSize } : {}),
   };
 
   console.log("[addDoc] Creating Firestore document:", docEntry);
@@ -271,11 +272,11 @@ function getErrorMessage(error: any): string {
 }
 
 /** Delete a document entry and its Storage file (if any). */
-export async function deleteDoc(docId: string, storageKey?: string): Promise<void> {
+export async function deleteDoc(docId: string, storagePath?: string): Promise<void> {
   await firestoreDeleteDoc(doc(db, COL, docId));
-  if (storageKey) {
+  if (storagePath) {
     try {
-      await deleteObject(ref(storage, storageKey));
+      await deleteObject(ref(storage, storagePath));
     } catch {
       // File may have already been deleted — ignore
     }

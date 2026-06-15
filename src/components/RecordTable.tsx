@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Download, Printer, Paperclip, X } from "lucide-react";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase";
+import { Plus, Pencil, Trash2, Search, Download, Printer, Paperclip, X, Users } from "lucide-react";
+import { addDoc as addCustomerDoc } from "@/lib/customerDocs";
 import {
   subscribeToRecords,
   saveRecord,
@@ -16,6 +15,8 @@ import {
   staffLabel,
   SERVICE_TYPES,
   serviceLabel,
+  getRecordServices,
+  type ServiceType,
   type Bucket,
   type RegistryRecord,
   type RecordStatus,
@@ -33,6 +34,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { DeleteRecordDialog } from "@/components/DeleteRecordDialog";
+import ClientProfile from "@/components/ClientProfile";
 import { DuplicateDetectionDialog } from "@/components/DuplicateDetectionDialog";
 import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
 import { WhatsAppQuickActions } from "@/components/WhatsAppQuickActions";
@@ -87,6 +89,8 @@ export function RecordTable({ bucket, title, description }: Props) {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<RegistryRecord | null>(null);
+  const [viewRecord, setViewRecord] = useState<RegistryRecord | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
   const [forceCaps, setForceCaps] = useState(() => getForceCapsSetting());
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
@@ -137,7 +141,9 @@ export function RecordTable({ bucket, title, description }: Props) {
   };
 
   const openEdit = (r: RegistryRecord) => {
-    setEditing({ ...r });
+    // Initialize services[] for the editor (support legacy single `serviceType`)
+    const services = getRecordServices(r);
+    setEditing({ ...r, services });
     setOpen(true);
   };
 
@@ -173,74 +179,30 @@ export function RecordTable({ bucket, title, description }: Props) {
     setAttachmentError(null);
 
     try {
-      // Generate unique storage path
-      const storagePath = `clients/${bucket}/${editing.id}/attachments/${crypto.randomUUID()}_${file.name}`;
-      const storageRef = ref(storage, storagePath);
+      // Delegate upload to customerDocs.addDoc which uses the canonical
+      // storage path: customers/{customerId}/attachments/{fileName}
+      console.error("[Attachment Upload] Delegating upload to addDoc for customer:", editing.id);
+      const docEntry = await addCustomerDoc(editing.id, file.name, file.type, file, (pct) => setUploadPct(pct));
 
-      console.error("[Attachment Upload] Starting upload:", {
-        recordId: editing.id,
-        recordName: editing.name,
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        storagePath,
-      });
-
-      // Upload file with progress tracking
-      let downloadUrl = "";
-      await new Promise<void>((resolve, reject) => {
-        const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
-        uploadTask.on(
-          "state_changed",
-          (snap) => {
-            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-            setUploadPct(pct);
-            console.error("[Attachment Upload] Progress:", { pct, bytesTransferred: snap.bytesTransferred, totalBytes: snap.totalBytes });
-          },
-          (error) => {
-            console.error("[Attachment Upload Error] Upload failed:", error);
-            reject(error);
-          },
-          async () => {
-            try {
-              downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              console.error("[Attachment Upload] Download URL obtained:", { downloadUrl });
-              resolve();
-            } catch (error) {
-              console.error("[Attachment Upload Error] Failed to get download URL:", error);
-              reject(error);
-            }
-          },
-        );
-      });
-
-      // Create attachment record
+      // Map CustomerDoc -> RecordAttachment shape
       const attachment: RecordAttachment = {
-        id: crypto.randomUUID(),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        storagePath,
-        downloadUrl,
-        uploadedAt: new Date().toISOString(),
+        id: docEntry.id,
+        name: docEntry.name,
+        type: docEntry.mimeType || file.type,
+        size: docEntry.fileSize || file.size,
+        storagePath: docEntry.storagePath || `customers/${editing.id}/attachments/${file.name}`,
+        downloadUrl: (docEntry.downloadURL as string) || "",
+        uploadedAt: docEntry.addedAt,
         uploadedBy: username,
       };
 
-      console.error("[Attachment Upload] Attachment record created:", attachment);
+      // Add attachment to editing state
+      setEditing({ ...editing, attachments: [...(editing.attachments ?? []), attachment] });
 
-      // Add attachment to record
-      const updatedRecord: RegistryRecord = {
-        ...editing,
-        attachments: [...(editing.attachments ?? []), attachment],
-      };
-
-      // Update the editing state
-      setEditing(updatedRecord);
-
-      // Save to Firestore
+      // Persist attachment reference on registry record
       await addAttachment(bucket, editing.id, attachment);
 
-      console.error("[Attachment Upload] Attachment saved to Firestore successfully");
+      console.error("[Attachment Upload] Attachment saved to Firestore successfully", attachment);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       setAttachmentError(`Upload failed: ${errorMsg}`);
@@ -343,6 +305,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(r)}><Pencil className="size-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => { setViewRecord(r); setViewOpen(true); }} title="View profile"><Users className="size-4" /></Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -480,18 +443,25 @@ export function RecordTable({ bucket, title, description }: Props) {
               <div className="sm:col-span-2 border-t pt-4 mt-2">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-3">Service Management</h3>
               </div>
-              <Field label="Service Type" full>
-                <Select
-                  value={editing.serviceType || ""}
-                  onValueChange={(v) => setEditing({ ...editing, serviceType: v as any })}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select a service type..." /></SelectTrigger>
-                  <SelectContent>
-                    {SERVICE_TYPES.map((s) => <SelectItem key={s} value={s}>{serviceLabel(s)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">Service type must be selected for service management.</p>
-              </Field>
+                  <Field label="Services" full>
+                    <div className="grid grid-cols-2 gap-2">
+                      {SERVICE_TYPES.map((s) => (
+                        <label key={s} className="inline-flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={(editing.services ?? []).includes(s as ServiceType)}
+                            onChange={(e) => {
+                              const cur = new Set(editing.services ?? []);
+                              if (e.target.checked) cur.add(s as ServiceType); else cur.delete(s as ServiceType);
+                              setEditing({ ...editing, services: Array.from(cur) });
+                            }}
+                          />
+                          <span>{serviceLabel(s as ServiceType)}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Select one or more services for this record.</p>
+                  </Field>
               <Field label="Service Due Date">
                 <Input
                   type="date"
@@ -631,6 +601,7 @@ export function RecordTable({ bucket, title, description }: Props) {
         username={username}
         onSuccess={handleDeleteSuccess}
       />
+      <ClientProfile record={viewRecord} open={viewOpen} onOpenChange={setViewOpen} />
     </div>
   );
 }

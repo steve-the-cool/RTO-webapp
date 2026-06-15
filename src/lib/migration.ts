@@ -135,13 +135,6 @@ function inferServiceTypeFromWork(
     ),
     (
       [
-        "permit",
-        "commercial",
-      ],
-      "Permit"
-    ),
-    (
-      [
         "gujarat permit",
       ],
       "Gujarat Permit"

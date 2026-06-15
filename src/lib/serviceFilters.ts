@@ -24,13 +24,6 @@ export const SERVICE_CONFIGS: Record<ServiceType, ServiceConfig> = {
     icon: "✓",
     color: "bg-green-500",
   },
-  Permit: {
-    type: "Permit",
-    label: "Permit",
-    description: "General vehicle permits",
-    icon: "📋",
-    color: "bg-purple-500",
-  },
   "Gujarat Permit": {
     type: "Gujarat Permit",
     label: "Gujarat Permit",
@@ -108,6 +101,10 @@ export function recordMatchesService(
   record: RegistryRecord,
   serviceType: ServiceType,
 ): boolean {
+  // Prefer explicit service arrays / legacy serviceType
+  if (Array.isArray(record.services) && record.services.includes(serviceType)) return true;
+  if (record.serviceType === serviceType) return true;
+
   // Match by work field (primary match)
   if (record.work && record.work.trim().toLowerCase() === serviceType.toLowerCase()) {
     return true;

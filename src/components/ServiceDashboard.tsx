@@ -6,7 +6,7 @@ import {
   getServiceAmountReceived,
   getServicePendingAmount,
 } from "@/lib/services";
-import { serviceLabel, type ServiceType, type RegistryRecord } from "@/lib/records";
+import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices } from "@/lib/records";
 import { RecordTable } from "@/components/RecordTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,9 +39,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
           getServicePendingAmount(serviceType),
         ]);
 
-        // Validation: Ensure all records have matching serviceType
-        const allMatch = recs.every(r => r.serviceType === serviceType);
-        const matchCount = recs.filter(r => r.serviceType === serviceType).length;
+        // Validation: Ensure all records include the requested service
+        const allMatch = recs.every(r => getRecordServices(r).includes(serviceType));
+        const matchCount = recs.filter(r => getRecordServices(r).includes(serviceType)).length;
         
         console.log(
           `[ServiceDashboard] LOADED: ${recs.length} records for "${serviceType}"`,
@@ -59,11 +59,11 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             {
               totalRecords: recs.length,
               matchingRecords: matchCount,
-              mismatchedRecords: recs.filter(r => r.serviceType !== serviceType).map(r => ({
+              mismatchedRecords: recs.filter(r => !getRecordServices(r).includes(serviceType)).map(r => ({
                 id: r.id,
                 name: r.name,
                 expectedServiceType: serviceType,
-                actualServiceType: r.serviceType,
+                actualServices: getRecordServices(r),
               })),
             },
           );

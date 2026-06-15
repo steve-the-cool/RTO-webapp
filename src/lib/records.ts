@@ -12,9 +12,11 @@ import {
   deleteDoc,
   getDoc,
   arrayUnion,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { createActivity, type ActivityLog } from "./activity";
+import { transformInput, getForceCapsSetting, CAPITALIZE_FIELDS } from "./capitalize-settings";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,7 +40,6 @@ export type PaymentStatus = "Paid" | "Partially Paid" | "Unpaid";
 export type ServiceType = 
   | "Insurance"
   | "Fitness"
-  | "Permit"
   | "Gujarat Permit"
   | "National Permit"
   | "Tax"
@@ -53,7 +54,6 @@ export type ServiceStatus = "Pending" | "In Progress" | "Completed" | "On Hold" 
 export const SERVICE_TYPES: ServiceType[] = [
   "Insurance",
   "Fitness",
-  "Permit",
   "Gujarat Permit",
   "National Permit",
   "Tax",
@@ -71,7 +71,6 @@ export const SERVICE_TYPES: ServiceType[] = [
 export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
   insurance: "Insurance",
   fitness: "Fitness",
-  permit: "Permit",
   "gujarat-permit": "Gujarat Permit",
   "national-permit": "National Permit",
   tax: "Tax",
@@ -140,9 +139,19 @@ export interface RegistryRecord {
   paymentDate?: string; // Date of last payment
   paymentStatus?: PaymentStatus; // Calculated: Paid | Partially Paid | Unpaid
   // Service Management fields
-  serviceType?: ServiceType; // Type of service (Insurance, Fitness, Permit, etc.)
+  serviceType?: ServiceType; // Legacy single service field (kept for compatibility)
+  services?: ServiceType[]; // New multi-service support
   serviceStatus?: ServiceStatus; // Service-specific status
   serviceDueDate?: string; // ISO date string for service renewal
+}
+
+/**
+ * Get canonical services for a record, supporting legacy `serviceType`.
+ */
+export function getRecordServices(record: RegistryRecord): ServiceType[] {
+  if (Array.isArray(record.services) && record.services.length > 0) return record.services;
+  if (record.serviceType) return [record.serviceType];
+  return [];
 }
 
 export type Bucket = "clients" | "leads" | "customers";
@@ -165,7 +174,6 @@ export const serviceLabel = (type?: ServiceType): string => {
   const labels: Record<ServiceType, string> = {
     "Insurance": "🛡️ Insurance",
     "Fitness": "💪 Fitness",
-    "Permit": "📜 Permit",
     "Gujarat Permit": "📍 Gujarat Permit",
     "National Permit": "🇮🇳 National Permit",
     "Tax": "💰 Tax",
@@ -183,7 +191,6 @@ export const serviceColor = (type?: ServiceType): string => {
   const colors: Record<ServiceType, string> = {
     "Insurance": "bg-blue-500",
     "Fitness": "bg-green-500",
-    "Permit": "bg-purple-500",
     "Gujarat Permit": "bg-purple-600",
     "National Permit": "bg-purple-700",
     "Tax": "bg-yellow-500",
@@ -299,47 +306,37 @@ export async function saveRecord(
     }
   }
 
-  // CRITICAL: Normalize serviceType before saving
-  const normalized = {
-    ...record,
-    serviceType: record.serviceType ? normalizeServiceType(record.serviceType) : undefined,
-  };
-  
-  // Validation: Ensure serviceType is properly normalized
-  if (record.serviceType) {
-    if (!normalized.serviceType) {
-      console.error(
-        "[saveRecord] ERROR: Invalid serviceType provided - normalization failed!",
-        {
-          inputServiceType: record.serviceType,
-          normalizedServiceType: normalized.serviceType,
-          validServiceTypes: SERVICE_TYPES,
-        },
-      );
-      throw new Error(
-        `Invalid serviceType: "${record.serviceType}". Valid types are: ${SERVICE_TYPES.join(", ")}`
-      );
-    }
-    
-    console.log(
-      `[saveRecord] ${existing ? "UPDATE" : "CREATE"}: Normalizing serviceType`,
-      {
-        bucket,
-        recordId: record.id,
-        clientName: record.name,
-        inputServiceType: record.serviceType,
-        normalizedServiceType: normalized.serviceType,
-        match: record.serviceType === normalized.serviceType,
-      },
-    );
+  // CRITICAL: Normalize serviceType / services before saving. Support both
+  // legacy `serviceType` and new `services[]` field. The DB will be updated
+  // with `services` for multi-service support while keeping `serviceType`
+  // for backward compatibility (set to first service if present).
+  const normalizedServices: ServiceType[] = [];
 
-    // Validation: Check if normalization changed the value
-    if (record.serviceType !== normalized.serviceType) {
-      console.warn(
-        `[saveRecord] WARNING: serviceType was normalized from "${record.serviceType}" to "${normalized.serviceType}"`,
-      );
+  if (Array.isArray(record.services) && record.services.length > 0) {
+    for (const s of record.services) {
+      const n = normalizeServiceType(s);
+      if (n) normalizedServices.push(n);
     }
   }
+
+  if (record.serviceType && normalizedServices.length === 0) {
+    const n = normalizeServiceType(record.serviceType);
+    if (n) normalizedServices.push(n);
+    else {
+      console.error(
+        "[saveRecord] ERROR: Invalid serviceType provided - normalization failed!",
+        { inputServiceType: record.serviceType, validServiceTypes: SERVICE_TYPES },
+      );
+      throw new Error(`Invalid serviceType: "${record.serviceType}". Valid types are: ${SERVICE_TYPES.join(", ")}`);
+    }
+  }
+
+  const normalized = {
+    ...record,
+    services: normalizedServices.length > 0 ? normalizedServices : undefined,
+    // Keep legacy serviceType set to first normalized service (if any) for compatibility
+    serviceType: normalizedServices.length > 0 ? normalizedServices[0] : undefined,
+  };
 
   // Prepare data with updated metadata
   const now = new Date().toISOString();
@@ -352,7 +349,45 @@ export async function saveRecord(
       : activities,
   };
 
+  // Also write detailed per-field activity logs to a separate collection for audit
+  if (activities.length > 0 && record.id && actor) {
+    try {
+      const logsCol = collection(db, "client_activity_logs");
+      for (const act of activities) {
+        await addDoc(logsCol, {
+          clientId: record.id,
+          userId: actor,
+          userName: actor,
+          action: act.action,
+          field: act.field || null,
+          oldValue: act.oldValue || null,
+          newValue: act.newValue || null,
+          timestamp: act.timestamp,
+        });
+      }
+    } catch (err) {
+      console.error("[saveRecord] Failed to write client_activity_logs entries:", err);
+    }
+  }
+
   const { id, ...updateData } = data;
+
+  // Apply uppercase forcing if the setting is enabled. This affects only
+  // the current save operation (create/edit/import) and does not modify
+  // existing records unless they are being updated now.
+  try {
+    if (getForceCapsSetting()) {
+      for (const field of CAPITALIZE_FIELDS) {
+        if ((updateData as any)[field]) {
+          (updateData as any)[field] = transformInput((updateData as any)[field], true);
+        }
+      }
+    }
+  } catch (err) {
+    // If settings aren't available (e.g., server-side), skip gracefully
+    console.warn("[saveRecord] Could not apply force-caps setting:", err);
+  }
+
   await setDoc(doc(db, colFor(bucket), id), updateData, { merge: true });
 }
 

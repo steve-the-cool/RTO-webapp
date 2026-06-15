@@ -24,20 +24,39 @@ export async function getServiceClients(
   );
 
   try {
-    // Simple query - just filter by serviceType
-    // We'll filter out deleted records in code to avoid composite index requirement
-    const constraints: QueryConstraint[] = [
-      where("serviceType", "==", serviceType),
-    ];
+    // New behavior: prefer `services` array-contains query (multi-service),
+    // but also include legacy `serviceType` equality results so older records
+    // remain visible until migration is complete. Merge unique results.
 
-    const q = query(collection(db, colName), ...constraints);
-    const snap = await getDocs(q);
-    const results = snap.docs
-      .map((d) => {
+    const resultsMap: Map<string, RegistryRecord> = new Map();
+
+    // Query for records that have the new `services` array
+    try {
+      const q1 = query(collection(db, colName), where("services", "array-contains", serviceType));
+      const snap1 = await getDocs(q1);
+      for (const d of snap1.docs) {
         const data = d.data() as RegistryRecord;
-        return { id: d.id, ...data };
-      })
-      .filter(r => !r.isDeleted); // Filter out deleted records in code
+        const rec = { id: d.id, ...data } as RegistryRecord;
+        if (!rec.isDeleted) resultsMap.set(d.id, rec);
+      }
+    } catch (err) {
+      console.warn(`[getServiceClients] services query failed for ${colName}:`, err);
+    }
+
+    // Also query legacy `serviceType` field for compatibility
+    try {
+      const q2 = query(collection(db, colName), where("serviceType", "==", serviceType));
+      const snap2 = await getDocs(q2);
+      for (const d of snap2.docs) {
+        const data = d.data() as RegistryRecord;
+        const rec = { id: d.id, ...data } as RegistryRecord;
+        if (!rec.isDeleted) resultsMap.set(d.id, rec);
+      }
+    } catch (err) {
+      console.warn(`[getServiceClients] serviceType legacy query failed for ${colName}:`, err);
+    }
+
+    const results = Array.from(resultsMap.values());
 
     console.log(
       `[getServiceClients] SUCCESS: Found ${results.length} records in ${colName} for serviceType="${serviceType}"`,
@@ -223,7 +242,6 @@ export async function getRevenueByService() {
   const serviceTypes = [
     "Insurance",
     "Fitness",
-    "Permit",
     "Gujarat Permit",
     "National Permit",
     "Tax",
@@ -338,7 +356,6 @@ export async function getServiceDistributionSummary() {
   const serviceTypes = [
     "Insurance",
     "Fitness",
-    "Permit",
     "Gujarat Permit",
     "National Permit",
     "Tax",

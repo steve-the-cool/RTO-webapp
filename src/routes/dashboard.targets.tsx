@@ -59,7 +59,6 @@ export const Route = createFileRoute("/dashboard/targets")({
 const CATEGORIES: TargetCategory[] = [
   "Insurance",
   "Fitness",
-  "Permit",
   "Gujarat Permit",
   "National Permit",
   "Tax",
@@ -72,7 +71,6 @@ const CATEGORIES: TargetCategory[] = [
 const CATEGORY_COLORS: Record<TargetCategory, string> = {
   Insurance: "#3b82f6",
   Fitness: "#10b981",
-  Permit: "#f59e0b",
   "Gujarat Permit": "#8b5cf6",
   "National Permit": "#ec4899",
   Tax: "#06b6d4",

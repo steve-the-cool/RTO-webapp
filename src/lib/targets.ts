@@ -19,7 +19,6 @@ import { getServiceStats, type ServiceType } from "./services";
 export type TargetCategory =
   | "Insurance"
   | "Fitness"
-  | "Permit"
   | "Gujarat Permit"
   | "National Permit"
   | "Tax"

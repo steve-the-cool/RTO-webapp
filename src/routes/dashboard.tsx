@@ -45,7 +45,6 @@ const GROUPS: NavGroup[] = [
     items: [
       { to: "/dashboard/service/insurance", label: "Insurance", icon: Shield },
       { to: "/dashboard/service/fitness", label: "Fitness", icon: CheckCircle },
-      { to: "/dashboard/service/permit", label: "Permit", icon: FileText },
       { to: "/dashboard/service/gujarat-permit", label: "Gujarat Permit", icon: FileText },
       { to: "/dashboard/service/national-permit", label: "National Permit", icon: FileText },
       { to: "/dashboard/service/tax", label: "Tax", icon: DollarSign },

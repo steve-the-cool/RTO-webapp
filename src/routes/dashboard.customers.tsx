@@ -451,7 +451,7 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
 
 // ─── Documents Modal ──────────────────────────────────────────────────────────
 
-const DOC_TYPES = ["RC Book", "Insurance", "Fitness Certificate", "Tax Receipt", "Permit", "PUC Certificate", "Other"];
+const DOC_TYPES = ["RC Book", "Insurance", "Fitness Certificate", "Tax Receipt", "PUC Certificate", "Other"];
 const MAX_FILE_MB = 5; // Reduced from 10 to 5 for better upload reliability
 
 function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: () => void }) {

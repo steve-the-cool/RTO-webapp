@@ -377,6 +377,18 @@ export function subscribeToTasks(cb: (tasks: Task[]) => void): () => void {
   });
 }
 
+/**
+ * Subscribe to live task updates for a specific recordId (client/lead/customer).
+ * Returns an unsubscribe function for useEffect cleanup.
+ */
+export function subscribeToTasksForRecord(recordId: string, cb: (tasks: Task[]) => void): () => void {
+  const q = query(collection(db, COL), where("recordId", "==", recordId), orderBy("createdAt", "desc"));
+  return onSnapshot(q, (snap) => {
+    const tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Task)).filter((t) => !t.isDeleted);
+    cb(tasks);
+  });
+}
+
 export interface CreateTaskInput {
   title: string;
   description?: string;
