@@ -317,39 +317,93 @@ export async function saveRecord(
 
   // Define HSL/premium labels for fields
   const fieldLabelMap: Record<string, string> = {
-    name: "Client Name",
-    mo: "Mobile Number",
-    co: "Address",
-    groupName: "Client Group",
+    srNo: "SR Number",
+    date: "Created Date",
     mvNo: "Vehicle Number",
+    application: "Application",
+    work: "Work",
+    name: "Client Name",
+    status: "Record Status",
+    mo: "Mobile Number",
+    insurance: "Insurance",
+    fitness: "Fitness",
+    tax: "Tax",
+    co: "C/O",
+    groupName: "Client Group",
+    assignee: "Assigned Employee",
     chassisNo: "Chassis Number",
     engineNo: "Engine Number",
-    serviceAmount: "Total Service Amount",
+    serviceAmount: "Service Amount",
     amountReceived: "Amount Received",
     paymentDate: "Payment Date",
     paymentStatus: "Payment Status",
-    status: "Record Status",
-    assignee: "Assigned Employee",
   };
 
-  // 1. Check client/vehicle/accounting changes
+  const formatValue = (value: unknown): string => {
+    if (value === undefined || value === null || value === "") return "—";
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  };
+
+  const prettyFieldName = (field: string): string =>
+    fieldLabelMap[field] ||
+    field
+      .replace(/([A-Z])/g, " $1")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const shouldSkipField = (field: string) =>
+    [
+      "id",
+      "activityLogs",
+      "lastUpdatedBy",
+      "lastUpdatedAt",
+      "isDeleted",
+      "deletedAt",
+      "deletedBy",
+      "deleteReason",
+      "attachments",
+      "services",
+      "serviceTypes",
+      "serviceDueDate",
+      "serviceStatus",
+      "serviceType",
+      "createdAt",
+      "createdBy",
+      "manual",
+    ].includes(field);
+
+  // 1. Check client/vehicle/accounting changes for every tracked field.
   if (existing && actor) {
-    const tracked = Object.keys(fieldLabelMap);
+    const tracked = Object.keys({ ...existing, ...record }).filter((field) => !shouldSkipField(field));
     for (const field of tracked) {
       const oldVal = (existing as any)[field];
       const newVal = (record as any)[field];
-      if (oldVal !== newVal && newVal !== undefined && newVal !== "") {
+      const oldLabel = formatValue(oldVal);
+      const newLabel = formatValue(newVal);
+      if (oldLabel !== newLabel) {
         activities.push(
           createActivity(
             actor,
-            `Changed ${fieldLabelMap[field] ?? field}`,
-            fieldLabelMap[field] ?? field,
-            String(oldVal ?? "—"),
-            String(newVal),
-          )
+            `Changed ${prettyFieldName(field)}`,
+            prettyFieldName(field),
+            oldLabel,
+            newLabel,
+          ),
         );
       }
     }
+  }
+
+  // Log creation as an audit event for new records.
+  if (!existing && actor) {
+    activities.push(createActivity(actor, "Created client record", "Record Created", "", ""));
   }
 
   // 2. Normalize and check Service changes

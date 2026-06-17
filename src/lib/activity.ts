@@ -12,6 +12,20 @@ export interface ActivityLog {
   timestamp: string;
 }
 
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value === "object" && value !== null && "toDate" in value && typeof (value as any).toDate === "function") {
+    return (value as any).toDate();
+  }
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /**
  * Create an activity log entry.
  */
@@ -66,8 +80,9 @@ export async function logClientActivity(
 /**
  * Format a timestamp for display.
  */
-export function formatActivityTime(iso: string): string {
-  const date = new Date(iso);
+export function formatActivityTime(iso: unknown): string {
+  const date = toDate(iso);
+  if (!date) return "—";
   return date.toLocaleString(undefined, {
     dateStyle: "short",
     timeStyle: "short",
