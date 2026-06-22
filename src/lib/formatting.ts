@@ -1,6 +1,15 @@
+const inrFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+});
+
 export function formatCurrency(amount?: number): string {
-  if (amount === undefined || amount === null) return "₹0";
-  return `₹${Number(amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  if (amount === undefined || amount === null || Number.isNaN(Number(amount))) {
+    return inrFormatter.format(0);
+  }
+  return inrFormatter.format(Number(amount));
 }
 
 export function formatDate(iso?: string): string {

@@ -11,6 +11,10 @@ const GST_NUMBER = "27AABCT1234H1Z0";
 const CONTACT_NUMBER = "+91 98765 43210";
 const CONTACT_EMAIL = "info@sainath-consultancy.com";
 
+function safeText(value?: string): string {
+  return value && value.trim() ? value : "—";
+}
+
 const getStatusBadgeColor = (status: string) => {
   switch (status) {
     case "Paid":
@@ -31,15 +35,24 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
     <div className="bg-white text-slate-900">
       <div className="border-b pb-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-blue-600">INVOICE</h1>
-            <p className="text-sm text-slate-600">{COMPANY_NAME}</p>
-            <p className="text-sm text-slate-600">{COMPANY_ADDRESS}</p>
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white text-lg font-bold">
+              SS
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-blue-600">INVOICE</h1>
+              <p className="text-sm text-slate-600">{COMPANY_NAME}</p>
+              <p className="text-sm text-slate-600">{COMPANY_ADDRESS}</p>
+            </div>
           </div>
           <div className="text-left lg:text-right">
-            <p className="text-2xl font-bold text-slate-800">{invoice.invoiceNumber}</p>
-            <span className={`inline-flex mt-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(invoice.status)}`}>
-              {invoice.status}
+            <p className="text-2xl font-bold text-slate-800">{safeText(invoice.invoiceNumber)}</p>
+            <div className="mt-2 text-sm text-slate-700">
+              <p>Invoice Date: {formatDate(invoice.invoiceDate)}</p>
+              <p>Billing Period: {formatDate(invoice.billingPeriodStart)} to {formatDate(invoice.billingPeriodEnd)}</p>
+            </div>
+            <span className={`inline-flex mt-3 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(invoice.status || "")}`}>
+              {safeText(invoice.status)}
             </span>
           </div>
         </div>
@@ -64,11 +77,11 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
         <div>
           <h3 className="font-bold text-slate-800 mb-3">BILL TO</h3>
           <div className="space-y-1 text-sm text-slate-700">
-            <p className="font-medium">{invoice.clientName}</p>
-            <p>Mobile: {invoice.clientMobile || "—"}</p>
-            <p>Address: {invoice.clientAddress || "—"}</p>
-            <p>Vehicle: {invoice.vehicleNumber || "—"} ({invoice.vehicleType || "—"})</p>
-            <p className="text-slate-500">Client ID: {invoice.clientId}</p>
+            <p className="font-medium">{safeText(invoice.clientName)}</p>
+            <p>Mobile: {safeText(invoice.clientMobile)}</p>
+            <p>Address: {safeText(invoice.clientAddress)}</p>
+            <p>Vehicle: {safeText(invoice.vehicleNumber)} ({safeText(invoice.vehicleType)})</p>
+            <p className="text-slate-500">Client ID: {safeText(invoice.clientId)}</p>
           </div>
         </div>
         <div>
@@ -83,7 +96,7 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
             </div>
             <div className="flex justify-between">
               <span className="font-medium text-slate-700">Created By:</span>
-              <span>{invoice.createdBy}</span>
+              <span>{safeText(invoice.createdBy)}</span>
             </div>
             <div className="flex justify-between">
               <span className="font-medium text-slate-700">Created At:</span>

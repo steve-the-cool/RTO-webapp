@@ -150,28 +150,37 @@ function addTableRow(
 }
 
 function addCanvasToPdf(doc: jsPDF, canvas: HTMLCanvasElement): void {
-  const imgData = canvas.toDataURL("image/png");
   const pdfWidth = doc.internal.pageSize.getWidth();
   const pdfHeight = doc.internal.pageSize.getHeight();
-  
-  // Calculate the height of the image when fitted to PDF width
-  const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-  
-  // Add the image across multiple pages if needed
-  let position = 0;
-  let pageNum = 0;
-  
-  while (position < imgHeight) {
-    if (pageNum > 0) {
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+  const pageCanvasHeight = Math.floor((pdfHeight * canvasWidth) / pdfWidth);
+
+  let yOffsetPx = 0;
+  let pageIndex = 0;
+
+  while (yOffsetPx < canvasHeight) {
+    const sliceHeight = Math.min(pageCanvasHeight, canvasHeight - yOffsetPx);
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvasWidth;
+    pageCanvas.height = sliceHeight;
+    const ctx = pageCanvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Failed to create PDF canvas context.");
+    }
+
+    ctx.drawImage(canvas, 0, yOffsetPx, canvasWidth, sliceHeight, 0, 0, canvasWidth, sliceHeight);
+    const imgData = pageCanvas.toDataURL("image/png");
+
+    if (pageIndex > 0) {
       doc.addPage();
     }
-    
-    // Calculate the Y offset for this page
-    const yOffset = -position;
-    doc.addImage(imgData, "PNG", 0, yOffset, pdfWidth, imgHeight);
-    
-    position += pdfHeight;
-    pageNum += 1;
+
+    const pageImageHeight = (sliceHeight * pdfWidth) / canvasWidth;
+    doc.addImage(imgData, "PNG", 0, 0, pdfWidth, pageImageHeight);
+
+    pageIndex += 1;
+    yOffsetPx += sliceHeight;
   }
 }
 
@@ -365,7 +374,7 @@ export async function generateInvoicePDF(invoice: Invoice): Promise<string | voi
     const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = blobUrl;
-    link.download = `${invoice.invoiceNumber}.pdf`;
+    link.download = `${invoice.invoiceNumber || "invoice"}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

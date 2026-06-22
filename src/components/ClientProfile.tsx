@@ -408,7 +408,7 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                   }
                   setSavingPayment(true);
                   try {
-                    await addPayment({
+                    const saved = await addPayment({
                       clientId: record.id,
                       amount: amt,
                       transactionDate: paymentForm.transactionDate ? new Date(paymentForm.transactionDate).toISOString() : new Date().toISOString(),
@@ -417,6 +417,16 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                       receivedBy: paymentForm.receivedBy || "",
                       referenceNumber: paymentForm.referenceNumber || "",
                       remarks: paymentForm.remarks || "",
+                    });
+                    // Optimistically update UI in case realtime listener is delayed or fails
+                    setPayments((prev) => {
+                      try {
+                        if (!saved || !saved.id) return prev;
+                        if (prev.find((p) => p.id === saved.id)) return prev;
+                        return [saved as ClientPayment, ...prev];
+                      } catch (e) {
+                        return prev;
+                      }
                     });
                     setShowAddPayment(false);
                     setPaymentForm({ amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
