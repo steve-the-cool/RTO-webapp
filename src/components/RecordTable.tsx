@@ -17,6 +17,7 @@ import {
   serviceLabel,
   getRecordServices,
   getRecordServiceDetails,
+  normalizeLegacyServiceType,
   type ServiceDetail,
   type ServiceType,
   type Bucket,
@@ -145,7 +146,12 @@ export function RecordTable({ bucket, title, description }: Props) {
   const openEdit = (r: RegistryRecord) => {
     // Initialize services[] as objects for the editor
     const services = getRecordServiceDetails(r);
-    setEditing({ ...r, services });
+    const normalizedServiceType = normalizeLegacyServiceType(r.serviceType, r.application, r.work);
+    const normalizedRecord = normalizedServiceType
+      ? { ...r, serviceType: normalizedServiceType }
+      : r;
+
+    setEditing({ ...normalizedRecord, services });
     setOpen(true);
   };
 
@@ -237,6 +243,7 @@ export function RecordTable({ bucket, title, description }: Props) {
           await syncTaskFromRecord(bucket, editing, username);
           setOpen(false);
         },
+        editing.id,
       );
     } catch (error) {
       console.error("Error saving record:", error);

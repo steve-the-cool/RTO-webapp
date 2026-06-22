@@ -18,10 +18,11 @@ export function useDuplicateDetection({ bucket, actor }: UseDuplicateDetectionPr
     mvNo: string,
     work: string,
     onSave: () => Promise<void>,
+    excludeId?: string,
   ): Promise<void> => {
     try {
       setLoading(true);
-      const dups = await checkForDuplicates(bucket, mvNo, work);
+      const dups = await checkForDuplicates(bucket, mvNo, work, excludeId);
 
       if (dups.length > 0) {
         // Show duplicate dialog

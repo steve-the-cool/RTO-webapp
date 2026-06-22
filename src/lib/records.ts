@@ -17,6 +17,7 @@ import {
 import { db } from "./firebase";
 import { createActivity, logClientActivity, type ActivityLog } from "./activity";
 import { transformInput, getForceCapsSetting, CAPITALIZE_FIELDS } from "./capitalize-settings";
+import { isLicenseRenewal } from "./documentTypes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,14 +38,15 @@ export interface RecordAttachment {
 
 export type PaymentStatus = "Paid" | "Partially Paid" | "Unpaid";
 
-export type ServiceType = 
+export type ServiceType =
   | "Insurance"
   | "Fitness"
   | "Gujarat Permit"
   | "National Permit"
   | "Tax"
   | "PUC"
-  | "License"
+  | "License New"
+  | "License Renew"
   | "RC Transfer"
   | "HP Addition"
   | "HP Termination";
@@ -64,7 +66,8 @@ export const SERVICE_TYPES: ServiceType[] = [
   "National Permit",
   "Tax",
   "PUC",
-  "License",
+  "License New",
+  "License Renew",
   "RC Transfer",
   "HP Addition",
   "HP Termination",
@@ -81,7 +84,10 @@ export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
   "national-permit": "National Permit",
   tax: "Tax",
   puc: "PUC",
-  license: "License",
+  // Backwards-compatibility: /service/license -> License New
+  license: "License New",
+  "license-new": "License New",
+  "license-renew": "License Renew",
   "rc-transfer": "RC Transfer",
   "hp-addition": "HP Addition",
   "hp-termination": "HP Termination",
@@ -111,8 +117,27 @@ export function normalizeServiceType(value: any): ServiceType | null {
   const mapped2 = SERVICE_ROUTE_MAP[asSlug];
   if (mapped2) return mapped2;
   
+  // Special-case legacy single-word 'License' — map to License New by default
+  if (trimmed.toLowerCase() === "license") return "License New";
+
   console.warn("[normalizeServiceType] Unknown service type:", value, "- not in SERVICE_TYPES or SERVICE_ROUTE_MAP");
   return null;
+}
+
+export function normalizeLegacyServiceType(
+  value: any,
+  application?: string,
+  work?: string,
+): ServiceType | null {
+  const rawType = String(value ?? "").trim();
+  const normalized = normalizeServiceType(rawType);
+  if (!normalized) return null;
+
+  if (rawType.toLowerCase() === "license") {
+    return isLicenseRenewal(application, work) ? "License Renew" : "License New";
+  }
+
+  return normalized;
 }
 
 export interface RegistryRecord {
@@ -161,11 +186,18 @@ export interface RegistryRecord {
  * Get canonical services for a record, supporting legacy `serviceType`.
  */
 export function getRecordServices(record: RegistryRecord): ServiceType[] {
-  if (Array.isArray(record.services) && record.services.length > 0) {
-    return record.services.map((s) => (typeof s === "object" && s !== null ? s.serviceType : (s as any)));
-  }
-  if (record.serviceType) return [record.serviceType];
-  return [];
+  const source = Array.isArray(record.services) && record.services.length > 0
+    ? record.services
+    : record.serviceType
+      ? [record.serviceType]
+      : [];
+
+  return source
+    .map((s) => {
+      const rawType = typeof s === "object" && s !== null ? (s as any).serviceType : s;
+      return normalizeLegacyServiceType(rawType, record.application, record.work);
+    })
+    .filter((t): t is ServiceType => Boolean(t));
 }
 
 /**
@@ -175,29 +207,42 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
   const defaultStatus = record.serviceStatus ?? record.status ?? "Active";
 
   if (Array.isArray(record.services) && record.services.length > 0) {
-    return record.services.map((s) => {
-      if (typeof s === "object" && s !== null) {
+    return record.services
+      .map((s) => {
+        if (typeof s === "object" && s !== null) {
+          const normalizedType = normalizeLegacyServiceType(s.serviceType, record.application, record.work);
+          if (!normalizedType) return null;
+          return {
+            serviceType: normalizedType,
+            dueDate: s.dueDate || record.serviceDueDate || "",
+            status: s.status || defaultStatus,
+          };
+        }
+
+        const normalizedType = normalizeLegacyServiceType(s, record.application, record.work);
+        if (!normalizedType) return null;
+
         return {
-          ...s,
-          status: s.status || defaultStatus,
+          serviceType: normalizedType,
+          dueDate: record.serviceDueDate || "",
+          status: defaultStatus,
         };
-      }
-      return {
-        serviceType: s as any,
-        dueDate: record.serviceDueDate || "",
-        status: defaultStatus,
-      };
-    });
+      })
+      .filter((detail): detail is ServiceDetail => detail !== null);
   }
+
   if (record.serviceType) {
+    const normalizedType = normalizeLegacyServiceType(record.serviceType, record.application, record.work);
+    if (!normalizedType) return [];
     return [
       {
-        serviceType: record.serviceType,
+        serviceType: normalizedType,
         dueDate: record.serviceDueDate || "",
         status: defaultStatus,
       },
     ];
   }
+
   return [];
 }
 
@@ -225,7 +270,8 @@ export const serviceLabel = (type?: ServiceType): string => {
     "National Permit": "🇮🇳 National Permit",
     "Tax": "💰 Tax",
     "PUC": "🌍 PUC",
-    "License": "🔖 License",
+    "License New": "🔖 License (New)",
+    "License Renew": "🔁 License (Renew)",
     "RC Transfer": "🔄 RC Transfer",
     "HP Addition": "➕ HP Addition",
     "HP Termination": "❌ HP Termination",
@@ -242,7 +288,8 @@ export const serviceColor = (type?: ServiceType): string => {
     "National Permit": "bg-purple-700",
     "Tax": "bg-yellow-500",
     "PUC": "bg-emerald-500",
-    "License": "bg-cyan-500",
+    "License New": "bg-cyan-500",
+    "License Renew": "bg-sky-400",
     "RC Transfer": "bg-orange-500",
     "HP Addition": "bg-pink-500",
     "HP Termination": "bg-red-500",
@@ -323,9 +370,13 @@ export async function saveRecord(
   actor?: string,
 ): Promise<void> {
   const colName = colFor(bucket);
-  
+  // Ensure we have a valid document id. If the incoming record has no id,
+  // generate a new Firestore id so we can safely call getDoc/setDoc.
+  const docRef = record.id ? doc(db, colName, record.id) : doc(collection(db, colName));
+  const recId = record.id ?? docRef.id;
+
   // Get existing record to track changes
-  const existingDoc = await getDoc(doc(db, colName, record.id));
+  const existingDoc = await getDoc(doc(db, colName, recId));
 
   const existing = existingDoc.exists()
     ? (existingDoc.data() as RegistryRecord)
@@ -428,38 +479,43 @@ export async function saveRecord(
   const normalizedServices: ServiceDetail[] = [];
   const serviceTypes: ServiceType[] = [];
 
+  const normalizeType = (rawType: any) => normalizeLegacyServiceType(rawType, record.application, record.work);
+
+  console.log("[saveRecord] Original services:", record.services, "serviceType:", record.serviceType, "serviceTypes:", record.serviceTypes);
+
   const rawServices = record.services;
   if (Array.isArray(rawServices) && rawServices.length > 0) {
     for (const s of rawServices) {
+      let rawType: any;
+      let dueDate = record.serviceDueDate || "";
+      let status = record.serviceStatus || "Active";
+
       if (typeof s === "object" && s !== null) {
-        const nType = normalizeServiceType(s.serviceType);
-        if (nType) {
-          normalizedServices.push({
-            serviceType: nType,
-            dueDate: s.dueDate || "",
-            status: s.status || "Active",
-          });
-          if (!serviceTypes.includes(nType)) {
-            serviceTypes.push(nType);
-          }
-        }
+        rawType = s.serviceType;
+        dueDate = s.dueDate || dueDate;
+        status = s.status || status;
       } else {
-        const nType = normalizeServiceType(s);
-        if (nType) {
-          normalizedServices.push({
-            serviceType: nType,
-            dueDate: record.serviceDueDate || "",
-            status: record.serviceStatus || "Active",
-          });
-          if (!serviceTypes.includes(nType)) {
-            serviceTypes.push(nType);
-          }
-        }
+        rawType = s;
+      }
+
+      const nType = normalizeType(rawType);
+      if (!nType) {
+        console.warn("[saveRecord] Skipping invalid service type:", rawType);
+        continue;
+      }
+
+      normalizedServices.push({
+        serviceType: nType,
+        dueDate,
+        status,
+      });
+      if (!serviceTypes.includes(nType)) {
+        serviceTypes.push(nType);
       }
     }
   } else if (record.serviceType) {
     // Handle single legacy serviceType fallback
-    const nType = normalizeServiceType(record.serviceType);
+    const nType = normalizeType(record.serviceType);
     if (nType) {
       normalizedServices.push({
         serviceType: nType,
@@ -467,8 +523,12 @@ export async function saveRecord(
         status: record.serviceStatus || "Active",
       });
       serviceTypes.push(nType);
+    } else {
+      console.warn("[saveRecord] Skipping invalid legacy serviceType:", record.serviceType);
     }
   }
+
+  console.log("[saveRecord] Normalized services:", normalizedServices, "serviceTypes:", serviceTypes);
 
   // Compare service changes
   if (existing && actor) {
@@ -603,7 +663,8 @@ export async function saveRecord(
     }
   }
 
-  const { id, ...updateData } = data;
+  const { id: _maybeId, ...updateData } = data;
+  const id = recId;
 
   // Apply uppercase forcing
   try {
@@ -618,7 +679,13 @@ export async function saveRecord(
     console.warn("[saveRecord] Could not apply force-caps setting:", err);
   }
 
-  await setDoc(doc(db, colName, id), updateData, { merge: true });
+  console.log("[saveRecord] Final update payload:", updateData);
+  try {
+    await setDoc(doc(db, colName, id), updateData, { merge: true });
+  } catch (err) {
+    console.error(`[saveRecord] Failed to write record ${id} to ${colName}:`, err);
+    throw err;
+  }
 }
 
 /** Check for possible duplicate entries (same mvNo and work). */
@@ -626,6 +693,7 @@ export async function checkForDuplicates(
   bucket: Bucket,
   mvNo: string,
   work: string,
+  excludeId?: string,
 ): Promise<RegistryRecord[]> {
   if (!mvNo || !work) return [];
 
@@ -636,10 +704,10 @@ export async function checkForDuplicates(
   );
 
   const snap = await getDocs(q);
-  // Filter out deleted records
+  // Filter out deleted records and optionally exclude a specific id (the record being edited)
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
-    .filter((r) => !r.isDeleted);
+    .filter((r) => !r.isDeleted && r.id !== excludeId);
 }
 
 /** Soft-delete a record (admin only). */

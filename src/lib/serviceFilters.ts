@@ -1,5 +1,6 @@
 // Service Filters — Service type definitions and filtering utilities.
 import { subscribeToRecords, normalizeServiceType, SERVICE_TYPES, type RegistryRecord, type Bucket, type ServiceType } from "./records";
+import { isLicenseRenewal } from "./documentTypes";
 
 export interface ServiceConfig {
   type: ServiceType;
@@ -52,12 +53,19 @@ export const SERVICE_CONFIGS: Record<ServiceType, ServiceConfig> = {
     icon: "🌱",
     color: "bg-emerald-500",
   },
-  License: {
-    type: "License",
-    label: "License",
-    description: "License applications and renewals",
+  "License New": {
+    type: "License New",
+    label: "License New",
+    description: "New license applications",
     icon: "🎫",
     color: "bg-indigo-500",
+  },
+  "License Renew": {
+    type: "License Renew",
+    label: "License Renew",
+    description: "License renewals",
+    icon: "🔁",
+    color: "bg-sky-400",
   },
   "RC Transfer": {
     type: "RC Transfer",
@@ -101,20 +109,44 @@ export function recordMatchesService(
   record: RegistryRecord,
   serviceType: ServiceType,
 ): boolean {
-  // Prefer explicit service arrays / legacy serviceType
+  // Match explicit serviceTypes array first.
+  if (Array.isArray(record.serviceTypes) && record.serviceTypes.length > 0) {
+    if (record.serviceTypes.includes(serviceType)) return true;
+  }
+
+  // Match explicit services array, including legacy string values and License markers.
   if (Array.isArray(record.services)) {
-    if (record.services.some(s => typeof s === 'object' && s !== null ? s.serviceType === serviceType : (s as any) === serviceType)) {
+    if (record.services.some((s) => {
+      const typeValue = typeof s === "object" && s !== null ? (s as any).serviceType : s;
+      const raw = String(typeValue ?? "").trim().toLowerCase();
+
+      if (!raw) return false;
+      if (raw === serviceType.toLowerCase()) return true;
+      if (raw === "license" && (serviceType === "License New" || serviceType === "License Renew")) {
+        const renewal = isLicenseRenewal(record.application, record.work);
+        return serviceType === "License Renew" ? renewal : !renewal;
+      }
+      return false;
+    })) {
       return true;
     }
   }
-  if (record.serviceType === serviceType) return true;
 
-  // Match by work field (primary match)
+  // Match legacy serviceType single-value field.
+  const legacyType = (record.serviceType ?? "").toString().trim();
+  if (legacyType) {
+    if (legacyType === serviceType) return true;
+    if (legacyType.toLowerCase() === "license" && (serviceType === "License New" || serviceType === "License Renew")) {
+      const renewal = isLicenseRenewal(record.application, record.work);
+      return serviceType === "License Renew" ? renewal : !renewal;
+    }
+  }
+
+  // Match by work or application string if explicit service fields are missing.
   if (record.work && record.work.trim().toLowerCase() === serviceType.toLowerCase()) {
     return true;
   }
 
-  // Match by application field (secondary match)
   if (
     record.application &&
     record.application.trim().toLowerCase() === serviceType.toLowerCase()

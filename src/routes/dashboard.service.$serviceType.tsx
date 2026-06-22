@@ -39,7 +39,7 @@ function ServiceTypePage() {
             The service type "{serviceType}" is not recognized.
           </p>
           <p className="text-xs text-muted-foreground mt-2">
-            Valid services: Insurance, Fitness, Permit, Gujarat Permit, National Permit, Tax, PUC, License, RC Transfer, HP Addition, HP Termination
+            Valid services: Insurance, Fitness, Permit, Gujarat Permit, National Permit, Tax, PUC, License New, License Renew, RC Transfer, HP Addition, HP Termination
           </p>
           <p className="text-xs text-muted-foreground mt-4">
             Valid URL parameters: {Object.keys(SERVICE_ROUTE_MAP).join(", ")}

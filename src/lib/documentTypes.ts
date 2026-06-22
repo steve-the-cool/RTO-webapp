@@ -40,7 +40,8 @@ export const SERVICE_SPECIFIC_DOCUMENT_TYPES: Record<ServiceType, string[]> = {
   "National Permit": ["RC Book", "Permit Documents"],
   Tax: ["RC Book", "Tax Documents"],
   PUC: ["RC Book", "PUC Certificate"],
-  License: ["Aadhaar Card", "PAN Card", "Photo", "Required License Documents"],
+  "License New": ["Aadhaar Card", "PAN Card", "Photo", "Required License Documents"],
+  "License Renew": ["Existing License", "Aadhaar Card", "Other Renewal Documents"],
   "RC Transfer": ["RC Book", "Insurance Copy", "Tax Documents"],
   "HP Addition": ["RC Book", "Insurance Copy"],
   "HP Termination": ["RC Book", "Insurance Copy"],
@@ -56,14 +57,16 @@ export function getServiceSpecificDocumentTypes(
   application?: string,
   work?: string,
 ): string[] {
-  if (serviceType !== "License") {
-    return SERVICE_SPECIFIC_DOCUMENT_TYPES[serviceType] ?? [];
+  // Service-specific mapping now includes 'License New' and 'License Renew'.
+  // If a legacy 'License' value is passed, determine renewal status and map accordingly.
+  if ((serviceType as string) === "License") {
+    const renewal = isLicenseRenewal(application, work);
+    return renewal
+      ? SERVICE_SPECIFIC_DOCUMENT_TYPES["License Renew"]
+      : SERVICE_SPECIFIC_DOCUMENT_TYPES["License New"];
   }
 
-  const renewal = isLicenseRenewal(application, work);
-  return renewal
-    ? ["Existing License", "Aadhaar Card", "Other Renewal Documents"]
-    : ["Aadhaar Card", "PAN Card", "Photo", "Required License Documents"];
+  return SERVICE_SPECIFIC_DOCUMENT_TYPES[serviceType] ?? [];
 }
 
 export const ALL_CLIENT_DOCUMENT_TYPES = [...CLIENT_DOCUMENT_TYPES] as readonly string[];

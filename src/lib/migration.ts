@@ -158,13 +158,7 @@ function inferServiceTypeFromWork(
       ],
       "PUC"
     ),
-    (
-      [
-        "license",
-        "registration",
-      ],
-      "License"
-    ),
+    // License handled below to distinguish New vs Renew
     (
       [
         "rc transfer",
@@ -193,6 +187,12 @@ function inferServiceTypeFromWork(
     if (keywords.some((kw) => combined.includes(kw))) {
       return serviceType;
     }
+  }
+
+  // Special-case license keywords to distinguish new vs renew
+  if (/(license|registration)/.test(combined)) {
+    if (/(renew|renewal)/.test(combined)) return "License Renew";
+    return "License New";
   }
 
   return null;

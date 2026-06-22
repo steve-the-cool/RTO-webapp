@@ -7,7 +7,8 @@ import {
 } from "firebase/firestore";
 import { computeFollowUps } from "./followups";
 import { db } from "./firebase";
-import { normalizeServiceType, type Bucket, type RegistryRecord, type ServiceType, type RecordStatus } from "./records";
+import { normalizeServiceType, normalizeLegacyServiceType, type Bucket, type RegistryRecord, type ServiceType, type RecordStatus, getRecordServices } from "./records";
+import { recordMatchesService } from "./serviceFilters";
 
 /**
  * Get all records for a specific service type across a bucket.
@@ -105,29 +106,29 @@ export async function getServiceClientsAll(
       buckets.map((b) => getServiceClients(b, serviceType)),
     );
     const flattened = allRecords.flat();
+    const matched = flattened.filter((r) => recordMatchesService(r, serviceType));
 
-    // Validation: Ensure all results match the filter
-    const totalCount = flattened.length;
-    const matchCount = flattened.filter(r => r.serviceType === serviceType).length;
-    
+    const totalCount = matched.length;
+    const rawCount = flattened.length;
+
     console.log(
-      `[getServiceClientsAll] SUCCESS: Retrieved ${totalCount} records across ${buckets.length} buckets`,
+      `[getServiceClientsAll] SUCCESS: Retrieved ${totalCount} matching records across ${buckets.length} buckets`,
       {
         serviceType,
         totalRecords: totalCount,
-        matchingFilter: matchCount,
+        rawRecords: rawCount,
         buckets: buckets.map((b, i) => ({ bucket: b, count: allRecords[i].length })),
       },
     );
 
-    if (matchCount !== totalCount) {
+    if (rawCount !== totalCount) {
       console.warn(
-        `[getServiceClientsAll] WARNING: Filter mismatch detected!`,
-        { expectedAll: totalCount, actualMatching: matchCount },
+        `[getServiceClientsAll] WARNING: Filter mismatch detected (raw query results included non-matching records).`,
+        { expectedMatches: totalCount, rawResults: rawCount },
       );
     }
 
-    return flattened;
+    return matched;
   } catch (error) {
     console.error(
       `[getServiceClientsAll] ERROR: Failed to fetch records for serviceType="${serviceType}"`,
@@ -266,7 +267,8 @@ export async function getRevenueByService() {
     "National Permit",
     "Tax",
     "PUC",
-    "License",
+    "License New",
+    "License Renew",
     "RC Transfer",
     "HP Addition",
     "HP Termination",
@@ -380,7 +382,8 @@ export async function getServiceDistributionSummary() {
     "National Permit",
     "Tax",
     "PUC",
-    "License",
+    "License New",
+    "License Renew",
     "RC Transfer",
     "HP Addition",
     "HP Termination",

@@ -22,7 +22,8 @@ export type TargetCategory =
   | "Gujarat Permit"
   | "National Permit"
   | "Tax"
-  | "License"
+  | "License New"
+  | "License Renew"
   | "RC Transfer"
   | "HP Addition"
   | "HP Termination";
@@ -64,7 +65,7 @@ const TARGETS_COLLECTION = "targets";
 
 /**
  * Map TargetCategory to ServiceType.
- * They share the same names except for "PUC" and "License".
+ * They share the same names except for "PUC" and the split License categories.
  */
 function categoryToServiceType(category: TargetCategory): ServiceType {
   return category as ServiceType;
