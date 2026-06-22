@@ -257,3 +257,137 @@ export function useServiceDistribution(records: RegistryRecord[]): ServiceDistri
       .sort((a, b) => b.value - a.value);
   }, [records]);
 }
+
+export interface ClientAnalyticsRow {
+  clientName: string;
+  serviceCount: number;
+  revenue: number;
+  collected: number;
+  pending: number;
+  lastServiceDate: string;
+}
+
+export interface ClientBusinessMetrics {
+  totalClients: number;
+  totalServicesTaken: number;
+  totalRevenue: number;
+  totalCollected: number;
+  averageMonthlyRevenue: number;
+  topCustomersByRevenue: ClientAnalyticsRow[];
+  topCustomersByServices: ClientAnalyticsRow[];
+  categoryBreakdown: RevenueByService[];
+}
+
+function getClientKey(record: RegistryRecord): string {
+  const name = record.name?.trim();
+  if (name) return name;
+  return record.mvNo?.trim() || "Unknown";
+}
+
+function toMonthSpan(start: Date | null, end: Date | null): number {
+  if (!start || !end) return 1;
+  const yearDiff = end.getFullYear() - start.getFullYear();
+  const monthDiff = end.getMonth() - start.getMonth();
+  return Math.max(1, yearDiff * 12 + monthDiff + 1);
+}
+
+export function useClientBusinessAnalytics(records: RegistryRecord[]): ClientBusinessMetrics {
+  return useMemo(() => {
+    const activeRecords = records.filter((r) => (r.serviceAmount && r.serviceAmount > 0) || (r.amountReceived && r.amountReceived > 0));
+
+    const clientMap = new Map<
+      string,
+      {
+        serviceCount: number;
+        revenue: number;
+        collected: number;
+        lastServiceDate: Date | null;
+      }
+    >();
+
+    let earliestRecord: Date | null = null;
+    let latestRecord: Date | null = null;
+
+    const categoryMap = new Map<string, { revenue: number; count: number }>();
+
+    activeRecords.forEach((record) => {
+      const clientName = getClientKey(record);
+      const revenue = record.serviceAmount || 0;
+      const collected = record.amountReceived || 0;
+      const recordDate = new Date(record.date);
+
+      if (!earliestRecord || recordDate < earliestRecord) earliestRecord = recordDate;
+      if (!latestRecord || recordDate > latestRecord) latestRecord = recordDate;
+
+      const existing = clientMap.get(clientName) || {
+        serviceCount: 0,
+        revenue: 0,
+        collected: 0,
+        lastServiceDate: null,
+      };
+
+      clientMap.set(clientName, {
+        serviceCount: existing.serviceCount + 1,
+        revenue: existing.revenue + revenue,
+        collected: existing.collected + collected,
+        lastServiceDate:
+          !existing.lastServiceDate || recordDate > existing.lastServiceDate
+            ? recordDate
+            : existing.lastServiceDate,
+      });
+
+      const category = record.work || "Other";
+      const categoryStats = categoryMap.get(category) || { revenue: 0, count: 0 };
+      categoryMap.set(category, {
+        revenue: categoryStats.revenue + revenue,
+        count: categoryStats.count + 1,
+      });
+    });
+
+    const totalClients = clientMap.size;
+    const totalServicesTaken = activeRecords.length;
+    const totalRevenue = activeRecords.reduce((sum, record) => sum + (record.serviceAmount || 0), 0);
+    const totalCollected = activeRecords.reduce((sum, record) => sum + (record.amountReceived || 0), 0);
+
+    const averageMonthlyRevenue = totalRevenue / toMonthSpan(earliestRecord, latestRecord);
+
+    const clients = Array.from(clientMap.entries()).map(([clientName, stats]) => ({
+      clientName,
+      serviceCount: stats.serviceCount,
+      revenue: stats.revenue,
+      collected: stats.collected,
+      pending: Math.max(0, stats.revenue - stats.collected),
+      lastServiceDate: stats.lastServiceDate ? stats.lastServiceDate.toISOString().slice(0, 10) : "—",
+    }));
+
+    const topCustomersByRevenue = clients
+      .slice()
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8);
+
+    const topCustomersByServices = clients
+      .slice()
+      .sort((a, b) => b.serviceCount - a.serviceCount)
+      .slice(0, 8);
+
+    const categoryBreakdown = Array.from(categoryMap.entries())
+      .map(([service, data]) => ({
+        service,
+        revenue: data.revenue,
+        servicesSold: data.count,
+        averageValue: data.count > 0 ? data.revenue / data.count : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    return {
+      totalClients,
+      totalServicesTaken,
+      totalRevenue,
+      totalCollected,
+      averageMonthlyRevenue,
+      topCustomersByRevenue,
+      topCustomersByServices,
+      categoryBreakdown,
+    };
+  }, [records]);
+}

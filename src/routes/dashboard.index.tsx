@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import { subscribeToRecords, SERVICE_TYPES, serviceLabel, serviceToUrlParam, type RegistryRecord } from "@/lib/records";
 import { computeFollowUps } from "@/lib/followups";
 import { getTotalRevenue, getActiveServicesCount, getRevenueByService, getUpcomingRenewals } from "@/lib/services";
+import { subscribeToAllPayments, type ClientPayment } from "@/lib/payments";
 import { subscribeToTasks, type Task } from "@/lib/tasks";
 import { subscribeToTargets, calculateTargetMetrics, type TargetMetrics } from "@/lib/targets";
-import { ArrowRight, Users, UserPlus, CheckCircle2, Clock, TrendingUp, DollarSign, AlertCircle, Zap, Target } from "lucide-react";
+import { calculateBillingMetrics } from "@/lib/billing";
+import { ArrowRight, Users, UserPlus, CheckCircle2, Clock, TrendingUp, DollarSign, AlertCircle, Zap, Target, Receipt } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const Route = createFileRoute("/dashboard/")({
@@ -20,10 +22,20 @@ function Overview() {
   const [activeServices, setActiveServices] = useState(0);
   const [revenueByService, setRevenueByService] = useState<{ service: string; revenue: number }[]>([]);
   const [upcomingRenewals, setUpcomingRenewals] = useState<RegistryRecord[]>([]);
+  const [allPayments, setAllPayments] = useState<ClientPayment[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [targets, setTargets] = useState<TargetMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<{ type: string } | null>(null);
+  const [billingMetrics, setBillingMetrics] = useState({
+    totalInvoiced: 0,
+    totalCollected: 0,
+    outstandingAmount: 0,
+    invoicesThisMonth: 0,
+    pendingInvoices: 0,
+    overdueInvoices: 0,
+    collectionRate: 0,
+  });
 
   useEffect(() => {
     const u1 = subscribeToRecords("clients", setClients);
@@ -38,19 +50,30 @@ function Overview() {
   }, []);
 
   useEffect(() => {
+    const unsub = subscribeToAllPayments((items) => {
+      setAllPayments(items);
+      const sum = items.reduce((s, p) => s + (p.amount || 0), 0);
+      setTotalRevenue(sum);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
     const loadServiceData = async () => {
       try {
-        const [revenue, active, byService, renewals] = await Promise.all([
+        const [revenue, active, byService, renewals, billing] = await Promise.all([
           getTotalRevenue(),
           getActiveServicesCount(),
           getRevenueByService(),
           getUpcomingRenewals(30),
+          calculateBillingMetrics(),
         ]);
 
         setTotalRevenue(revenue);
         setActiveServices(active);
         setRevenueByService(byService);
         setUpcomingRenewals(renewals);
+        setBillingMetrics(billing);
       } catch (error) {
         console.error("Error loading service data:", error);
       } finally {
@@ -143,8 +166,6 @@ function Overview() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Follow-Up Center */}
         {followups && (
           <div className="space-y-4 mt-4">
             <h3 className="text-lg font-semibold">Follow-Up Center</h3>

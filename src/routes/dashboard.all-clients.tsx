@@ -16,7 +16,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { subscribeToAllClients, filterClients, type AggregatedClient } from "@/lib/allClients";
-import { staffLabel } from "@/lib/records";
+import { SERVICE_TYPES, STATUS_OPTIONS, staffLabel } from "@/lib/records";
 import { formatActivityTime, getActivityDescription } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,17 @@ function AllClientsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [paymentFilter, setPaymentFilter] = useState<"all" | "Paid" | "Partial" | "Unpaid">("all");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("all");
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<string>("all");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [vehicleFilter, setVehicleFilter] = useState("");
+  const [mobileFilter, setMobileFilter] = useState("");
+  const [clientNameFilter, setClientNameFilter] = useState("");
+  const [assignedFilter, setAssignedFilter] = useState("");
+  const [dueDateStart, setDueDateStart] = useState("");
+  const [dueDateEnd, setDueDateEnd] = useState("");
+  const [createdStart, setCreatedStart] = useState("");
+  const [createdEnd, setCreatedEnd] = useState("");
   const [selectedClient, setSelectedClient] = useState<AggregatedClient | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -71,8 +82,35 @@ function AllClientsPage() {
         paymentFilter === "all"
           ? undefined
           : (paymentFilter as AggregatedClient["paymentStatus"]),
+      serviceType: serviceTypeFilter === "all" ? undefined : serviceTypeFilter,
+      serviceStatus: serviceStatusFilter === "all" ? undefined : serviceStatusFilter,
+      groupName: groupFilter,
+      vehicleNumber: vehicleFilter,
+      mobileNumber: mobileFilter,
+      clientName: clientNameFilter,
+      assignedTo: assignedFilter,
+      dueDateStart,
+      dueDateEnd,
+      createdStart,
+      createdEnd,
     });
-  }, [clients, searchQuery, statusFilter, paymentFilter]);
+  }, [
+    clients,
+    searchQuery,
+    statusFilter,
+    paymentFilter,
+    serviceTypeFilter,
+    serviceStatusFilter,
+    groupFilter,
+    vehicleFilter,
+    mobileFilter,
+    clientNameFilter,
+    assignedFilter,
+    dueDateStart,
+    dueDateEnd,
+    createdStart,
+    createdEnd,
+  ]);
 
   // Calculate metrics
   const metrics = useMemo(() => {
@@ -155,7 +193,7 @@ function AllClientsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="all">All Client Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
@@ -166,12 +204,108 @@ function AllClientsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Payments</SelectItem>
+                <SelectItem value="all">All Payment Status</SelectItem>
                 <SelectItem value="Paid">Paid</SelectItem>
                 <SelectItem value="Partial">Partially Paid</SelectItem>
                 <SelectItem value="Unpaid">Unpaid</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Select value={serviceTypeFilter} onValueChange={(val: any) => setServiceTypeFilter(val)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Service Types</SelectItem>
+                {SERVICE_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={serviceStatusFilter} onValueChange={(val: any) => setServiceStatusFilter(val)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Input
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              placeholder="Group Name"
+            />
+
+            <Input
+              value={clientNameFilter}
+              onChange={(e) => setClientNameFilter(e.target.value)}
+              placeholder="Client Name"
+            />
+
+            <Input
+              value={vehicleFilter}
+              onChange={(e) => setVehicleFilter(e.target.value)}
+              placeholder="Vehicle Number"
+            />
+
+            <Input
+              value={mobileFilter}
+              onChange={(e) => setMobileFilter(e.target.value)}
+              placeholder="Mobile Number"
+            />
+
+            <Input
+              value={assignedFilter}
+              onChange={(e) => setAssignedFilter(e.target.value)}
+              placeholder="Employee Assigned"
+            />
+
+            <div className="grid gap-2">
+              <Label className="text-xs text-muted-foreground">Due Date From</Label>
+              <Input
+                type="date"
+                value={dueDateStart}
+                onChange={(e) => setDueDateStart(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs text-muted-foreground">Due Date To</Label>
+              <Input
+                type="date"
+                value={dueDateEnd}
+                onChange={(e) => setDueDateEnd(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs text-muted-foreground">Created From</Label>
+              <Input
+                type="date"
+                value={createdStart}
+                onChange={(e) => setCreatedStart(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs text-muted-foreground">Created To</Label>
+              <Input
+                type="date"
+                value={createdEnd}
+                onChange={(e) => setCreatedEnd(e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Clients Table */}

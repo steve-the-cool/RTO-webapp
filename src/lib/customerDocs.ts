@@ -39,6 +39,7 @@ export interface CustomerDoc {
 // ─── Firestore helpers ────────────────────────────────────────────────────────
 
 const COL = "registry_customer_docs";
+export const GENERAL_CUSTOMER_ID = "__unlinked__";
 
 /**
  * Subscribe to live doc updates for a specific customer.
@@ -70,6 +71,19 @@ export function subscribeToDocsFor(
 }
 
 /**
+ * Subscribe to all document entries in the system.
+ */
+export function subscribeToAllDocs(
+  cb: (docs: CustomerDoc[]) => void,
+): () => void {
+  const q = query(collection(db, COL), orderBy("addedAt", "desc"));
+  return onSnapshot(q, (snap) => {
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerDoc));
+    cb(docs);
+  });
+}
+
+/**
  * Add a document entry for a customer.
  * If `file` is provided it will be uploaded to Firebase Storage first.
  *
@@ -91,13 +105,14 @@ export async function addDoc(
   let fileSize: number | undefined;
 
   if (file) {
-    // Use required path: customers/{customerId}/attachments/{fileName}
-    storagePath = `customers/${customerId}/attachments/${file.name}`;
+    const safeFileName = `${id}_${file.name}`;
+    storagePath = customerId === GENERAL_CUSTOMER_ID
+      ? `documents/general/attachments/${safeFileName}`
+      : `customers/${customerId}/attachments/${safeFileName}`;
     const storageRef = ref(storage, storagePath);
     
     console.log("[addDoc] Uploading file to:", storagePath);
     
-    // Upload with better error handling and timeout
     try {
       downloadURL = await uploadFileWithRetry(storageRef, file, onProgress);
       console.log("[addDoc] File uploaded successfully, URL:", downloadURL?.substring(0, 50) + "...");
@@ -105,7 +120,6 @@ export async function addDoc(
       fileSize = file.size;
     } catch (error) {
       console.error("[addDoc] Upload failed:", error);
-      // Clean up failed upload attempt
       try {
         await deleteObject(storageRef);
       } catch {
@@ -136,6 +150,66 @@ export async function addDoc(
   } catch (error) {
     console.error("[addDoc] Firestore write failed:", error);
     throw new Error(`Failed to save document: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+}
+
+export async function updateDoc(
+  docId: string,
+  customerId: string,
+  name: string,
+  type: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+  oldStoragePath?: string,
+): Promise<CustomerDoc> {
+  console.log("[updateDoc] Replacing document:", docId, "for customer:", customerId, "type:", type);
+  const storageId = crypto.randomUUID();
+  const safeFileName = `${storageId}_${file.name}`;
+  const storagePath = customerId === GENERAL_CUSTOMER_ID
+    ? `documents/general/attachments/${safeFileName}`
+    : `customers/${customerId}/attachments/${safeFileName}`;
+  const storageRef = ref(storage, storagePath);
+
+  let downloadURL: string;
+  try {
+    downloadURL = await uploadFileWithRetry(storageRef, file, onProgress);
+  } catch (error) {
+    console.error("[updateDoc] Upload failed:", error);
+    try {
+      await deleteObject(storageRef);
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw new Error(`Upload failed: ${getErrorMessage(error)}`);
+  }
+
+  const updatedDoc: CustomerDoc = {
+    id: docId,
+    customerId,
+    name,
+    type,
+    addedAt: new Date().toISOString(),
+    storagePath,
+    downloadURL,
+    mimeType: file.type,
+    fileSize: file.size,
+  };
+
+  try {
+    const { id: _id, ...data } = updatedDoc;
+    const docRef = doc(db, COL, docId);
+    await setDoc(docRef, data);
+    if (oldStoragePath && oldStoragePath !== storagePath) {
+      try {
+        await deleteObject(ref(storage, oldStoragePath));
+      } catch {
+        // ignore cleanup failures
+      }
+    }
+    return updatedDoc;
+  } catch (error) {
+    console.error("[updateDoc] Firestore update failed:", error);
+    throw new Error(`Failed to update document: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }
 

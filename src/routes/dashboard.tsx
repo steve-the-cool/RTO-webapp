@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, UserPlus, CheckSquare,
   UserCircle, BarChart3, DollarSign, LineChart,
   Settings as SettingsIcon, LogOut, Menu, Globe, Target, Users2,
-  Shield, CheckCircle, Lightbulb, FileText, Zap,
+  Shield, CheckCircle, Lightbulb, FileText, Zap, Receipt,
 } from "lucide-react";
 import { getSession, logout, type StaffUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { to: "/dashboard/all-clients", label: "All Clients", icon: Users2 },
       { to: "/dashboard/customers", label: "Customers", icon: UserCircle },
+      { to: "/dashboard/documents", label: "Documents", icon: FileText },
       { to: "/dashboard/reports", label: "Reports", icon: BarChart3 },
     ],
   },
@@ -59,6 +60,7 @@ const GROUPS: NavGroup[] = [
     heading: "Financial",
     items: [
       { to: "/dashboard/accounting", label: "Accounting", icon: DollarSign },
+      { to: "/dashboard/billing", label: "Billing", icon: Receipt },
       { to: "/dashboard/analytics", label: "Analytics", icon: LineChart },
       { to: "/dashboard/targets", label: "Target Management", icon: Target },
     ],

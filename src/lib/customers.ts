@@ -51,11 +51,24 @@ export interface CustomerProfile {
 const COL = "registry_customers";
 
 /** Subscribe to live customer profile updates. Returns unsubscribe function. */
-export function subscribeToCustomers(cb: (customers: CustomerProfile[]) => void): () => void {
+export function subscribeToCustomers(
+  cb: (customers: CustomerProfile[]) => void,
+  errorCb?: (error: unknown) => void,
+): () => void {
   const q = query(collection(db, COL), orderBy("name"));
-  return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerProfile)));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerProfile)));
+    },
+    (error) => {
+      console.error("[subscribeToCustomers] Firestore error:", error);
+      if (errorCb) {
+        errorCb(error);
+      }
+      cb([]);
+    },
+  );
 }
 
 /** Upsert a customer profile. */

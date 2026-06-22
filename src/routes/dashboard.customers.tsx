@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Loader2,
   Paperclip,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -527,7 +528,7 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
   const handleDelete = async (d: CustomerDoc) => {
     setDeleting(d.id);
     try {
-      await deleteDoc(d.id, d.storageKey);
+      await deleteDoc(d.id, d.storagePath);
     } finally {
       setDeleting(null);
     }
@@ -726,11 +727,12 @@ function CustomersPage() {
 
       {/* Table */}
       <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="grid grid-cols-[2fr_2fr_2fr_auto_auto] gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="grid grid-cols-[2fr_2fr_2fr_auto_auto_auto] gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <div>Name</div>
           <div>Contact</div>
           <div>Vehicles</div>
           <div className="text-center">Attachments</div>
+          <div className="text-center">Documents</div>
           <div className="text-center">Details</div>
         </div>
 
@@ -785,6 +787,17 @@ function CustomersPage() {
                   className="size-9 rounded-lg flex items-center justify-center bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
                 >
                   <Paperclip className="size-4" />
+                </button>
+              </div>
+
+              {/* Documents icon */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setDocsModal(c)}
+                  title="View / add structured documents"
+                  className="size-9 rounded-lg flex items-center justify-center bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
+                >
+                  <FileText className="size-4" />
                 </button>
               </div>
 

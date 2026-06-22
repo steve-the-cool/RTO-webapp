@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { subscribeToRecords, type Bucket, type RegistryRecord } from "@/lib/records";
 import {
+  useClientBusinessAnalytics,
   useServiceAnalytics,
   useRevenueByService,
   useMonthlyComparison,
@@ -25,6 +26,9 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart,
   Bar,
@@ -47,6 +51,9 @@ export const Route = createFileRoute("/dashboard/analytics")({
 
 function AnalyticsDashboard() {
   const [allRecords, setAllRecords] = useState<RegistryRecord[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState<"daily" | "weekly" | "monthly" | "quarterly" | "yearly" | "custom">("monthly");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
 
   // Subscribe to all buckets
   useEffect(() => {
@@ -71,12 +78,69 @@ function AnalyticsDashboard() {
     return () => unsubscribers.forEach((unsub) => unsub());
   }, []);
 
+  const filteredRecords = useMemo(() => {
+    const now = new Date();
+    let start: Date | null = null;
+    let end: Date | null = null;
+
+    const normalize = (value: string) => {
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    };
+
+    switch (selectedPeriod) {
+      case "daily":
+        start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case "weekly":
+        start = new Date(now);
+        start.setDate(now.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+        end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case "monthly":
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case "quarterly": {
+        const quarter = Math.floor(now.getMonth() / 3);
+        start = new Date(now.getFullYear(), quarter * 3, 1);
+        end = new Date(now.getFullYear(), quarter * 3 + 3, 0, 23, 59, 59, 999);
+        break;
+      }
+      case "yearly":
+        start = new Date(now.getFullYear(), 0, 1);
+        end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      case "custom": {
+        start = normalize(customStartDate);
+        if (start) start.setHours(0, 0, 0, 0);
+        end = normalize(customEndDate);
+        if (end) end.setHours(23, 59, 59, 999);
+        break;
+      }
+    }
+
+    return allRecords.filter((record) => {
+      const recordDate = new Date(record.date);
+      if (isNaN(recordDate.getTime())) return false;
+      if (start && recordDate < start) return false;
+      if (end && recordDate > end) return false;
+      return true;
+    });
+  }, [allRecords, selectedPeriod, customStartDate, customEndDate]);
+
   // Calculate analytics
-  const metrics = useServiceAnalytics(allRecords);
-  const revenueByService = useRevenueByService(allRecords);
-  const monthlyData = useMonthlyComparison(allRecords);
-  const yearlyData = useYearlyComparison(allRecords);
-  const serviceDistribution = useServiceDistribution(allRecords);
+  const metrics = useServiceAnalytics(filteredRecords);
+  const revenueByService = useRevenueByService(filteredRecords);
+  const monthlyData = useMonthlyComparison(filteredRecords);
+  const yearlyData = useYearlyComparison(filteredRecords);
+  const serviceDistribution = useServiceDistribution(filteredRecords);
+  const clientBusiness = useClientBusinessAnalytics(filteredRecords);
 
   // Chart colors
   const COLORS = [
@@ -161,6 +225,172 @@ function AnalyticsDashboard() {
           color="bg-amber-500/10 text-amber-600"
           subtext="Payment collection efficiency"
         />
+      </div>
+
+      <div className="rounded-lg border bg-card p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Client Business Analysis</h3>
+            <p className="text-sm text-muted-foreground">Filter customer analytics by period and review top clients.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor="period" className="text-xs uppercase tracking-wide text-muted-foreground">
+                Date range
+              </Label>
+              <Select value={selectedPeriod} onValueChange={(value) => setSelectedPeriod(value as any)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue id="period" placeholder="Select range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedPeriod === "custom" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="start-date" className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Start date
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={customStartDate}
+                    onChange={(event) => setCustomStartDate(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-date" className="text-xs uppercase tracking-wide text-muted-foreground">
+                    End date
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={customEndDate}
+                    onChange={(event) => setCustomEndDate(event.target.value)}
+                  />
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mt-6">
+          <KPICard
+            label="Clients Active"
+            value={clientBusiness.totalClients.toString()}
+            icon={Target}
+            color="bg-sky-500/10 text-sky-600"
+            subtext="Unique clients in this range"
+          />
+          <KPICard
+            label="Services Taken"
+            value={clientBusiness.totalServicesTaken.toString()}
+            icon={TrendingDown}
+            color="bg-emerald-500/10 text-emerald-600"
+            subtext="Service interactions recorded"
+          />
+          <KPICard
+            label="Revenue Generated"
+            value={`₹${clientBusiness.totalRevenue.toLocaleString("en-IN")}`}
+            icon={DollarSign}
+            color="bg-lime-500/10 text-lime-600"
+            subtext="Total billed to clients"
+          />
+          <KPICard
+            label="Monthly Avg Business"
+            value={`₹${Math.round(clientBusiness.averageMonthlyRevenue).toLocaleString("en-IN")}`}
+            icon={BarChart3}
+            color="bg-violet-500/10 text-violet-600"
+            subtext="Average per month in range"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
+        <div className="rounded-lg border bg-card p-6">
+          <h3 className="font-semibold mb-4">Top Customers by Revenue</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="text-left font-semibold px-6 py-3 whitespace-nowrap">Client</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Revenue</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Services</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Pending</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientBusiness.topCustomersByRevenue.map((item) => (
+                  <tr key={item.clientName} className="border-t hover:bg-muted/30">
+                    <td className="px-6 py-3 font-medium">{item.clientName}</td>
+                    <td className="px-6 py-3 text-right font-mono">₹{item.revenue.toLocaleString("en-IN")}</td>
+                    <td className="px-6 py-3 text-right">{item.serviceCount}</td>
+                    <td className="px-6 py-3 text-right font-mono">₹{item.pending.toLocaleString("en-IN")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-lg border bg-card p-6">
+          <h3 className="font-semibold mb-4">Top Customers by Services</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="text-left font-semibold px-6 py-3 whitespace-nowrap">Client</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Services</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Revenue</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Last Service</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientBusiness.topCustomersByServices.map((item) => (
+                  <tr key={item.clientName} className="border-t hover:bg-muted/30">
+                    <td className="px-6 py-3 font-medium">{item.clientName}</td>
+                    <td className="px-6 py-3 text-right">{item.serviceCount}</td>
+                    <td className="px-6 py-3 text-right font-mono">₹{item.revenue.toLocaleString("en-IN")}</td>
+                    <td className="px-6 py-3 text-right">{item.lastServiceDate}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-6">
+        <h3 className="font-semibold mb-4">Category Revenue Breakdown</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="text-left font-semibold px-6 py-3 whitespace-nowrap">Category</th>
+                <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Revenue</th>
+                <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Services</th>
+                <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Avg Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientBusiness.categoryBreakdown.map((item) => (
+                <tr key={item.service} className="border-t hover:bg-muted/30">
+                  <td className="px-6 py-3 font-medium">{item.service}</td>
+                  <td className="px-6 py-3 text-right font-mono">₹{item.revenue.toLocaleString("en-IN")}</td>
+                  <td className="px-6 py-3 text-right">{item.servicesSold}</td>
+                  <td className="px-6 py-3 text-right font-mono">₹{Math.round(item.averageValue).toLocaleString("en-IN")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Charts Grid - Responsive Layout */}

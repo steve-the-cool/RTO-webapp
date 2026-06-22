@@ -131,6 +131,8 @@ export interface RegistryRecord {
   co: string;
   groupName?: string; // Customer group/company
   assignee?: string; // staff username
+  createdAt?: string;
+  createdBy?: string;
   lastUpdatedBy?: string;
   lastUpdatedAt?: string;
   activityLogs?: ActivityLog[];
@@ -170,15 +172,20 @@ export function getRecordServices(record: RegistryRecord): ServiceType[] {
  * Get service details objects (serviceType, dueDate, status) for a record, supporting legacy formats.
  */
 export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[] {
+  const defaultStatus = record.serviceStatus ?? record.status ?? "Active";
+
   if (Array.isArray(record.services) && record.services.length > 0) {
     return record.services.map((s) => {
       if (typeof s === "object" && s !== null) {
-        return s;
+        return {
+          ...s,
+          status: s.status || defaultStatus,
+        };
       }
       return {
         serviceType: s as any,
         dueDate: record.serviceDueDate || "",
-        status: record.serviceStatus || "Active",
+        status: defaultStatus,
       };
     });
   }
@@ -187,7 +194,7 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
       {
         serviceType: record.serviceType,
         dueDate: record.serviceDueDate || "",
-        status: record.serviceStatus || "Active",
+        status: defaultStatus,
       },
     ];
   }
@@ -288,14 +295,25 @@ const colFor = (bucket: Bucket) => `registry_${bucket}`;
 export function subscribeToRecords(
   bucket: Bucket,
   cb: (records: RegistryRecord[]) => void,
+  errorCb?: (error: unknown) => void,
 ): () => void {
   const q = query(collection(db, colFor(bucket)), orderBy("srNo"));
-  return onSnapshot(q, (snap) => {
-    const records = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
-      .filter((r) => !r.isDeleted); // Hide soft-deleted records
-    cb(records);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const records = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
+        .filter((r) => !r.isDeleted); // Hide soft-deleted records
+      cb(records);
+    },
+    (error) => {
+      console.error(`[subscribeToRecords] Firestore error for bucket=${bucket}:`, error);
+      if (errorCb) {
+        errorCb(error);
+      }
+      cb([]);
+    },
+  );
 }
 
 /** Upsert a record (creates if new, updates if exists). */
@@ -561,6 +579,8 @@ export async function saveRecord(
   const now = new Date().toISOString();
   const data = {
     ...normalized,
+    createdAt: existing?.createdAt ?? now,
+    createdBy: existing?.createdBy ?? actor,
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
     activityLogs: existing?.activityLogs
