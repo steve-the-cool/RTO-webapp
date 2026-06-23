@@ -5,9 +5,11 @@ import {
   getServiceRevenue,
   getServiceAmountReceived,
   getServicePendingAmount,
+  getServiceDistributionSummary,
 } from "@/lib/services";
-import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices } from "@/lib/records";
+import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus } from "@/lib/records";
 import { RecordTable } from "@/components/RecordTable";
+import ClientProfile from "@/components/ClientProfile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Package, TrendingUp, DollarSign, Users } from "lucide-react";
@@ -24,6 +26,15 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
   const [amountReceived, setAmountReceived] = useState(0);
   const [pendingAmount, setPendingAmount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [selectedRecord, setSelectedRecord] = useState<RegistryRecord | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [diagOutput, setDiagOutput] = useState<string | null>(null);
+  const [diagRunning, setDiagRunning] = useState(false);
+
+  const openWorkflow = (record: RegistryRecord) => {
+    setSelectedRecord(record);
+    setProfileOpen(true);
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -209,12 +220,47 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <p className="text-muted-foreground">Loading clients...</p>
           </div>
         ) : records.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Package className="size-12 text-muted-foreground/50 mb-2" />
-              <p className="text-muted-foreground">No clients found for {serviceType.toLowerCase()}</p>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
+                <Package className="size-12 text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground">No clients found for {serviceType.toLowerCase()}</p>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={async () => {
+                      setDiagRunning(true);
+                      setDiagOutput(null);
+                      try {
+                        const recs = await getServiceClientsAll(serviceType);
+                        const summary = await getServiceDistributionSummary();
+
+                        // Populate dashboard state so UI updates immediately
+                        setRecords(recs);
+                        const st = await getServiceStats(serviceType);
+                        const rev = await getServiceRevenue(serviceType);
+                        const recv = await getServiceAmountReceived(serviceType);
+                        const pend = await getServicePendingAmount(serviceType);
+                        setStats(st);
+                        setRevenue(rev);
+                        setAmountReceived(recv);
+                        setPendingAmount(pend);
+
+                        setDiagOutput(JSON.stringify({ requested: serviceType, found: recs.length, sample: recs.slice(0,5).map(r=>({id:r.id,name:r.name,services:getRecordServices(r)})), summary, stats: st, revenue: rev, received: recv, pending: pend }, null, 2));
+                      } catch (err) {
+                        setDiagOutput(String(err));
+                      } finally {
+                        setDiagRunning(false);
+                      }
+                    }}
+                  >
+                    {diagRunning ? "Running..." : "Run diagnostics"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setDiagOutput(null)}>Clear</Button>
+                </div>
+                {diagOutput ? (
+                  <pre className="text-xs mt-4 max-h-56 overflow-auto w-full bg-slate-50 p-3 rounded text-left">{diagOutput}</pre>
+                ) : null}
+              </CardContent>
+            </Card>
         ) : (
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="overflow-x-auto">
@@ -233,9 +279,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                 </thead>
                 <tbody>
                   {records.map((r) => (
-                    <tr key={r.id} className="border-t hover:bg-muted/30">
+                    <tr key={r.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => openWorkflow(r)}>
                       <td className="px-3 py-3 font-medium">{r.srNo}</td>
-                      <td className="px-3 py-3 font-medium">{r.name}</td>
+                      <td className="px-3 py-3 font-medium text-sky-600 underline decoration-dotted underline-offset-2">{r.name}</td>
                       <td className="px-3 py-3 font-mono text-xs">{r.mvNo || "—"}</td>
                       <td className="px-3 py-3">
                         <span
@@ -254,13 +300,13 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                         {r.serviceDueDate ? new Date(r.serviceDueDate).toLocaleDateString("en-IN") : "—"}
                       </td>
                       <td className="px-3 py-3 font-mono text-xs">
-                        ₹{(r.serviceAmount || 0).toLocaleString("en-IN")}
+                        ₹{getRecordServiceAmount(r).toLocaleString("en-IN")}
                       </td>
                       <td className="px-3 py-3 font-mono text-xs text-green-600">
                         ₹{(r.amountReceived || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="px-3 py-3 font-mono text-xs text-red-600">
-                        ₹{((r.serviceAmount || 0) - (r.amountReceived || 0)).toLocaleString("en-IN")}
+                        ₹{getRecordPendingAmount(r).toLocaleString("en-IN")}
                       </td>
                     </tr>
                   ))}
@@ -270,6 +316,7 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
           </div>
         )}
       </div>
+      <ClientProfile record={selectedRecord} open={profileOpen} onOpenChange={setProfileOpen} />
     </div>
   );
 }

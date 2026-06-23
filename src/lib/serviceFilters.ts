@@ -1,5 +1,5 @@
 // Service Filters — Service type definitions and filtering utilities.
-import { subscribeToRecords, normalizeServiceType, SERVICE_TYPES, type RegistryRecord, type Bucket, type ServiceType } from "./records";
+import { subscribeToRecords, normalizeServiceType, SERVICE_TYPES, type RegistryRecord, type Bucket, type ServiceType, getRecordServiceAmount } from "./records";
 import { isLicenseRenewal } from "./documentTypes";
 
 export interface ServiceConfig {
@@ -238,8 +238,9 @@ export function calculateServiceMetrics(records: RegistryRecord[]): ServiceMetri
     }
 
     // Revenue calculations
-    if (record.serviceAmount) {
-      metrics.totalRevenue += record.serviceAmount;
+    const serviceRevenue = getRecordServiceAmount(record);
+    if (serviceRevenue) {
+      metrics.totalRevenue += serviceRevenue;
     }
     if (record.amountReceived) {
       metrics.totalReceived += record.amountReceived;

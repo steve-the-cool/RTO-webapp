@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { type RegistryRecord } from "@/lib/records";
+import { type RegistryRecord, getRecordServiceAmount } from "@/lib/records";
 
 export interface ServiceMetrics {
   totalServicesSold: number;
@@ -43,8 +43,8 @@ export interface ServiceDistribution {
  */
 export function useServiceAnalytics(records: RegistryRecord[]) {
   return useMemo(() => {
-    // Filter records with service amounts
-    const activeRecords = records.filter((r) => r.serviceAmount && r.serviceAmount > 0);
+    // Filter records with service-level revenue
+    const activeRecords = records.filter((r) => getRecordServiceAmount(r) > 0);
 
     if (activeRecords.length === 0) {
       return {
@@ -59,7 +59,7 @@ export function useServiceAnalytics(records: RegistryRecord[]) {
 
     // Calculate basic metrics
     const totalServicesSold = activeRecords.length;
-    const totalRevenue = activeRecords.reduce((sum, r) => sum + (r.serviceAmount || 0), 0);
+    const totalRevenue = activeRecords.reduce((sum, r) => sum + getRecordServiceAmount(r), 0);
     const totalCollected = activeRecords.reduce((sum, r) => sum + (r.amountReceived || 0), 0);
     const averageServiceValue = totalRevenue / totalServicesSold;
     const collectionRate = totalRevenue > 0 ? (totalCollected / totalRevenue) * 100 : 0;
@@ -113,12 +113,12 @@ export function useRevenueByService(records: RegistryRecord[]): RevenueByService
     >();
 
     records
-      .filter((r) => r.serviceAmount && r.serviceAmount > 0)
+      .filter((r) => getRecordServiceAmount(r) > 0)
       .forEach((r) => {
         const service = r.work || "Unknown";
         const current = serviceData.get(service) || { revenue: 0, count: 0 };
         serviceData.set(service, {
-          revenue: current.revenue + (r.serviceAmount || 0),
+          revenue: current.revenue + getRecordServiceAmount(r),
           count: current.count + 1,
         });
       });
@@ -145,7 +145,7 @@ export function useMonthlyComparison(records: RegistryRecord[]): MonthlyData[] {
     >();
 
     records
-      .filter((r) => r.serviceAmount && r.serviceAmount > 0)
+      .filter((r) => getRecordServiceAmount(r) > 0)
       .forEach((r) => {
         const date = new Date(r.date);
         const month = date.toLocaleString("en-IN", { year: "numeric", month: "short" });
@@ -157,7 +157,7 @@ export function useMonthlyComparison(records: RegistryRecord[]): MonthlyData[] {
         };
 
         monthlyMap.set(month, {
-          revenue: current.revenue + (r.serviceAmount || 0),
+          revenue: current.revenue + getRecordServiceAmount(r),
           count: current.count + 1,
           collected: current.collected + (r.amountReceived || 0),
         });
@@ -204,7 +204,7 @@ export function useYearlyComparison(records: RegistryRecord[]): YearlyData[] {
     >();
 
     records
-      .filter((r) => r.serviceAmount && r.serviceAmount > 0)
+      .filter((r) => getRecordServiceAmount(r) > 0)
       .forEach((r) => {
         const year = new Date(r.date).getFullYear().toString();
 
@@ -215,7 +215,7 @@ export function useYearlyComparison(records: RegistryRecord[]): YearlyData[] {
         };
 
         yearlyMap.set(year, {
-          revenue: current.revenue + (r.serviceAmount || 0),
+          revenue: current.revenue + getRecordServiceAmount(r),
           count: current.count + 1,
           collected: current.collected + (r.amountReceived || 0),
         });
@@ -239,14 +239,13 @@ export function useServiceDistribution(records: RegistryRecord[]): ServiceDistri
   return useMemo(() => {
     const serviceCounts = new Map<string, number>();
 
-    records
-      .filter((r) => r.serviceAmount && r.serviceAmount > 0)
-      .forEach((r) => {
-        const service = r.work || "Unknown";
-        serviceCounts.set(service, (serviceCounts.get(service) || 0) + 1);
-      });
+    const revenueRecords = records.filter((r) => getRecordServiceAmount(r) > 0);
+    revenueRecords.forEach((r) => {
+      const service = r.work || "Unknown";
+      serviceCounts.set(service, (serviceCounts.get(service) || 0) + 1);
+    });
 
-    const total = records.filter((r) => r.serviceAmount && r.serviceAmount > 0).length;
+    const total = revenueRecords.length;
 
     return Array.from(serviceCounts.entries())
       .map(([service, value]) => ({
@@ -293,7 +292,7 @@ function toMonthSpan(start: Date | null, end: Date | null): number {
 
 export function useClientBusinessAnalytics(records: RegistryRecord[]): ClientBusinessMetrics {
   return useMemo(() => {
-    const activeRecords = records.filter((r) => (r.serviceAmount && r.serviceAmount > 0) || (r.amountReceived && r.amountReceived > 0));
+    const activeRecords = records.filter((r) => (getRecordServiceAmount(r) > 0) || (r.amountReceived && r.amountReceived > 0));
 
     const clientMap = new Map<
       string,
@@ -312,7 +311,7 @@ export function useClientBusinessAnalytics(records: RegistryRecord[]): ClientBus
 
     activeRecords.forEach((record) => {
       const clientName = getClientKey(record);
-      const revenue = record.serviceAmount || 0;
+      const revenue = getRecordServiceAmount(record);
       const collected = record.amountReceived || 0;
       const recordDate = new Date(record.date);
 
@@ -346,7 +345,7 @@ export function useClientBusinessAnalytics(records: RegistryRecord[]): ClientBus
 
     const totalClients = clientMap.size;
     const totalServicesTaken = activeRecords.length;
-    const totalRevenue = activeRecords.reduce((sum, record) => sum + (record.serviceAmount || 0), 0);
+    const totalRevenue = activeRecords.reduce((sum, record) => sum + getRecordServiceAmount(record), 0);
     const totalCollected = activeRecords.reduce((sum, record) => sum + (record.amountReceived || 0), 0);
 
     const averageMonthlyRevenue = totalRevenue / toMonthSpan(earliestRecord, latestRecord);

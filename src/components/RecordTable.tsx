@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Download, Printer, Paperclip, X, Users } from "lucide-react";
-import { addDoc as addCustomerDoc } from "@/lib/customerDocs";
+import { Plus, Pencil, Trash2, Search, Download, Printer, Paperclip, X, Users, Eye } from "lucide-react";
+import { addDoc as addCustomerDoc, deleteDoc as deleteCustomerDoc } from "@/lib/customerDocs";
 import {
   subscribeToRecords,
   saveRecord,
@@ -17,6 +17,9 @@ import {
   serviceLabel,
   getRecordServices,
   getRecordServiceDetails,
+  getRecordServiceAmount,
+  getRecordPendingAmount,
+  getRecordPaymentStatus,
   normalizeLegacyServiceType,
   type ServiceDetail,
   type ServiceType,
@@ -221,13 +224,88 @@ export function RecordTable({ bucket, title, description }: Props) {
     }
   };
 
-  const handleRemoveAttachment = (attachmentId: string) => {
+  const handleServiceFileUpload = async (file: File, serviceIndex: number) => {
+    if (!editing) {
+      setAttachmentError("No record selected");
+      return;
+    }
+
+    const MAX_FILE_MB = 10;
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      setAttachmentError(`File too large — max ${MAX_FILE_MB} MB.`);
+      return;
+    }
+
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setAttachmentError("Only PDF files are allowed for service attachments.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadPct(0);
+    setAttachmentError(null);
+
+    try {
+      const services = (editing.services as any) || [];
+      const serviceObj = typeof services[serviceIndex] === "object" && services[serviceIndex] !== null
+        ? services[serviceIndex]
+        : { serviceType: services[serviceIndex] };
+
+      const docEntry = await addCustomerDoc(editing.id, file.name, file.type, file, (pct) => setUploadPct(pct));
+
+      const attachment: RecordAttachment = {
+        id: docEntry.id,
+        name: docEntry.name,
+        type: docEntry.mimeType || file.type,
+        size: docEntry.fileSize || file.size,
+        storagePath: docEntry.storagePath || `customers/${editing.id}/attachments/${file.name}`,
+        downloadUrl: (docEntry.downloadURL as string) || "",
+        uploadedAt: docEntry.addedAt,
+        uploadedBy: username,
+        serviceType: serviceObj.serviceType,
+      };
+
+      setEditing({ ...editing, attachments: [...(editing.attachments ?? []), attachment] });
+      await addAttachment(bucket, editing.id, attachment);
+      console.error("[Service Attachment Upload] Saved attachment for service", serviceObj.serviceType, attachment);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setAttachmentError(`Upload failed: ${errorMsg}`);
+      console.error("[Service Attachment Upload Error]", error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveAttachment = async (attachmentId: string) => {
     if (!editing) return;
+    const toRemove = (editing.attachments ?? []).find((a) => a.id === attachmentId);
+    if (!toRemove) return;
+
+    // Optimistically update UI
     const updatedAttachments = (editing.attachments ?? []).filter((a) => a.id !== attachmentId);
-    setEditing({
-      ...editing,
-      attachments: updatedAttachments,
-    });
+    setEditing({ ...editing, attachments: updatedAttachments });
+
+    try {
+      // Remove storage + customerDocs entry if present
+      try {
+        await deleteCustomerDoc(attachmentId, toRemove.storagePath);
+      } catch (err) {
+        console.warn("[handleRemoveAttachment] deleteCustomerDoc failed; continuing:", err);
+      }
+
+      // Persist change to the registry record
+      try {
+        await saveRecord(bucket, { ...editing, attachments: updatedAttachments }, username);
+      } catch (err) {
+        console.error("[handleRemoveAttachment] Failed to save record after removing attachment:", err);
+      }
+    } catch (error) {
+      console.error("[handleRemoveAttachment] Unexpected error:", error);
+      setAttachmentError("Failed to remove attachment. Please try again.");
+      // Revert UI
+      setEditing({ ...editing, attachments: (editing.attachments ?? []) });
+    }
   };
 
   const save = async () => {
@@ -303,11 +381,11 @@ export function RecordTable({ bucket, title, description }: Props) {
                   <td className="px-3 py-3 whitespace-nowrap">{r.fitness || "—"}</td>
                   <td className="px-3 py-3 whitespace-nowrap">{r.tax || "—"}</td>
                   <td className="px-3 py-3">{r.co || "—"}</td>
-                  <td className="px-3 py-3 font-mono text-xs">₹{(r.serviceAmount || 0).toLocaleString("en-IN")}</td>
+                  <td className="px-3 py-3 font-mono text-xs">₹{getRecordServiceAmount(r).toLocaleString("en-IN")}</td>
                   <td className="px-3 py-3 font-mono text-xs">₹{(r.amountReceived || 0).toLocaleString("en-IN")}</td>
                   <td className="px-3 py-3">
-                    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", paymentStatusClass(r.paymentStatus))}>
-                      {r.paymentStatus || "—"}
+                    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", paymentStatusClass(getRecordPaymentStatus(r)))}>
+                      {getRecordPaymentStatus(r)}
                     </span>
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-xs">{staffLabel(r.assignee) || <span className="text-muted-foreground">Unassigned</span>}</td>
@@ -471,7 +549,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                           {serviceLabel(serviceObj.serviceType)}
                         </div>
                         
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground uppercase font-bold w-16 sm:hidden">Due Date</span>
                             <Input
@@ -482,6 +560,25 @@ export function RecordTable({ bucket, title, description }: Props) {
                                 newServices[index] = { ...serviceObj, dueDate: e.target.value };
                                 setEditing({ ...editing, services: newServices });
                               }}
+                              className="h-9 text-xs flex-1"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground uppercase font-bold w-16 sm:hidden">Price</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={serviceObj.price ?? ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const price = value === "" ? 0 : Number(value);
+                                const newServices = [...(editing.services || [])];
+                                newServices[index] = { ...serviceObj, price };
+                                const totalServiceAmount = newServices.reduce((sum, svc) => sum + ((svc.price || 0)), 0);
+                                setEditing({ ...editing, services: newServices, serviceAmount: totalServiceAmount });
+                              }}
+                              placeholder="0"
                               className="h-9 text-xs flex-1"
                             />
                           </div>
@@ -516,12 +613,53 @@ export function RecordTable({ bucket, title, description }: Props) {
                           size="icon"
                           onClick={() => {
                             const newServices = (editing.services || []).filter((_, idx) => idx !== index);
-                            setEditing({ ...editing, services: newServices });
+                            const totalServiceAmount = newServices.reduce((sum, svc) => sum + ((svc?.price || 0)), 0);
+                            setEditing({ ...editing, services: newServices, serviceAmount: totalServiceAmount });
                           }}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 w-9 self-end sm:self-auto"
                         >
                           <Trash2 className="size-4" />
                         </Button>
+                        <label className="flex items-center gap-2 px-2 py-1 self-end sm:self-auto">
+                          <Paperclip className="size-4 text-muted-foreground" />
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => {
+                              const file = e.currentTarget.files?.[0];
+                              if (file) handleServiceFileUpload(file, index);
+                              e.currentTarget.value = "";
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {/* Per-service attachments preview */}
+                        <div className="absolute left-3 top-3 flex gap-1">
+                          {(editing?.attachments ?? [])
+                            .filter((a) => a.serviceType === serviceObj.serviceType)
+                            .slice(0, 3)
+                            .map((a) => (
+                              <div key={a.id} className="flex items-center gap-1 bg-white/80 px-1 py-0.5 rounded border">
+                                <a
+                                  href={a.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={a.name}
+                                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                >
+                                  <Eye className="size-4" />
+                                </a>
+                                <button
+                                  onClick={() => handleRemoveAttachment(a.id)}
+                                  className="text-destructive hover:text-destructive/80"
+                                  title="Remove attachment"
+                                >
+                                  <X className="size-4" />
+                                </button>
+                              </div>
+                          ))}
+                        </div>
                       </div>
                     );
                   })}
@@ -547,8 +685,10 @@ export function RecordTable({ bucket, title, description }: Props) {
                           serviceType: v as ServiceType,
                           dueDate: "",
                           status: "Active",
+                          price: 0,
                         });
-                        setEditing({ ...editing, services: newServices });
+                        const totalServiceAmount = newServices.reduce((sum, svc) => sum + ((svc.price || 0)), 0);
+                        setEditing({ ...editing, services: newServices, serviceAmount: totalServiceAmount });
                       }}
                     >
                       <SelectTrigger className="h-9 text-xs">

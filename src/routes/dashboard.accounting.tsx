@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Download, Printer } from "lucide-react";
-import { subscribeToRecords, type RegistryRecord, type Bucket } from "@/lib/records";
+import { subscribeToRecords, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus, type RegistryRecord, type Bucket } from "@/lib/records";
 import { generateAccountingPDF, printWindow } from "@/lib/pdfGenerator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -38,21 +38,24 @@ function AccountingDashboard() {
 
   // Calculate accounting metrics
   const metrics = useMemo(() => {
-    const records = allRecords.filter((r) => r.serviceAmount && r.serviceAmount > 0);
+    const records = allRecords.filter((r) => getRecordServiceAmount(r) > 0);
 
-    const totalServiceAmount = records.reduce((sum, r) => sum + (r.serviceAmount || 0), 0);
+    const totalServiceAmount = records.reduce((sum, r) => sum + getRecordServiceAmount(r), 0);
     const totalAmountReceived = records.reduce((sum, r) => sum + (r.amountReceived || 0), 0);
     const totalPendingAmount = totalServiceAmount - totalAmountReceived;
 
-    const unpaidCount = records.filter((r) => r.paymentStatus === "Unpaid").length;
-    const partiallyPaidCount = records.filter((r) => r.paymentStatus === "Partially Paid").length;
-    const paidCount = records.filter((r) => r.paymentStatus === "Paid").length;
+    const unpaidCount = records.filter((r) => getRecordPaymentStatus(r) === "Unpaid").length;
+    const partiallyPaidCount = records.filter((r) => getRecordPaymentStatus(r) === "Partially Paid").length;
+    const paidCount = records.filter((r) => getRecordPaymentStatus(r) === "Paid").length;
 
     const pendingRecords = records
-      .filter((r) => r.paymentStatus === "Unpaid" || r.paymentStatus === "Partially Paid")
+      .filter((r) => {
+        const status = getRecordPaymentStatus(r);
+        return status === "Unpaid" || status === "Partially Paid";
+      })
       .sort((a, b) => {
-        const aPending = (a.serviceAmount || 0) - (a.amountReceived || 0);
-        const bPending = (b.serviceAmount || 0) - (b.amountReceived || 0);
+        const aPending = getRecordPendingAmount(a);
+        const bPending = getRecordPendingAmount(b);
         return bPending - aPending;
       });
 
@@ -181,7 +184,7 @@ function AccountingDashboard() {
               </thead>
               <tbody>
                 {metrics.pendingRecords.map((record) => {
-                  const pending = (record.serviceAmount || 0) - (record.amountReceived || 0);
+                  const pending = getRecordPendingAmount(record);
                   return (
                     <tr key={record.id} className="border-t hover:bg-muted/30">
                       <td className="px-6 py-3">
@@ -190,21 +193,21 @@ function AccountingDashboard() {
                           <p className="text-xs text-muted-foreground">{record.mvNo}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-right font-mono">₹{(record.serviceAmount || 0).toLocaleString("en-IN")}</td>
+                      <td className="px-6 py-3 text-right font-mono">₹{getRecordServiceAmount(record).toLocaleString("en-IN")}</td>
                       <td className="px-6 py-3 text-right font-mono">₹{(record.amountReceived || 0).toLocaleString("en-IN")}</td>
                       <td className="px-6 py-3 text-right font-mono font-semibold text-amber-600">₹{pending.toLocaleString("en-IN")}</td>
                       <td className="px-6 py-3">
                         <span
                           className={cn(
                             "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                            record.paymentStatus === "Paid"
+                            getRecordPaymentStatus(record) === "Paid"
                               ? "bg-green-500/15 text-green-700 border-green-500/30"
-                              : record.paymentStatus === "Partially Paid"
+                              : getRecordPaymentStatus(record) === "Partially Paid"
                                 ? "bg-yellow-500/15 text-yellow-700 border-yellow-500/30"
                                 : "bg-red-500/15 text-red-700 border-red-500/30",
                           )}
                         >
-                          {record.paymentStatus || "Unpaid"}
+                          {getRecordPaymentStatus(record)}
                         </span>
                       </td>
                     </tr>

@@ -99,13 +99,37 @@ export function initAuth(onChange: (user: StaffUser | null) => void): () => void
       _session = null;
     }
     _initialized = true;
+    // Keep a lightweight session in localStorage for immediate restores
+    try {
+      if (_session) {
+        localStorage.setItem("rp_session", JSON.stringify({ uid: _session.uid, username: _session.username, name: _session.name, role: _session.role }));
+      } else {
+        localStorage.removeItem("rp_session");
+      }
+    } catch {
+      // ignore storage errors
+    }
     onChange(_session);
   });
 }
 
 /** Synchronous getter — populated after initAuth fires. */
 export function getSession(): StaffUser | null {
-  return _session;
+  if (_session) return _session;
+  // Try to restore lightweight session from localStorage to avoid redirect loops
+  try {
+    const raw = localStorage.getItem("rp_session");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Minimal validation
+      if (parsed && parsed.username) {
+        return parsed as StaffUser;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 /** True once the first onAuthStateChanged callback has fired. */
@@ -119,6 +143,11 @@ export async function login(username: string, password: string): Promise<StaffUs
   const snap = await getDoc(doc(db, "users", cred.user.uid));
   if (!snap.exists()) throw new Error("User profile not found — contact admin.");
   _session = { uid: cred.user.uid, ...snap.data() } as StaffUser;
+  try {
+    localStorage.setItem("rp_session", JSON.stringify({ uid: _session.uid, username: _session.username, name: _session.name, role: _session.role }));
+  } catch {
+    // ignore
+  }
   window.dispatchEvent(new Event("auth-change"));
   return _session;
 }
@@ -127,5 +156,6 @@ export async function login(username: string, password: string): Promise<StaffUs
 export async function logout(): Promise<void> {
   await signOut(auth);
   _session = null;
+  try { localStorage.removeItem("rp_session"); } catch {}
   window.dispatchEvent(new Event("auth-change"));
 }

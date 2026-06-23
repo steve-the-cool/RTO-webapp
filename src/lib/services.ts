@@ -7,7 +7,7 @@ import {
 } from "firebase/firestore";
 import { computeFollowUps } from "./followups";
 import { db } from "./firebase";
-import { normalizeServiceType, normalizeLegacyServiceType, type Bucket, type RegistryRecord, type ServiceType, type RecordStatus, getRecordServices } from "./records";
+import { normalizeServiceType, normalizeLegacyServiceType, type Bucket, type RegistryRecord, type ServiceType, type RecordStatus, getRecordServices, getRecordServiceDetails } from "./records";
 import { recordMatchesService } from "./serviceFilters";
 
 /**
@@ -24,51 +24,63 @@ export async function getServiceClients(
   console.log(
     `[getServiceClients] START: Querying ${colName} for serviceType="${serviceType}"`,
   );
-
   try {
-    // New behavior: prefer `services` array-contains query (multi-service),
-    // but also include legacy `serviceType` equality results so older records
-    // remain visible until migration is complete. Merge unique results.
-
+    // Use a map to deduplicate results from multiple queries
     const resultsMap: Map<string, RegistryRecord> = new Map();
 
-    // Query for records that have the new `serviceTypes` array (multi-service objects)
-    try {
-      const q0 = query(collection(db, colName), where("serviceTypes", "array-contains", serviceType));
-      const snap0 = await getDocs(q0);
-      for (const d of snap0.docs) {
-        const data = d.data() as RegistryRecord;
-        const rec = { id: d.id, ...data } as RegistryRecord;
-        if (!rec.isDeleted) resultsMap.set(d.id, rec);
+    // Generate common variants to cover legacy data shapes (canonical, lowercase, slug)
+    const variants = Array.from(new Set([
+      String(serviceType),
+      String(serviceType).toLowerCase(),
+      String(serviceType).toLowerCase().replace(/\s+/g, "-"),
+    ]));
+
+    // Query `serviceTypes` array for each variant
+    for (const v of variants) {
+      try {
+        const q = query(collection(db, colName), where("serviceTypes", "array-contains", v as any));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          const data = d.data() as RegistryRecord;
+          const rec = { id: d.id, ...data } as RegistryRecord;
+          if (!rec.isDeleted) resultsMap.set(d.id, rec);
+        }
+        if (snap.docs.length > 0) console.debug(`[getServiceClients] serviceTypes match for variant='${v}' in ${colName}: ${snap.docs.length}`);
+      } catch (err) {
+        console.warn(`[getServiceClients] serviceTypes query failed for ${colName} variant='${v}':`, err);
       }
-    } catch (err) {
-      console.warn(`[getServiceClients] serviceTypes query failed for ${colName}:`, err);
     }
 
-    // Query for records that have the legacy `services` array of strings
-    try {
-      const q1 = query(collection(db, colName), where("services", "array-contains", serviceType));
-      const snap1 = await getDocs(q1);
-      for (const d of snap1.docs) {
-        const data = d.data() as RegistryRecord;
-        const rec = { id: d.id, ...data } as RegistryRecord;
-        if (!rec.isDeleted) resultsMap.set(d.id, rec);
+    // Query legacy `services` array for each variant
+    for (const v of variants) {
+      try {
+        const q = query(collection(db, colName), where("services", "array-contains", v as any));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          const data = d.data() as RegistryRecord;
+          const rec = { id: d.id, ...data } as RegistryRecord;
+          if (!rec.isDeleted) resultsMap.set(d.id, rec);
+        }
+        if (snap.docs.length > 0) console.debug(`[getServiceClients] services array match for variant='${v}' in ${colName}: ${snap.docs.length}`);
+      } catch (err) {
+        console.warn(`[getServiceClients] services legacy query failed for ${colName} variant='${v}':`, err);
       }
-    } catch (err) {
-      console.warn(`[getServiceClients] services legacy query failed for ${colName}:`, err);
     }
 
-    // Also query legacy `serviceType` field for compatibility
-    try {
-      const q2 = query(collection(db, colName), where("serviceType", "==", serviceType));
-      const snap2 = await getDocs(q2);
-      for (const d of snap2.docs) {
-        const data = d.data() as RegistryRecord;
-        const rec = { id: d.id, ...data } as RegistryRecord;
-        if (!rec.isDeleted) resultsMap.set(d.id, rec);
+    // Query legacy `serviceType` field equality using variants
+    for (const v of variants) {
+      try {
+        const q = query(collection(db, colName), where("serviceType", "==", v as any));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          const data = d.data() as RegistryRecord;
+          const rec = { id: d.id, ...data } as RegistryRecord;
+          if (!rec.isDeleted) resultsMap.set(d.id, rec);
+        }
+        if (snap.docs.length > 0) console.debug(`[getServiceClients] serviceType field match for variant='${v}' in ${colName}: ${snap.docs.length}`);
+      } catch (err) {
+        console.warn(`[getServiceClients] serviceType legacy query failed for ${colName} variant='${v}':`, err);
       }
-    } catch (err) {
-      console.warn(`[getServiceClients] serviceType legacy query failed for ${colName}:`, err);
     }
 
     const results = Array.from(resultsMap.values());
@@ -127,15 +139,13 @@ export async function getServiceClientsAll(
         { expectedMatches: totalCount, rawResults: rawCount },
       );
     }
-
+    // Return records that matched the robust recordMatchesService filter
     return matched;
   } catch (error) {
-    console.error(
-      `[getServiceClientsAll] ERROR: Failed to fetch records for serviceType="${serviceType}"`,
-      { serviceType, error },
-    );
-    throw error;
+    console.error(`[getServiceClientsAll] ERROR: ${error}`, { serviceType, error });
+    return [];
   }
+
 }
 
 /**
@@ -160,7 +170,17 @@ export async function getServiceStats(serviceType: ServiceType) {
  */
 export async function getServiceRevenue(serviceType: ServiceType): Promise<number> {
   const records = await getServiceClientsAll(serviceType);
-  return records.reduce((sum, r) => sum + (r.serviceAmount || 0), 0);
+
+  return records.reduce((sum, r) => {
+    const details = getRecordServiceDetails(r).filter((detail) => detail.serviceType === serviceType);
+    if (details.length > 0) {
+      return sum + details.reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0);
+    }
+    
+    // Compatibility fallback for legacy records that do not expose detailed service prices.
+    const legacyMatch = r.serviceType === serviceType || getRecordServices(r).includes(serviceType);
+    return sum + (legacyMatch ? (r.serviceAmount || 0) : 0);
+  }, 0);
 }
 
 /**
@@ -232,7 +252,7 @@ export async function getTotalRevenue(): Promise<number> {
   );
 
   const flatRecords = allRecords.flat();
-  return flatRecords.reduce((sum, r) => sum + (r.serviceAmount || 0), 0);
+  return flatRecords.reduce((sum, r) => sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0), 0);
 }
 
 /**

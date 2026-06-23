@@ -6,13 +6,33 @@ import {
   Settings as SettingsIcon, LogOut, Menu, Globe, Target, Users2,
   Shield, CheckCircle, Lightbulb, FileText, Zap, Receipt,
 } from "lucide-react";
-import { getSession, logout, type StaffUser } from "@/lib/auth";
+import { getSession, logout, isAuthReady, type StaffUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard")({
-  beforeLoad: () => {
-    if (typeof window !== "undefined" && !getSession()) {
+  beforeLoad: async () => {
+    if (typeof window === "undefined") return;
+
+    // Prefer the lightweight cached session so refresh restores the page fast.
+    if (getSession()) return;
+
+    if (!isAuthReady()) {
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          if (isAuthReady() || getSession()) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 50);
+        setTimeout(() => {
+          clearInterval(interval);
+          resolve();
+        }, 1500);
+      });
+    }
+
+    if (!getSession()) {
       throw redirect({ to: "/" });
     }
   },

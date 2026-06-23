@@ -34,6 +34,8 @@ export interface RecordAttachment {
   downloadUrl: string;
   uploadedAt: string;
   uploadedBy: string;
+  /** Optional: the service this attachment is associated with */
+  serviceType?: ServiceType;
 }
 
 export type PaymentStatus = "Paid" | "Partially Paid" | "Unpaid";
@@ -57,6 +59,7 @@ export interface ServiceDetail {
   serviceType: ServiceType;
   dueDate: string; // YYYY-MM-DD
   status: string; // e.g. "Active", "Renewal Due", "Completed", etc.
+  price?: number; // Service-specific price / charge
 }
 
 export const SERVICE_TYPES: ServiceType[] = [
@@ -216,6 +219,7 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
             serviceType: normalizedType,
             dueDate: s.dueDate || record.serviceDueDate || "",
             status: s.status || defaultStatus,
+            price: typeof s.price === "number" ? s.price : Number(s.price) || 0,
           };
         }
 
@@ -226,6 +230,7 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
           serviceType: normalizedType,
           dueDate: record.serviceDueDate || "",
           status: defaultStatus,
+          price: 0,
         };
       })
       .filter((detail): detail is ServiceDetail => detail !== null);
@@ -329,6 +334,41 @@ export function calculatePendingAmount(
   if (!serviceAmount) return 0;
   if (!amountReceived) return serviceAmount;
   return Math.max(0, serviceAmount - amountReceived);
+}
+
+/**
+ * Get the authoritative total service amount for this record.
+ * Uses detailed service item prices when available, otherwise falls back to legacy serviceAmount.
+ */
+export function getRecordServiceAmount(record: RegistryRecord): number {
+  const detailTotal = getRecordServiceDetails(record)
+    .reduce((sum, service) => sum + (service.price || 0), 0);
+
+  return detailTotal > 0 ? detailTotal : (record.serviceAmount ?? 0);
+}
+
+export function getRecordServiceAmountByType(record: RegistryRecord, serviceType: ServiceType): number {
+  const details = getRecordServiceDetails(record).filter((detail) => detail.serviceType === serviceType);
+  const detailTotal = details.reduce((sum, service) => sum + (service.price || 0), 0);
+
+  if (detailTotal > 0) {
+    return detailTotal;
+  }
+
+  const belongsToType = record.serviceType === serviceType || getRecordServices(record).includes(serviceType);
+  return belongsToType ? (record.serviceAmount ?? 0) : 0;
+}
+
+export function getRecordPendingAmount(record: RegistryRecord, amountReceived?: number): number {
+  const totalAmount = getRecordServiceAmount(record);
+  const received = amountReceived ?? record.amountReceived ?? 0;
+  return Math.max(0, totalAmount - received);
+}
+
+export function getRecordPaymentStatus(record: RegistryRecord): PaymentStatus {
+  const totalAmount = getRecordServiceAmount(record);
+  const received = record.amountReceived ?? 0;
+  return calculatePaymentStatus(totalAmount, received);
 }
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
@@ -489,11 +529,13 @@ export async function saveRecord(
       let rawType: any;
       let dueDate = record.serviceDueDate || "";
       let status = record.serviceStatus || "Active";
+      let price = 0;
 
       if (typeof s === "object" && s !== null) {
         rawType = s.serviceType;
         dueDate = s.dueDate || dueDate;
         status = s.status || status;
+        price = typeof s.price === "number" ? s.price : Number((s as any).price) || 0;
       } else {
         rawType = s;
       }
@@ -508,6 +550,7 @@ export async function saveRecord(
         serviceType: nType,
         dueDate,
         status,
+        price,
       });
       if (!serviceTypes.includes(nType)) {
         serviceTypes.push(nType);

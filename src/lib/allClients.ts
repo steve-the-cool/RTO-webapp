@@ -1,5 +1,5 @@
 // All Clients — Aggregates client data from all buckets with service history and metrics.
-import { subscribeToRecords, getRecordServiceDetails, type RegistryRecord, type Bucket } from "./records";
+import { subscribeToRecords, getRecordServiceDetails, getRecordServiceAmount, getRecordPaymentStatus, type RegistryRecord, type Bucket } from "./records";
 import { subscribeToCustomers, type CustomerProfile } from "./customers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ export interface AggregatedClient {
   pendingServices: number; // Pending or On Hold
   completedServices: number; // Completed
   assignee?: string; // Latest assignee
-  totalRevenue: number; // Sum of all serviceAmount
+  totalRevenue: number; // Sum of all authoritative service prices
   totalReceived: number; // Sum of all amountReceived
   pendingRevenue: number; // totalRevenue - totalReceived
   lastActivityDate?: string; // Most recent service date
@@ -108,9 +108,9 @@ export function aggregateAllClients(
         status: detail.status || record.status,
         serviceType: detail.serviceType,
         dueDate: detail.dueDate,
-        serviceAmount: record.serviceAmount,
+        serviceAmount: detail.price ?? 0,
         amountReceived: record.amountReceived,
-        paymentStatus: record.paymentStatus,
+        paymentStatus: record.paymentStatus ?? getRecordPaymentStatus(record),
         activityLogs: record.activityLogs,
       };
 
@@ -136,8 +136,9 @@ export function aggregateAllClients(
     }
 
     // Update revenue
-    if (record.serviceAmount) {
-      client.totalRevenue += record.serviceAmount;
+    const recordRevenue = getRecordServiceAmount(record);
+    if (recordRevenue) {
+      client.totalRevenue += recordRevenue;
     }
     if (record.amountReceived) {
       client.totalReceived += record.amountReceived;

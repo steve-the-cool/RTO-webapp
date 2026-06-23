@@ -77,6 +77,16 @@ export async function logClientActivity(
   }
 }
 
+export async function addClientNote(
+  clientId: string,
+  userId: string,
+  userName: string,
+  note: string,
+): Promise<void> {
+  if (!clientId || !note.trim()) return;
+  await logClientActivity(clientId, userId, userName, "Note added", "note", "", note.trim());
+}
+
 /**
  * Format a timestamp for display.
  */

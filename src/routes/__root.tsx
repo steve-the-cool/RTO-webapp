@@ -96,15 +96,63 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [authReady, setAuthReady] = useState(false);
+  const [authFallbackElapsed, setAuthFallbackElapsed] = useState(false);
 
   useEffect(() => {
     const unsub = initAuth(() => setAuthReady(true));
     return unsub;
   }, []);
 
+  // If auth initialization takes too long (network/cordova issues), don't block
+  // app rendering forever — proceed after a short fallback so site becomes usable.
+  useEffect(() => {
+    const t = setTimeout(() => setAuthFallbackElapsed(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Global error handlers to avoid blank white-screen on unhandled errors
+  const [fatalError, setFatalError] = useState<Error | null>(null);
+  useEffect(() => {
+    const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+      console.error("Unhandled promise rejection:", ev.reason);
+      try {
+        const err = ev.reason instanceof Error ? ev.reason : new Error(String(ev.reason));
+        setFatalError(err);
+      } catch {
+        setFatalError(new Error("Unknown error"));
+      }
+    };
+    const onError = (ev: ErrorEvent) => {
+      console.error("Global error:", ev.error || ev.message);
+      setFatalError(ev.error instanceof Error ? ev.error : new Error(ev.message));
+    };
+    window.addEventListener("unhandledrejection", onUnhandledRejection as any);
+    window.addEventListener("error", onError as any);
+    return () => {
+      window.removeEventListener("unhandledrejection", onUnhandledRejection as any);
+      window.removeEventListener("error", onError as any);
+    };
+  }, []);
+
+  if (fatalError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="max-w-xl w-full text-center border rounded-lg p-6 bg-card">
+          <h2 className="text-lg font-semibold">Something went wrong</h2>
+          <p className="text-sm text-muted-foreground my-3">An unexpected error occurred. You can try refreshing the page or returning to the dashboard.</p>
+          <div className="flex items-center justify-center gap-2">
+            <button onClick={() => window.location.reload()} className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded">Reload</button>
+            <a href="/" className="inline-flex items-center px-4 py-2 border rounded">Go home</a>
+          </div>
+          <pre className="text-xs text-muted-foreground mt-4 text-left overflow-auto max-h-40">{String(fatalError && fatalError.stack)}</pre>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      {authReady ? (
+      {authReady || authFallbackElapsed ? (
         <Outlet />
       ) : (
         <div className="flex min-h-screen items-center justify-center bg-background">
