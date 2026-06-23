@@ -53,13 +53,15 @@ export type ServiceType =
   | "HP Addition"
   | "HP Termination";
 
-export type ServiceStatus = "Pending" | "In Progress" | "Completed" | "On Hold" | "Renewal Due" | "Active";
+export type ServiceStatus = "Pending" | "In Progress" | "Completed" | "On Hold" | "Renewal Due" | "Active" | "Paid" | "Partially Paid" | "Unpaid";
 
 export interface ServiceDetail {
   serviceType: ServiceType;
   dueDate: string; // YYYY-MM-DD
   status: string; // e.g. "Active", "Renewal Due", "Completed", etc.
   price?: number; // Service-specific price / charge
+  amountReceived?: number; // Service-specific amount received
+  assignee?: string; // Service-specific assignee (optional)
 }
 
 export const SERVICE_TYPES: ServiceType[] = [
@@ -220,6 +222,8 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
             dueDate: s.dueDate || record.serviceDueDate || "",
             status: s.status || defaultStatus,
             price: typeof s.price === "number" ? s.price : Number(s.price) || 0,
+            amountReceived: s.amountReceived,
+            assignee: s.assignee,
           };
         }
 
@@ -231,6 +235,8 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
           dueDate: record.serviceDueDate || "",
           status: defaultStatus,
           price: 0,
+          amountReceived: undefined,
+          assignee: undefined,
         };
       })
       .filter((detail): detail is ServiceDetail => detail !== null);
@@ -244,6 +250,9 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
         serviceType: normalizedType,
         dueDate: record.serviceDueDate || "",
         status: defaultStatus,
+        price: 0,
+        amountReceived: undefined,
+        assignee: undefined,
       },
     ];
   }
@@ -336,6 +345,24 @@ export function calculatePendingAmount(
   return Math.max(0, serviceAmount - amountReceived);
 }
 
+/** Calculate service-specific pending amount. */
+export function calculateServicePendingAmount(service: ServiceDetail): number {
+  const amount = service.price ?? 0;
+  const received = service.amountReceived ?? 0;
+  return Math.max(0, amount - received);
+}
+
+/** Calculate service-specific payment status. */
+export function calculateServicePaymentStatus(service: ServiceDetail): PaymentStatus {
+  const amount = service.price ?? 0;
+  const received = service.amountReceived ?? 0;
+  
+  if (!amount || amount === 0) return "Unpaid";
+  if (!received || received === 0) return "Unpaid";
+  if (received >= amount) return "Paid";
+  return "Partially Paid";
+}
+
 /**
  * Get the authoritative total service amount for this record.
  * Uses detailed service item prices when available, otherwise falls back to legacy serviceAmount.
@@ -359,6 +386,36 @@ export function getRecordServiceAmountByType(record: RegistryRecord, serviceType
   return belongsToType ? (record.serviceAmount ?? 0) : 0;
 }
 
+/** Get service-specific received amount. */
+export function getServiceReceivedAmount(service: ServiceDetail): number {
+  return service.amountReceived ?? 0;
+}
+
+/** Get service-specific pending amount. */
+export function getServicePendingAmount(service: ServiceDetail): number {
+  return calculateServicePendingAmount(service);
+}
+
+/** Get service-specific payment status. */
+export function getServicePaymentStatus(service: ServiceDetail): PaymentStatus {
+  return calculateServicePaymentStatus(service);
+}
+
+/** Get total received across all services in a record. */
+export function getRecordTotalReceived(record: RegistryRecord): number {
+  const detailsTotal = getRecordServiceDetails(record)
+    .reduce((sum, service) => sum + (service.amountReceived ?? 0), 0);
+  
+  return detailsTotal > 0 ? detailsTotal : (record.amountReceived ?? 0);
+}
+
+/** Get total pending across all services in a record. */
+export function getRecordTotalPending(record: RegistryRecord): number {
+  const totalAmount = getRecordServiceAmount(record);
+  const totalReceived = getRecordTotalReceived(record);
+  return Math.max(0, totalAmount - totalReceived);
+}
+
 export function getRecordPendingAmount(record: RegistryRecord, amountReceived?: number): number {
   const totalAmount = getRecordServiceAmount(record);
   const received = amountReceived ?? record.amountReceived ?? 0;
@@ -367,7 +424,7 @@ export function getRecordPendingAmount(record: RegistryRecord, amountReceived?: 
 
 export function getRecordPaymentStatus(record: RegistryRecord): PaymentStatus {
   const totalAmount = getRecordServiceAmount(record);
-  const received = record.amountReceived ?? 0;
+  const received = getRecordTotalReceived(record);
   return calculatePaymentStatus(totalAmount, received);
 }
 

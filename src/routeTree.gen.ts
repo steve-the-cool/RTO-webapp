@@ -26,6 +26,7 @@ import { Route as DashboardAllClientsRouteImport } from './routes/dashboard.all-
 import { Route as DashboardAccountingRouteImport } from './routes/dashboard.accounting'
 import { Route as DashboardSettingsMigrationRouteImport } from './routes/dashboard.settings.migration'
 import { Route as DashboardServiceServiceTypeRouteImport } from './routes/dashboard.service.$serviceType'
+import { Route as DashboardSettingsMigrationAccountingRouteImport } from './routes/dashboard.settings.migration.accounting'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -114,6 +115,12 @@ const DashboardServiceServiceTypeRoute =
     path: '/service/$serviceType',
     getParentRoute: () => DashboardRoute,
   } as any)
+const DashboardSettingsMigrationAccountingRoute =
+  DashboardSettingsMigrationAccountingRouteImport.update({
+    id: '/accounting',
+    path: '/accounting',
+    getParentRoute: () => DashboardSettingsMigrationRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -132,7 +139,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
-  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRoute
+  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRouteWithChildren
+  '/dashboard/settings/migration/accounting': typeof DashboardSettingsMigrationAccountingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -150,7 +158,8 @@ export interface FileRoutesByTo {
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard': typeof DashboardIndexRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
-  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRoute
+  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRouteWithChildren
+  '/dashboard/settings/migration/accounting': typeof DashboardSettingsMigrationAccountingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -170,7 +179,8 @@ export interface FileRoutesById {
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
-  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRoute
+  '/dashboard/settings/migration': typeof DashboardSettingsMigrationRouteWithChildren
+  '/dashboard/settings/migration/accounting': typeof DashboardSettingsMigrationAccountingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/service/$serviceType'
     | '/dashboard/settings/migration'
+    | '/dashboard/settings/migration/accounting'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/service/$serviceType'
     | '/dashboard/settings/migration'
+    | '/dashboard/settings/migration/accounting'
   id:
     | '__root__'
     | '/'
@@ -229,6 +241,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/service/$serviceType'
     | '/dashboard/settings/migration'
+    | '/dashboard/settings/migration/accounting'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -357,15 +370,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardServiceServiceTypeRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/settings/migration/accounting': {
+      id: '/dashboard/settings/migration/accounting'
+      path: '/accounting'
+      fullPath: '/dashboard/settings/migration/accounting'
+      preLoaderRoute: typeof DashboardSettingsMigrationAccountingRouteImport
+      parentRoute: typeof DashboardSettingsMigrationRoute
+    }
   }
 }
 
+interface DashboardSettingsMigrationRouteChildren {
+  DashboardSettingsMigrationAccountingRoute: typeof DashboardSettingsMigrationAccountingRoute
+}
+
+const DashboardSettingsMigrationRouteChildren: DashboardSettingsMigrationRouteChildren =
+  {
+    DashboardSettingsMigrationAccountingRoute:
+      DashboardSettingsMigrationAccountingRoute,
+  }
+
+const DashboardSettingsMigrationRouteWithChildren =
+  DashboardSettingsMigrationRoute._addFileChildren(
+    DashboardSettingsMigrationRouteChildren,
+  )
+
 interface DashboardSettingsRouteChildren {
-  DashboardSettingsMigrationRoute: typeof DashboardSettingsMigrationRoute
+  DashboardSettingsMigrationRoute: typeof DashboardSettingsMigrationRouteWithChildren
 }
 
 const DashboardSettingsRouteChildren: DashboardSettingsRouteChildren = {
-  DashboardSettingsMigrationRoute: DashboardSettingsMigrationRoute,
+  DashboardSettingsMigrationRoute: DashboardSettingsMigrationRouteWithChildren,
 }
 
 const DashboardSettingsRouteWithChildren =

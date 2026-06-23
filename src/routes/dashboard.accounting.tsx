@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Download, Printer } from "lucide-react";
-import { subscribeToRecords, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus, type RegistryRecord, type Bucket } from "@/lib/records";
+import { subscribeToRecords, getRecordServiceAmount, getRecordServiceDetails, getRecordPendingAmount, getRecordPaymentStatus, type RegistryRecord, type Bucket } from "@/lib/records";
 import { generateAccountingPDF, printWindow } from "@/lib/pdfGenerator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,12 +36,15 @@ function AccountingDashboard() {
     return () => unsubscribers.forEach((unsub) => unsub());
   }, []);
 
-  // Calculate accounting metrics
+  // Calculate accounting metrics - SERVICE-WISE ACCOUNTING
   const metrics = useMemo(() => {
     const records = allRecords.filter((r) => getRecordServiceAmount(r) > 0);
 
     const totalServiceAmount = records.reduce((sum, r) => sum + getRecordServiceAmount(r), 0);
-    const totalAmountReceived = records.reduce((sum, r) => sum + (r.amountReceived || 0), 0);
+    // Use service-level amountReceived instead of record-level
+    const totalAmountReceived = records.reduce((sum, r) => {
+      return sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.amountReceived ?? 0), 0);
+    }, 0);
     const totalPendingAmount = totalServiceAmount - totalAmountReceived;
 
     const unpaidCount = records.filter((r) => getRecordPaymentStatus(r) === "Unpaid").length;

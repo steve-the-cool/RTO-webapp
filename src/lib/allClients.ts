@@ -109,8 +109,10 @@ export function aggregateAllClients(
         serviceType: detail.serviceType,
         dueDate: detail.dueDate,
         serviceAmount: detail.price ?? 0,
-        amountReceived: record.amountReceived,
-        paymentStatus: record.paymentStatus ?? getRecordPaymentStatus(record),
+        amountReceived: detail.amountReceived ?? 0,
+        paymentStatus: detail.amountReceived !== undefined 
+          ? (detail.amountReceived >= (detail.price ?? 0) ? "Paid" : detail.amountReceived > 0 ? "Partially Paid" : "Unpaid")
+          : getRecordPaymentStatus(record),
         activityLogs: record.activityLogs,
       };
 
@@ -135,13 +137,15 @@ export function aggregateAllClients(
       client.completedServices += 1;
     }
 
-    // Update revenue
+    // Update revenue - aggregate from SERVICE-LEVEL accounting
     const recordRevenue = getRecordServiceAmount(record);
     if (recordRevenue) {
       client.totalRevenue += recordRevenue;
     }
-    if (record.amountReceived) {
-      client.totalReceived += record.amountReceived;
+    // Update received from SERVICE-LEVEL accounting
+    const recordReceived = getRecordServiceDetails(record).reduce((sum, detail) => sum + (detail.amountReceived ?? 0), 0);
+    if (recordReceived) {
+      client.totalReceived += recordReceived;
     }
 
     // Update latest assignee

@@ -65,9 +65,6 @@ const COLS: { key: keyof RegistryRecord; label: string }[] = [
   { key: "fitness", label: "FITNESS" },
   { key: "tax", label: "TAX" },
   { key: "co", label: "C/O" },
-  { key: "serviceAmount", label: "SERVICE" },
-  { key: "amountReceived", label: "RECEIVED" },
-  { key: "paymentStatus", label: "PAYMENT" },
 ];
 
 function statusClass(status: RecordStatus) {
@@ -381,13 +378,6 @@ export function RecordTable({ bucket, title, description }: Props) {
                   <td className="px-3 py-3 whitespace-nowrap">{r.fitness || "—"}</td>
                   <td className="px-3 py-3 whitespace-nowrap">{r.tax || "—"}</td>
                   <td className="px-3 py-3">{r.co || "—"}</td>
-                  <td className="px-3 py-3 font-mono text-xs">₹{getRecordServiceAmount(r).toLocaleString("en-IN")}</td>
-                  <td className="px-3 py-3 font-mono text-xs">₹{(r.amountReceived || 0).toLocaleString("en-IN")}</td>
-                  <td className="px-3 py-3">
-                    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", paymentStatusClass(getRecordPaymentStatus(r)))}>
-                      {getRecordPaymentStatus(r)}
-                    </span>
-                  </td>
                   <td className="px-3 py-3 whitespace-nowrap text-xs">{staffLabel(r.assignee) || <span className="text-muted-foreground">Unassigned</span>}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex gap-1">
@@ -441,78 +431,7 @@ export function RecordTable({ bucket, title, description }: Props) {
               <Field label="CHASSIS NUMBER"><Input value={editing.chassisNo || ""} onChange={(e) => setEditing({ ...editing, chassisNo: transformInput(e.target.value, forceCaps) })} placeholder="Chassis No" /></Field>
               <Field label="ENGINE NUMBER"><Input value={editing.engineNo || ""} onChange={(e) => setEditing({ ...editing, engineNo: transformInput(e.target.value, forceCaps) })} placeholder="Engine No" /></Field>
               
-              {/* Accounting Fields */}
-              <div className="sm:col-span-2 border-t pt-4 mt-2">
-                <h3 className="text-sm font-semibold text-muted-foreground mb-3">Accounting</h3>
-              </div>
-              <Field label="Total Service Amount">
-                <Input
-                  type="number"
-                  value={editing.serviceAmount || ""}
-                  onChange={(e) => {
-                    const amount = Number(e.target.value) || 0;
-                    const paymentStatus = calculatePaymentStatus(amount, editing.amountReceived);
-                    setEditing({
-                      ...editing,
-                      serviceAmount: amount,
-                      paymentStatus,
-                    });
-                  }}
-                  placeholder="0"
-                  min="0"
-                />
-              </Field>
-              <Field label="Amount Received">
-                <Input
-                  type="number"
-                  value={editing.amountReceived || ""}
-                  onChange={(e) => {
-                    const amount = Number(e.target.value) || 0;
-                    const paymentStatus = calculatePaymentStatus(editing.serviceAmount, amount);
-                    setEditing({
-                      ...editing,
-                      amountReceived: amount,
-                      paymentStatus,
-                    });
-                  }}
-                  placeholder="0"
-                  min="0"
-                />
-              </Field>
-              <Field label="Payment Date">
-                <Input
-                  type="date"
-                  value={editing.paymentDate || ""}
-                  onChange={(e) => setEditing({ ...editing, paymentDate: e.target.value })}
-                />
-              </Field>
-              <Field label="Pending Amount" full>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    value={calculatePendingAmount(editing.serviceAmount, editing.amountReceived)}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                    (Auto-calculated)
-                  </span>
-                </div>
-              </Field>
-              <Field label="Payment Status" full>
-                <div className="relative">
-                  <Input
-                    type="text"
-                    value={editing.paymentStatus || "Unpaid"}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                    (Auto-calculated)
-                  </span>
-                </div>
-              </Field>
-
+              {/* Service Management & Accounting - UNIFIED SYSTEM */}
               <Field label={isAdmin ? "ASSIGN TO STAFF" : "ASSIGNED TO"} full>
                 <Select
                   value={editing.assignee || "__none"}
@@ -528,9 +447,9 @@ export function RecordTable({ bucket, title, description }: Props) {
                 {isAdmin && <p className="text-xs text-muted-foreground">A task is auto-created for the assignee and stays in sync with the record status.</p>}
               </Field>
 
-              {/* Service Management Fields */}
               <div className="sm:col-span-2 border-t pt-4 mt-2">
-                <h3 className="text-sm font-semibold text-muted-foreground mb-3">Service Management</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">Services (Each Service Manages Its Own Amount, Received, Status)</h3>
+                <p className="text-xs text-muted-foreground mb-4">This is the only accounting source. No client-level accounting.</p>
               </div>
 
               <div className="sm:col-span-2 space-y-4">
@@ -545,13 +464,13 @@ export function RecordTable({ bucket, title, description }: Props) {
                     
                     return (
                       <div key={index} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 border rounded-lg bg-muted/20 relative group hover:border-primary/30 transition-colors">
-                        <div className="font-semibold text-sm sm:w-1/4">
+                        <div className="font-semibold text-sm sm:w-1/6">
                           {serviceLabel(serviceObj.serviceType)}
                         </div>
                         
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground uppercase font-bold w-16 sm:hidden">Due Date</span>
+                            <span className="text-xs text-muted-foreground uppercase font-bold w-full sm:hidden">Due Date</span>
                             <Input
                               type="date"
                               value={serviceObj.dueDate}
@@ -565,7 +484,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground uppercase font-bold w-16 sm:hidden">Price</span>
+                            <span className="text-xs text-muted-foreground uppercase font-bold w-full sm:hidden">Amount</span>
                             <Input
                               type="number"
                               min="0"
@@ -575,8 +494,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                                 const price = value === "" ? 0 : Number(value);
                                 const newServices = [...(editing.services || [])];
                                 newServices[index] = { ...serviceObj, price };
-                                const totalServiceAmount = newServices.reduce((sum, svc) => sum + ((svc.price || 0)), 0);
-                                setEditing({ ...editing, services: newServices, serviceAmount: totalServiceAmount });
+                                setEditing({ ...editing, services: newServices });
                               }}
                               placeholder="0"
                               className="h-9 text-xs flex-1"
@@ -584,7 +502,35 @@ export function RecordTable({ bucket, title, description }: Props) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground uppercase font-bold w-16 sm:hidden">Status</span>
+                            <span className="text-xs text-muted-foreground uppercase font-bold w-full sm:hidden">Received</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={serviceObj.amountReceived ?? ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const amountReceived = value === "" ? 0 : Number(value);
+                                const newServices = [...(editing.services || [])];
+                                newServices[index] = { ...serviceObj, amountReceived };
+                                setEditing({ ...editing, services: newServices });
+                              }}
+                              placeholder="0"
+                              className="h-9 text-xs flex-1"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground uppercase font-bold w-full sm:hidden">Pending</span>
+                            <Input
+                              type="number"
+                              disabled
+                              value={Math.max(0, (serviceObj.price || 0) - (serviceObj.amountReceived || 0))}
+                              className="h-9 text-xs flex-1 bg-muted"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground uppercase font-bold w-full sm:hidden">Status</span>
                             <Select
                               value={serviceObj.status || "Active"}
                               onValueChange={(v) => {
@@ -597,7 +543,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {["Active", "Renewal Due", "Completed", "Pending", "In Progress", "On Hold"].map((st) => (
+                                {["Active", "Renewal Due", "Completed", "Pending", "In Progress", "On Hold", "Paid", "Partially Paid", "Unpaid"].map((st) => (
                                   <SelectItem key={st} value={st} className="text-xs">
                                     {st}
                                   </SelectItem>
@@ -613,8 +559,7 @@ export function RecordTable({ bucket, title, description }: Props) {
                           size="icon"
                           onClick={() => {
                             const newServices = (editing.services || []).filter((_, idx) => idx !== index);
-                            const totalServiceAmount = newServices.reduce((sum, svc) => sum + ((svc?.price || 0)), 0);
-                            setEditing({ ...editing, services: newServices, serviceAmount: totalServiceAmount });
+                            setEditing({ ...editing, services: newServices });
                           }}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 w-9 self-end sm:self-auto"
                         >
@@ -686,9 +631,9 @@ export function RecordTable({ bucket, title, description }: Props) {
                           dueDate: "",
                           status: "Active",
                           price: 0,
+                          amountReceived: 0,
                         });
-                        const totalServiceAmount = newServices.reduce((sum, svc) => sum + ((svc.price || 0)), 0);
-                        setEditing({ ...editing, services: newServices, serviceAmount: totalServiceAmount });
+                        setEditing({ ...editing, services: newServices });
                       }}
                     >
                       <SelectTrigger className="h-9 text-xs">

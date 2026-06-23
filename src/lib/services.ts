@@ -185,10 +185,17 @@ export async function getServiceRevenue(serviceType: ServiceType): Promise<numbe
 
 /**
  * Calculate total amount received for a specific service type.
+ * NOW USES SERVICE-LEVEL ACCOUNTING: sums amountReceived from service details only.
  */
 export async function getServiceAmountReceived(serviceType: ServiceType): Promise<number> {
   const records = await getServiceClientsAll(serviceType);
-  return records.reduce((sum, r) => sum + (r.amountReceived || 0), 0);
+  return records.reduce((sum, r) => {
+    const details = getRecordServiceDetails(r).filter((detail) => detail.serviceType === serviceType);
+    if (details.length > 0) {
+      return sum + details.reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0);
+    }
+    return sum;
+  }, 0);
 }
 
 /**
@@ -253,6 +260,36 @@ export async function getTotalRevenue(): Promise<number> {
 
   const flatRecords = allRecords.flat();
   return flatRecords.reduce((sum, r) => sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0), 0);
+}
+
+/**
+ * Get total amount received across all services (SERVICE-WISE ACCOUNTING).
+ */
+export async function getTotalAmountReceived(): Promise<number> {
+  const buckets: Bucket[] = ["clients", "leads", "customers"];
+  const allRecords = await Promise.all(
+    buckets.map(async (b) => {
+      const colName = `registry_${b}`;
+      const q = query(
+        collection(db, colName),
+        where("isDeleted", "!=", true),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RegistryRecord));
+    }),
+  );
+
+  const flatRecords = allRecords.flat();
+  return flatRecords.reduce((sum, r) => sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0), 0);
+}
+
+/**
+ * Get total pending amount across all services (SERVICE-WISE ACCOUNTING).
+ */
+export async function getTotalPendingAmount(): Promise<number> {
+  const revenue = await getTotalRevenue();
+  const received = await getTotalAmountReceived();
+  return Math.max(0, revenue - received);
 }
 
 /**
