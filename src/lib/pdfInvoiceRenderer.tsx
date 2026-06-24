@@ -1,12 +1,58 @@
 import * as React from "react";
 import html2canvas from "html2canvas";
 import { createRoot } from "react-dom/client";
-import { InvoiceDocument } from "@/components/InvoiceDocument";
+import { InvoicePDFTemplate } from "@/components/InvoicePDFTemplate";
 import type { Invoice } from "./billing";
 
 const PAGE_WIDTH = 210; // A4 width in mm
 
+// Canvas-based dynamic OKLCH/OKLAB converter
+function oklchToRgb(colorStr: string): string {
+  if (typeof document === "undefined") return "#3b82f6";
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "#3b82f6";
+    ctx.fillStyle = colorStr;
+    ctx.fillRect(0, 0, 1, 1);
+    const data = ctx.getImageData(0, 0, 1, 1).data;
+    console.log(`[PDF] Dynamically resolved color: ${colorStr} -> rgb(${data[0]}, ${data[1]}, ${data[2]})`);
+    return `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
+  } catch (e) {
+    console.warn("[PDF] Failed to convert color:", colorStr, e);
+    return "#3b82f6";
+  }
+}
+
+// Convert unsupported color functions in a style string
+function sanitizeCssText(cssText: string): string {
+  let sanitized = cssText;
+  
+  const oklchRegex = /oklch\([^)]+\)/gi;
+  sanitized = sanitized.replace(oklchRegex, (match) => oklchToRgb(match));
+
+  const oklabRegex = /oklab\([^)]+\)/gi;
+  sanitized = sanitized.replace(oklabRegex, (match) => oklchToRgb(match));
+
+  return sanitized;
+}
+
 export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanvasElement> {
+  console.log("[PDF] Render Started");
+  console.log("[PDF] Data Loaded");
+  
+  // Step 2 Logs
+  console.log("[PDF] Invoice Data", invoice);
+  console.log("[PDF] Client", invoice.clientName);
+  console.log("[PDF] Services", invoice.services);
+  console.log("[PDF] Total", invoice.totalAmount);
+
+  if (!invoice) {
+    throw new Error("Invoice data missing");
+  }
+
   if (typeof document === "undefined") {
     throw new Error("Invoice PDF generation requires a browser environment.");
   }
@@ -18,126 +64,34 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
   const container = document.createElement("div");
   container.id = "pdf-renderer-container";
   container.style.position = "fixed";
-  container.style.left = "-999999px";
+  container.style.left = "-9999px"; // Off-screen instead of opacity: 0
   container.style.top = "0";
   container.style.width = `${widthPx}px`;
   container.style.minHeight = "297mm";
   container.style.boxSizing = "border-box";
-  container.style.padding = "24px";
+  container.style.padding = "0px";
   container.style.background = "#ffffff";
-  container.style.color = "#0f172a";
+  container.style.color = "#1e293b";
   container.style.visibility = "visible";
-  container.style.opacity = "0";
-  container.style.fontFamily = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  container.style.opacity = "1"; // Keep opacity: 1 so html2canvas doesn't capture blank transparent page
+  container.style.fontFamily = "Inter, Arial, sans-serif";
   container.style.zIndex = "-9999";
   container.style.pointerEvents = "none";
   container.style.overflow = "visible";
-  container.style.setProperty("--background", "#ffffff");
-  container.style.setProperty("--foreground", "#0f172a");
-  container.style.setProperty("--card", "#ffffff");
-  container.style.setProperty("--card-foreground", "#0f172a");
-  container.style.setProperty("--popover", "#f8fafc");
-  container.style.setProperty("--popover-foreground", "#0f172a");
-  container.style.setProperty("--primary", "#2563eb");
-  container.style.setProperty("--primary-foreground", "#ffffff");
-  container.style.setProperty("--secondary", "#f8fafc");
-  container.style.setProperty("--secondary-foreground", "#334155");
-  container.style.setProperty("--muted", "#f8fafc");
-  container.style.setProperty("--muted-foreground", "#475569");
-  container.style.setProperty("--accent", "#f8fafc");
-  container.style.setProperty("--accent-foreground", "#0f172a");
-  container.style.setProperty("--destructive", "#fecaca");
-  container.style.setProperty("--destructive-foreground", "#991b1b");
-  container.style.setProperty("--success", "#bbf7d0");
-  container.style.setProperty("--success-foreground", "#14532d");
-  container.style.setProperty("--warning", "#fef3c7");
-  container.style.setProperty("--warning-foreground", "#92400e");
-  container.style.setProperty("--border", "#cbd5e1");
-  container.style.setProperty("--input", "#f8fafc");
-  container.style.setProperty("--ring", "#bfdbfe");
-  container.style.setProperty("--sidebar", "#ffffff");
-  container.style.setProperty("--sidebar-foreground", "#0f172a");
-  container.style.setProperty("--sidebar-border", "#cbd5e1");
 
   const styleElement = document.createElement("style");
   styleElement.textContent = `
     #pdf-renderer-container, #pdf-renderer-container * {
-      color: #0f172a !important;
-      background-color: transparent !important;
-      border-color: #cbd5e1 !important;
       box-shadow: none !important;
+      text-shadow: none !important;
     }
-    #pdf-renderer-container th, #pdf-renderer-container td {
-      border-bottom: 1px solid #e2e8f0 !important;
-    }
-    #pdf-renderer-container table {
-      width: 100% !important;
-      border-collapse: collapse !important;
-    }
-    #pdf-renderer-container .bg-white { background-color: #ffffff !important; }
-    #pdf-renderer-container .bg-slate-50, #pdf-renderer-container .bg-slate-100 { background-color: #f8fafc !important; }
-    #pdf-renderer-container .bg-blue-50 { background-color: #eff6ff !important; }
-    #pdf-renderer-container .bg-blue-600 { background-color: #2563eb !important; }
-    #pdf-renderer-container .text-blue-600 { color: #2563eb !important; }
-    #pdf-renderer-container .text-slate-900 { color: #0f172a !important; }
-    #pdf-renderer-container .text-slate-800 { color: #1e293b !important; }
-    #pdf-renderer-container .text-slate-700 { color: #334155 !important; }
-    #pdf-renderer-container .text-slate-600 { color: #475569 !important; }
-    #pdf-renderer-container .text-slate-500 { color: #64748b !important; }
-    #pdf-renderer-container .border { border-color: #cbd5e1 !important; }
-    #pdf-renderer-container .border-slate-800, #pdf-renderer-container .border-slate-900 { border-color: #0f172a !important; }
-    #pdf-renderer-container .border-slate-700 { border-color: #334155 !important; }
-    #pdf-renderer-container .rounded-lg { border-radius: 0.5rem !important; }
-    #pdf-renderer-container .rounded-2xl { border-radius: 1rem !important; }
-    #pdf-renderer-container .rounded-full { border-radius: 9999px !important; }
-    #pdf-renderer-container .text-right { text-align: right !important; }
-    #pdf-renderer-container .text-center { text-align: center !important; }
-    #pdf-renderer-container .text-left { text-align: left !important; }
-    #pdf-renderer-container .flex { display: flex !important; }
-    #pdf-renderer-container .grid { display: grid !important; }
-    #pdf-renderer-container .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
-    #pdf-renderer-container .lg\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    #pdf-renderer-container .lg\\:flex-row { flex-direction: row !important; }
-    #pdf-renderer-container .items-center { align-items: center !important; }
-    #pdf-renderer-container .justify-between { justify-content: space-between !important; }
-    #pdf-renderer-container .justify-end { justify-content: flex-end !important; }
-    #pdf-renderer-container .font-bold { font-weight: 700 !important; }
-    #pdf-renderer-container .font-medium { font-weight: 500 !important; }
-    #pdf-renderer-container .text-3xl { font-size: 1.875rem !important; line-height: 2.25rem !important; }
-    #pdf-renderer-container .text-2xl { font-size: 1.5rem !important; line-height: 2rem !important; }
-    #pdf-renderer-container .text-sm { font-size: 0.875rem !important; line-height: 1.25rem !important; }
-    #pdf-renderer-container .text-xs { font-size: 0.75rem !important; line-height: 1rem !important; }
-    #pdf-renderer-container .p-4 { padding: 1rem !important; }
-    #pdf-renderer-container .p-2 { padding: 0.5rem !important; }
-    #pdf-renderer-container .p-3 { padding: 0.75rem !important; }
-    #pdf-renderer-container .p-8 { padding: 2rem !important; }
-    #pdf-renderer-container .pb-6 { padding-bottom: 1.5rem !important; }
-    #pdf-renderer-container .pt-4 { padding-top: 1rem !important; }
-    #pdf-renderer-container .mt-2 { margin-top: 0.5rem !important; }
-    #pdf-renderer-container .mt-3 { margin-top: 0.75rem !important; }
-    #pdf-renderer-container .mb-4 { margin-bottom: 1rem !important; }
-    #pdf-renderer-container .mb-3 { margin-bottom: 0.75rem !important; }
-    #pdf-renderer-container .space-y-1 > * + * { margin-top: 0.25rem !important; }
-    #pdf-renderer-container .space-y-2 > * + * { margin-top: 0.5rem !important; }
-    #pdf-renderer-container .space-y-4 > * + * { margin-top: 1rem !important; }
-    #pdf-renderer-container .gap-4 { gap: 1rem !important; }
-    #pdf-renderer-container .gap-6 { gap: 1.5rem !important; }
-    #pdf-renderer-container .border-b { border-bottom-width: 1px !important; }
-    #pdf-renderer-container .border-b-2 { border-bottom-width: 2px !important; }
-    #pdf-renderer-container .border-t-2 { border-top-width: 2px !important; }
-    #pdf-renderer-container .w-full { width: 100% !important; }
-    #pdf-renderer-container .max-w-xs { max-width: 20rem !important; }
-    #pdf-renderer-container .max-w-4xl { max-width: 56rem !important; }
-    #pdf-renderer-container .overflow-x-auto { overflow-x: auto !important; }
-    #pdf-renderer-container .hover\\:bg-slate-50:hover { background-color: #f8fafc !important; }
-    #pdf-renderer-container .bg-slate-50 { background-color: #f8fafc !important; }
-    #pdf-renderer-container .bg-slate-100 { background-color: #f1f5f9 !important; }
   `;
   container.appendChild(styleElement);
   document.body.appendChild(container);
 
+  const invoiceRef = React.createRef<HTMLDivElement>();
   const root = createRoot(container);
-  root.render(<InvoiceDocument invoice={invoice} />);
+  root.render(<InvoicePDFTemplate invoice={invoice} ref={invoiceRef} />);
 
   // Wait for React to fully render and paint the component
   await new Promise<void>((resolve) => {
@@ -148,6 +102,22 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
     });
   });
 
+  // Verify elements exist and are not empty
+  if (!invoiceRef.current) {
+    root.unmount();
+    container.remove();
+    throw new Error("Invoice template missing");
+  }
+
+  console.log("[PDF] Template Found");
+  console.log("[PDF] Captured element HTML length:", invoiceRef.current.innerHTML.length);
+  
+  if (invoiceRef.current.innerHTML.trim().length === 0) {
+    root.unmount();
+    container.remove();
+    throw new Error("Invoice template empty");
+  }
+
   if ((document as any).fonts?.ready) {
     try {
       await (document as any).fonts.ready;
@@ -156,24 +126,92 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
     }
   }
 
+  // Disable all other stylesheets to prevent html2canvas parsing errors
+  const originalDisabled = new Map<HTMLStyleElement | HTMLLinkElement, boolean>();
+  const styleAndLinkElements = Array.from(document.querySelectorAll("style, link[rel='stylesheet']")) as (HTMLStyleElement | HTMLLinkElement)[];
+  
+  for (const el of styleAndLinkElements) {
+    if (el === styleElement) continue;
+    originalDisabled.set(el, el.disabled);
+    el.disabled = true;
+  }
+  console.log(`[PDF] Theme Sanitized: Temporarily disabled ${originalDisabled.size} style sheets`);
+
   try {
-    const canvas = await html2canvas(container, {
+    const canvas = await html2canvas(invoiceRef.current, {
       backgroundColor: "#ffffff",
       scale,
       useCORS: true,
-      width: container.offsetWidth,
-      height: container.offsetHeight,
+      width: invoiceRef.current.offsetWidth || widthPx,
+      height: invoiceRef.current.offsetHeight || 1120,
       allowTaint: true,
-      foreignObjectRendering: true,
+      foreignObjectRendering: false,
       imageTimeout: 20000,
     });
 
+    console.log("[PDF] Canvas Created");
+    
+    // Restore style sheets
+    for (const [el, wasDisabled] of originalDisabled.entries()) {
+      el.disabled = wasDisabled;
+    }
+    
     root.unmount();
     container.remove();
     return canvas;
   } catch (error) {
-    root.unmount();
-    container.remove();
-    throw new Error(`Failed to render invoice to canvas: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn("[PDF] html2canvas error encountered, attempting fallback sanitization route", error);
+    
+    // Fallback: If it failed, let's restore sheets first
+    for (const [el, wasDisabled] of originalDisabled.entries()) {
+      el.disabled = wasDisabled;
+    }
+
+    // Try fallback color sanitization in the sheets themselves instead of disabling them
+    const restoredText = new Map<HTMLStyleElement, string>();
+    const styleTags = Array.from(document.getElementsByTagName("style"));
+    for (const tag of styleTags) {
+      const text = tag.textContent || "";
+      if (text.includes("oklch") || text.includes("oklab")) {
+        restoredText.set(tag, text);
+        tag.textContent = sanitizeCssText(text);
+      }
+    }
+    console.log(`[PDF] Theme Sanitized fallback: Modified ${restoredText.size} style tags`);
+
+    try {
+      const canvas = await html2canvas(invoiceRef.current, {
+        backgroundColor: "#ffffff",
+        scale,
+        useCORS: true,
+        width: invoiceRef.current.offsetWidth || widthPx,
+        height: invoiceRef.current.offsetHeight || 1120,
+        allowTaint: true,
+        foreignObjectRendering: false,
+        imageTimeout: 20000,
+      });
+
+      console.log("[PDF] Canvas Created (fallback)");
+
+      // Restore style text
+      for (const [tag, text] of restoredText.entries()) {
+        tag.textContent = text;
+      }
+
+      root.unmount();
+      container.remove();
+      return canvas;
+    } catch (fallbackError) {
+      // Restore style text
+      for (const [tag, text] of restoredText.entries()) {
+        tag.textContent = text;
+      }
+
+      root.unmount();
+      container.remove();
+      throw new Error(`Failed to render invoice to canvas: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+    }
   }
 }
+
+

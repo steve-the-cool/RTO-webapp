@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   LayoutDashboard, Users, UserPlus, CheckSquare,
   UserCircle, BarChart3, DollarSign, LineChart,
@@ -101,6 +101,7 @@ function DashboardLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [user, setUser] = useState<StaffUser | null>(null);
   const [open, setOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setUser(getSession());
@@ -109,15 +110,49 @@ function DashboardLayout() {
     return () => window.removeEventListener("auth-change", handler);
   }, []);
 
+  // Restore scroll position when layout mounts or route changes
+  useEffect(() => {
+    const restore = () => {
+      if (sidebarRef.current) {
+        const savedPosition = localStorage.getItem("sidebarScrollPosition");
+        if (savedPosition) {
+          const parsed = Number(savedPosition);
+          const maxScroll = sidebarRef.current.scrollHeight - sidebarRef.current.clientHeight;
+          const clamped = Math.max(0, Math.min(parsed, maxScroll));
+          sidebarRef.current.scrollTop = clamped;
+          console.log("[Sidebar] Restoring Position:", clamped);
+        }
+      }
+    };
+
+    restore();
+    // Secondary defer pass to account for layout shifts
+    const id = requestAnimationFrame(restore);
+
+    // Scroll main content to top on pathname changes
+    const mainEl = document.querySelector("main");
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+
+    return () => cancelAnimationFrame(id);
+  }, [pathname]);
+
+  const handleSidebarScroll = (e: React.UIEvent<HTMLElement>) => {
+    const scrollTop = e.currentTarget.scrollTop;
+    localStorage.setItem("sidebarScrollPosition", scrollTop.toString());
+    console.log("[Sidebar] Saving Position:", scrollTop);
+  };
+
   const handleLogout = async () => { await logout(); navigate({ to: "/" }); };
 
   const initials = (user?.name ?? "U").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-screen w-screen overflow-hidden flex bg-background">
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-40 w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-transform",
+          "fixed lg:relative inset-y-0 left-0 z-40 w-64 h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-transform",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
@@ -126,7 +161,11 @@ function DashboardLayout() {
           <div className="font-bold tracking-tight">REGISTRY PRO</div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-5">
+        <nav
+          ref={sidebarRef}
+          onScroll={handleSidebarScroll}
+          className="flex-1 overflow-y-auto p-3 space-y-5"
+        >
           {GROUPS.map((group) => (
             <div key={group.heading}>
               <div className="px-3 mb-1 text-[11px] font-semibold tracking-wider text-sidebar-foreground/50 uppercase">
@@ -186,7 +225,7 @@ function DashboardLayout() {
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <header className="h-14 border-b bg-card flex items-center gap-3 px-4 lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)}>
             <Menu className="size-5" />
@@ -195,7 +234,7 @@ function DashboardLayout() {
             {ALL_ITEMS.find((n) => (n.exact ? pathname === n.to : pathname === n.to || pathname.startsWith(n.to + "/")))?.label ?? "Dashboard"}
           </h1>
         </header>
-        <main className="flex-1 p-4 lg:p-6 overflow-x-hidden">
+        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
           <Outlet />
         </main>
       </div>

@@ -9,19 +9,21 @@ import {
   validateBillingPeriodSequence,
   getLatestBillingPeriod,
   getNextBillingStartDate,
+  calculateInvoiceAmount,
   type InvoiceServiceItem,
   type Invoice,
 } from "@/lib/billing";
 import { getSession } from "@/lib/auth";
+import { subscribeAllClients } from "@/lib/hierarchy";
 
 interface InvoiceGeneratorProps {
   onInvoiceCreated?: (invoice: Invoice) => void;
 }
 
 export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
-  const [clients, setClients] = useState<RegistryRecord[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedClient, setSelectedClient] = useState<RegistryRecord | null>(null);
+  const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [billingStartDate, setBillingStartDate] = useState("");
   const [billingEndDate, setBillingEndDate] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
@@ -32,33 +34,24 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
   const [latestPeriod, setLatestPeriod] = useState<any>(null);
   const [autoStartDate, setAutoStartDate] = useState<string>("");
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
+  const [breakdown, setBreakdown] = useState<any[]>([]);
 
   const session = getSession();
   const createdBy = session?.username || "system";
 
-  // Load all clients
+  // Load all V2 clients
   useEffect(() => {
-    const buckets: Bucket[] = ["clients", "leads", "customers"];
-    const unsubscribers: Array<() => void> = [];
-    const allRecords: { [key in Bucket]: RegistryRecord[] } = { clients: [], leads: [], customers: [] };
-
-    buckets.forEach((bucket) => {
-      const unsub = subscribeToRecords(bucket, (records) => {
-        allRecords[bucket] = records;
-        const combined = Object.values(allRecords).flat();
-        setClients(combined.filter((r) => !r.isDeleted));
-      });
-      unsubscribers.push(unsub);
+    const unsub = subscribeAllClients((items) => {
+      setClients(items);
     });
-
-    return () => unsubscribers.forEach((unsub) => unsub());
+    return unsub;
   }, []);
 
   // Fetch latest billing period when client changes
   useEffect(() => {
     if (selectedClient) {
+      console.log({ step: "FETCH_BILLING_PERIOD_START", clientId: selectedClient.id });
       (async () => {
-        console.log({ step: "FETCH_BILLING_PERIOD_START", clientId: selectedClient.id });
         try {
           const [latest, nextStart] = await Promise.all([
             getLatestBillingPeriod(selectedClient.id),
@@ -75,6 +68,32 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
       })();
     }
   }, [selectedClient]);
+
+  // Recalculate invoice amount and breakdown dynamically
+  useEffect(() => {
+    if (selectedClient && selectedServices.length > 0) {
+      (async () => {
+        try {
+          const res = await calculateInvoiceAmount(selectedClient.id, selectedServices);
+          setUnitPrice(String(res.totalAmount));
+          setBreakdown(res.breakdown);
+          
+          // Debugging logs requested by prompt
+          console.log("[Billing] Selected Client", selectedClient.id);
+          console.log("[Billing] Selected Services", selectedServices);
+          console.log("[Billing] Service Breakdown", res.breakdown);
+          console.log("[Billing] Calculated Invoice Amount", res.totalAmount);
+        } catch (err) {
+          console.error("Failed to calculate invoice amount:", err);
+          setUnitPrice("0");
+          setBreakdown([]);
+        }
+      })();
+    } else {
+      setUnitPrice("0");
+      setBreakdown([]);
+    }
+  }, [selectedClient, selectedServices]);
 
   // Validate billing period
   useEffect(() => {
@@ -124,7 +143,7 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
 
   // Filter clients by search
   const filteredClients = clients.filter((c) =>
-    searchTerm === "" || c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.mo?.includes(searchTerm),
+    searchTerm === "" || c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.mobile?.includes(searchTerm),
   );
 
   // Handle service selection
@@ -159,7 +178,7 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
       return;
     }
     if (!unitPrice || Number(unitPrice) <= 0 || Number.isNaN(Number(unitPrice))) {
-      setError("Please enter valid unit price");
+      setError("Calculation returned no services or 0 amount.");
       return;
     }
     if (!validationMsg?.includes("✓")) {
@@ -171,18 +190,20 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
     setError(null);
     setSuccess(null);
 
-    const parsedAmount = Number(unitPrice);
-    const tax = parsedAmount * 0.18; // 18% GST
-    const services: InvoiceServiceItem[] = selectedServices.map((serviceName) => ({
-      serviceId: `svc-${Date.now()}-${serviceName.replace(/\s+/g, "-")}`,
-      serviceName,
-      vehicleNumber: selectedClient.mvNo || "",
-      quantity: 1,
-      unitPrice: parsedAmount,
-      amount: parsedAmount,
-      tax,
-      total: parsedAmount + tax,
-    }));
+    const services: InvoiceServiceItem[] = breakdown.map((item) => {
+      const price = item.amount;
+      const tax = price * 0.18;
+      return {
+        serviceId: item.serviceId || `svc-${Date.now()}-${item.serviceName.replace(/\s+/g, "-")}-${item.vehicleNumber}`,
+        serviceName: item.serviceName,
+        vehicleNumber: item.vehicleNumber,
+        quantity: 1,
+        unitPrice: price,
+        amount: price,
+        tax,
+        total: price + tax,
+      };
+    });
 
     console.log({
       step: "INVOICE_PAYLOAD_PREPARED",
@@ -191,8 +212,6 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
       billingStartDate,
       billingEndDate,
       selectedServices,
-      parsedAmount,
-      tax,
       services,
       isFormValid,
     });
@@ -215,6 +234,7 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
       setUnitPrice("");
       setSelectedServices([]);
       setValidationMsg(null);
+      setBreakdown([]);
 
       onInvoiceCreated?.(invoice);
 
@@ -294,7 +314,7 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
                   >
                     <div className="font-medium">{client.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      {client.mo} • {client.mvNo}
+                      {client.mobile} {client.companyName ? `• ${client.companyName}` : ""}
                     </div>
                   </button>
                 ))}
@@ -304,7 +324,7 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
               <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm font-medium">{selectedClient.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {selectedClient.mo} • {selectedClient.mvNo}
+                  {selectedClient.mobile} {selectedClient.companyName ? `• ${selectedClient.companyName}` : ""}
                 </p>
               </div>
             )}
@@ -360,19 +380,55 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
             </div>
           </div>
 
+          {/* Breakdown of selected services across vehicles */}
+          {selectedClient && selectedServices.length > 0 && breakdown.length > 0 && (
+            <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-border space-y-2">
+              <h4 className="text-xs font-bold uppercase text-muted-foreground tracking-wide">Invoice Breakdown</h4>
+              <div className="space-y-2.5 text-xs">
+                {selectedServices.map((serviceName) => {
+                  const serviceItems = breakdown.filter((item) => item.serviceName === serviceName);
+                  if (serviceItems.length === 0) return null;
+                  const serviceSubtotal = serviceItems.reduce((sum, item) => sum + item.amount, 0);
+                  
+                  return (
+                    <div key={serviceName} className="border-b border-gray-200/60 pb-1.5 last:border-b-0 last:pb-0">
+                      <div className="font-semibold text-foreground">{serviceName}</div>
+                      <div className="mt-1 space-y-0.5 pl-2 text-muted-foreground font-mono text-[11px]">
+                        {serviceItems.map((item, idx) => (
+                          <div key={idx} className="flex justify-between">
+                            <span>Vehicle {item.vehicleNumber}</span>
+                            <span>₹{item.amount.toLocaleString("en-IN")}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-1 flex justify-between font-semibold pl-2 text-foreground text-[11px]">
+                        <span>Total {serviceName}</span>
+                        <span>₹{serviceSubtotal.toLocaleString("en-IN")}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-1.5 border-t border-gray-300 flex justify-between font-bold text-foreground text-xs">
+                  <span>Grand Total</span>
+                  <span>₹{Number(unitPrice).toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Unit Price */}
           <div>
             <label className="text-sm font-medium">Service Amount (₹) *</label>
             <Input
-              type="number"
-              placeholder="Enter amount"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-              className="mt-1"
+              type="text"
+              readOnly
+              disabled
+              value={unitPrice ? `₹${Number(unitPrice).toLocaleString("en-IN")}` : "₹0"}
+              className="mt-1 bg-muted font-bold text-foreground cursor-not-allowed"
             />
-            {unitPrice && (
+            {unitPrice && Number(unitPrice) > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                Tax (18%): ₹{(Number(unitPrice) * 0.18).toFixed(2)} | Total: ₹{(Number(unitPrice) * 1.18).toFixed(2)}
+                Tax (18%): ₹{(Number(unitPrice) * 0.18).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Total: ₹{(Number(unitPrice) * 1.18).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             )}
           </div>

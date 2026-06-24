@@ -378,6 +378,7 @@ export async function generateInvoicePDF(invoice: Invoice): Promise<string | voi
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    console.log("[PDF] PDF Saved");
     
     // Then upload to Firebase (non-blocking)
     setTimeout(async () => {

@@ -1,4 +1,4 @@
-﻿import { db, storage } from "./firebase";
+import { db, storage } from "./firebase";
 import {
   addDoc,
   collection,
@@ -214,6 +214,67 @@ export async function getNextBillingStartDate(clientId: string): Promise<string>
   }
 
   return dateToIsoString(addDaysUtc(lastEnd, 1));
+}
+
+/**
+ * Calculates the total invoice amount dynamically for a client and selected services.
+ * Fetches all vehicles for the client, and filters their services by the selected service types.
+ */
+export async function calculateInvoiceAmount(
+  clientId: string,
+  selectedServices: string[]
+): Promise<{
+  totalAmount: number;
+  breakdown: Array<{
+    serviceId: string;
+    serviceName: string;
+    vehicleNumber: string;
+    vehicleType: string;
+    amount: number;
+  }>;
+}> {
+  console.log(`[calculateInvoiceAmount] calculating for clientId=${clientId}, selectedServices=`, selectedServices);
+  
+  if (!clientId || selectedServices.length === 0) {
+    return { totalAmount: 0, breakdown: [] };
+  }
+
+  // Load vehicles
+  const qVehicles = query(collection(db, "registry_vehicles_v2"), where("clientId", "==", clientId));
+  const vehiclesSnap = await getDocs(qVehicles);
+  
+  const vehicles = vehiclesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+  const vehicleIds = vehicles.map(v => v.id);
+
+  if (vehicleIds.length === 0) {
+    return { totalAmount: 0, breakdown: [] };
+  }
+
+  // Fetch all services, filter in memory by vehicleId
+  const servicesSnap = await getDocs(collection(db, "registry_services_v2"));
+  const services = servicesSnap.docs
+    .map(d => ({ id: d.id, ...d.data() } as any))
+    .filter(s => vehicleIds.includes(s.vehicleId));
+  
+  let totalAmount = 0;
+  const breakdown: any[] = [];
+
+  for (const s of services) {
+    if (selectedServices.includes(s.serviceType)) {
+      const v = vehicles.find(veh => veh.id === s.vehicleId);
+      const amount = s.serviceAmount ?? 0;
+      totalAmount += amount;
+      breakdown.push({
+        serviceId: s.id,
+        serviceName: s.serviceType,
+        vehicleNumber: v?.vehicleNumber || "—",
+        vehicleType: v?.vehicleType || "Commercial",
+        amount,
+      });
+    }
+  }
+
+  return { totalAmount, breakdown };
 }
 
 export async function validateBillingPeriodSequence(
