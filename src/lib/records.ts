@@ -174,11 +174,7 @@ export interface RegistryRecord {
   // Vehicle Details addition
   chassisNo?: string;
   engineNo?: string;
-  // Accounting fields
-  serviceAmount?: number; // Total service charge
-  amountReceived?: number; // Amount paid
-  paymentDate?: string; // Date of last payment
-  paymentStatus?: PaymentStatus; // Calculated: Paid | Partially Paid | Unpaid
+  // Legacy accounting fields removed – use services[].price and services[].amountReceived instead
   // Service Management fields
   serviceType?: ServiceType; // Legacy single service field (kept for compatibility)
   services?: ServiceDetail[]; // New multi-service support with details
@@ -217,13 +213,28 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
         if (typeof s === "object" && s !== null) {
           const normalizedType = normalizeLegacyServiceType(s.serviceType, record.application, record.work);
           if (!normalizedType) return null;
+          
+          const price = typeof s.price === "number"
+            ? s.price
+            : (typeof (s as any).serviceAmount === "number"
+              ? (s as any).serviceAmount
+              : (Number(s.price ?? (s as any).serviceAmount) || 0));
+
+          const amountReceived = typeof s.amountReceived === "number"
+            ? s.amountReceived
+            : (typeof (s as any).receivedAmount === "number"
+              ? (s as any).receivedAmount
+              : ((s.amountReceived ?? (s as any).receivedAmount) !== undefined
+                ? Number(s.amountReceived ?? (s as any).receivedAmount)
+                : undefined));
+
           return {
             serviceType: normalizedType,
             dueDate: s.dueDate || record.serviceDueDate || "",
             status: s.status || defaultStatus,
-            price: typeof s.price === "number" ? s.price : Number(s.price) || 0,
-            amountReceived: s.amountReceived,
-            assignee: s.assignee,
+            price,
+            amountReceived,
+            ...(s.assignee ? { assignee: s.assignee } : {}),
           };
         }
 
@@ -235,11 +246,10 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
           dueDate: record.serviceDueDate || "",
           status: defaultStatus,
           price: 0,
-          amountReceived: undefined,
-          assignee: undefined,
+          amountReceived: 0,
         };
       })
-      .filter((detail): detail is ServiceDetail => detail !== null);
+      .filter((detail) => detail !== null) as ServiceDetail[];
   }
 
   if (record.serviceType) {
@@ -251,8 +261,7 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
         dueDate: record.serviceDueDate || "",
         status: defaultStatus,
         price: 0,
-        amountReceived: undefined,
-        assignee: undefined,
+        amountReceived: 0,
       },
     ];
   }
@@ -371,7 +380,11 @@ export function getRecordServiceAmount(record: RegistryRecord): number {
   const detailTotal = getRecordServiceDetails(record)
     .reduce((sum, service) => sum + (service.price || 0), 0);
 
-  return detailTotal > 0 ? detailTotal : (record.serviceAmount ?? 0);
+  // Legacy fallback: if no service details have price, use legacy serviceAmount if available
+  if (detailTotal === 0 && typeof record.serviceAmount === 'number') {
+    return record.serviceAmount;
+  }
+  return detailTotal > 0 ? detailTotal : 0;
 }
 
 export function getRecordServiceAmountByType(record: RegistryRecord, serviceType: ServiceType): number {
@@ -418,7 +431,7 @@ export function getRecordTotalPending(record: RegistryRecord): number {
 
 export function getRecordPendingAmount(record: RegistryRecord, amountReceived?: number): number {
   const totalAmount = getRecordServiceAmount(record);
-  const received = amountReceived ?? record.amountReceived ?? 0;
+  const received = amountReceived ?? getRecordTotalReceived(record);
   return Math.max(0, totalAmount - received);
 }
 
@@ -426,6 +439,41 @@ export function getRecordPaymentStatus(record: RegistryRecord): PaymentStatus {
   const totalAmount = getRecordServiceAmount(record);
   const received = getRecordTotalReceived(record);
   return calculatePaymentStatus(totalAmount, received);
+}
+
+export function hasLegacyAccounting(record: RegistryRecord): boolean {
+  return !!(
+    record.serviceAmount ||
+    record.amountReceived ||
+    (record as any).totalAmount ||
+    (record as any).receivedAmount ||
+    (record as any).pendingAmount ||
+    (record as any).accounting ||
+    (record as any).legacyAccounting ||
+    (record as any).oldAccountingFields
+  );
+}
+
+/**
+ * Recursively removes all keys with undefined values from an object or array.
+ */
+export function removeUndefined<T>(obj: T): T {
+  if (obj === null || typeof obj !== "object") {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => removeUndefined(item)) as unknown as T;
+  }
+  const result: any = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        result[key] = removeUndefined(val);
+      }
+    }
+  }
+  return result;
 }
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
@@ -466,6 +514,7 @@ export async function saveRecord(
   record: RegistryRecord,
   actor?: string,
 ): Promise<void> {
+  console.log('[saveRecord] Received record for save:', record);
   const colName = colFor(bucket);
   // Ensure we have a valid document id. If the incoming record has no id,
   // generate a new Firestore id so we can safely call getDoc/setDoc.
@@ -584,15 +633,19 @@ export async function saveRecord(
   if (Array.isArray(rawServices) && rawServices.length > 0) {
     for (const s of rawServices) {
       let rawType: any;
-      let dueDate = record.serviceDueDate || "";
-      let status = record.serviceStatus || "Active";
+      let dueDate = "";
+      let status: string = record.serviceStatus || "Active";
       let price = 0;
+      let amountReceived = 0;
+      let assignee: string | undefined;
 
       if (typeof s === "object" && s !== null) {
         rawType = s.serviceType;
-        dueDate = s.dueDate || dueDate;
+        dueDate = s.dueDate || "";
         status = s.status || status;
-        price = typeof s.price === "number" ? s.price : Number((s as any).price) || 0;
+        price = Number(s.price || 0);
+        amountReceived = Number(s.amountReceived || 0);
+        assignee = s.assignee;
       } else {
         rawType = s;
       }
@@ -603,12 +656,17 @@ export async function saveRecord(
         continue;
       }
 
-      normalizedServices.push({
+      const serviceEntry: ServiceDetail = {
         serviceType: nType,
         dueDate,
         status,
         price,
-      });
+        amountReceived,
+      };
+      if (assignee) {
+        serviceEntry.assignee = assignee;
+      }
+      normalizedServices.push(serviceEntry);
       if (!serviceTypes.includes(nType)) {
         serviceTypes.push(nType);
       }
@@ -724,16 +782,26 @@ export async function saveRecord(
       }
     }
   }
-
-  const normalized = {
+  // Build normalized record without legacy accounting fields
+  const normalized: Record<string, any> = {
     ...record,
-    services: normalizedServices.length > 0 ? normalizedServices : undefined,
-    serviceTypes: serviceTypes.length > 0 ? serviceTypes : undefined,
+    name: record.name || "",
+    mo: record.mo || "",
+    co: record.co || "",
+    groupName: record.groupName || "",
+    email: (record as any).email || "",
+    address: (record as any).address || "",
+    services: normalizedServices.length > 0 ? normalizedServices : [],
+    serviceTypes: serviceTypes.length > 0 ? serviceTypes : [],
     // Keep legacy serviceType set to first normalized service for compatibility
-    serviceType: serviceTypes.length > 0 ? serviceTypes[0] : undefined,
-    serviceDueDate: normalizedServices.length > 0 ? normalizedServices[0].dueDate : record.serviceDueDate,
-    serviceStatus: normalizedServices.length > 0 ? normalizedServices[0].status as ServiceStatus : record.serviceStatus,
+    serviceType: serviceTypes.length > 0 ? serviceTypes[0] : "",
+    serviceDueDate: normalizedServices.length > 0 ? normalizedServices[0].dueDate : (record.serviceDueDate || ""),
+    serviceStatus: normalizedServices.length > 0 ? normalizedServices[0].status as ServiceStatus : (record.serviceStatus || "Active"),
   };
+  // Remove legacy accounting fields that should not exist at root level
+  delete normalized.serviceAmount;
+  delete normalized.amountReceived;
+  delete normalized.pendingAmount;
 
   // Prepare data with updated metadata
   const now = new Date().toISOString();
@@ -779,11 +847,25 @@ export async function saveRecord(
     console.warn("[saveRecord] Could not apply force-caps setting:", err);
   }
 
-  console.log("[saveRecord] Final update payload:", updateData);
+  // Debug logging: before save (original record)
+  console.log("[CLIENT SAVE]", JSON.stringify(record, null, 2));
+
+  // Validation step: Check if input record has undefined properties
+  const hasUndefined = JSON.stringify(record, (k, v) => (v === undefined ? "undefined" : v)).includes("undefined");
+  if (hasUndefined) {
+    console.error("[SAVE BLOCKED] Undefined value detected", record);
+  }
+
+  // Deep sanitize payload before Firestore call
+  const cleanedRecord = removeUndefined(updateData);
+  console.log("[CLIENT SAVE CLEANED]", JSON.stringify(cleanedRecord, null, 2));
+
   try {
-    await setDoc(doc(db, colName, id), updateData, { merge: true });
+    console.log("[saveRecord] Firestore update call - Writing to doc:", id, "in collection:", colName);
+    await setDoc(doc(db, colName, id), cleanedRecord, { merge: true });
+    console.log('[saveRecord] Save success - Successfully wrote record', id, 'to', colName);
   } catch (err) {
-    console.error(`[saveRecord] Failed to write record ${id} to ${colName}:`, err);
+    console.error(`[saveRecord] Save error - Failed to write record ${id} to ${colName}:`, err);
     throw err;
   }
 }
@@ -831,7 +913,7 @@ export async function softDeleteRecord(
     deletedAt: now,
     deletedBy: actor,
     deleteReason: reason,
-    activityLogs: arrayUnion(deleteLog),
+    activityLogs: arrayUnion(removeUndefined(deleteLog)),
   });
 }
 
@@ -855,11 +937,14 @@ export async function addAttachment(
     attachment.name,
   );
 
+  const cleanAttachment = removeUndefined(attachment);
+  const cleanEntry = removeUndefined(entry);
+
   const updates = {
-    attachments: arrayUnion(attachment),
+    attachments: arrayUnion(cleanAttachment),
     lastUpdatedBy: attachment.uploadedBy,
     lastUpdatedAt: now,
-    activityLogs: arrayUnion(entry),
+    activityLogs: arrayUnion(cleanEntry),
   };
 
   console.error("[addAttachment] Uploading attachment:", {

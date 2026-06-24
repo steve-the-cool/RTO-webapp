@@ -17,6 +17,7 @@ import {
   FirebaseStorage,
 } from "firebase/storage";
 import { db, storage } from "./firebase";
+import { removeUndefined } from "./records";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ export async function addDoc(
     const { id: _id, ...data } = docEntry;
     const docRef = doc(db, COL, id);
     console.log("[addDoc] Writing to Firestore at:", docRef.path);
-    await setDoc(docRef, data);
+    await setDoc(docRef, removeUndefined(data));
     console.log("[addDoc] Document written successfully");
     return docEntry;
   } catch (error) {
@@ -198,7 +199,7 @@ export async function updateDoc(
   try {
     const { id: _id, ...data } = updatedDoc;
     const docRef = doc(db, COL, docId);
-    await setDoc(docRef, data);
+    await setDoc(docRef, removeUndefined(data));
     if (oldStoragePath && oldStoragePath !== storagePath) {
       try {
         await deleteObject(ref(storage, oldStoragePath));

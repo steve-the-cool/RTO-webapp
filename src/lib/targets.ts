@@ -12,7 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { createActivity, type ActivityLog } from "./activity";
-import { getServiceStats, type ServiceType } from "./services";
+import { getServiceStats } from "./services";
+import { removeUndefined, type ServiceType } from "./records";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,14 +179,14 @@ export async function createOrInitializeTarget(
     const targetRef = doc(collection(db, TARGETS_COLLECTION));
     const activity = createActivity(actor, "Created", "target", "0", `${targetValue}`);
 
-    await setDoc(targetRef, {
+    await setDoc(targetRef, removeUndefined({
       category,
       target: targetValue,
       completed: 0,
       lastUpdatedBy: actor,
       lastUpdatedAt: new Date().toISOString(),
       activityLogs: [activity],
-    } as Target);
+    } as Target));
   }
 }
 

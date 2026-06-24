@@ -11,7 +11,7 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { RecordStatus } from "./records";
+import { removeUndefined, type RecordStatus } from "./records";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,8 @@ export function subscribeToCustomers(
 /** Upsert a customer profile. */
 export async function saveCustomerProfile(profile: CustomerProfile): Promise<void> {
   const { id, ...data } = profile;
-  await setDoc(doc(db, COL, id), data, { merge: true });
+  const cleanedData = removeUndefined(data);
+  await setDoc(doc(db, COL, id), cleanedData, { merge: true });
 }
 
 /** Delete a customer profile. */
@@ -108,7 +109,7 @@ export async function addAttachment(
 
   try {
     await updateDoc(doc(db, COL, customerId), {
-      attachments: arrayUnion(attachment),
+      attachments: arrayUnion(removeUndefined(attachment)),
     });
     console.log("[addAttachment] FIRESTORE_UPDATE_SUCCESS:", {
       customerId,

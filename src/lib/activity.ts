@@ -40,9 +40,9 @@ export function createActivity(
     id: crypto.randomUUID(),
     actor,
     action,
-    field,
-    oldValue,
-    newValue,
+    field: field ?? "",
+    oldValue: oldValue ?? "",
+    newValue: newValue ?? "",
     timestamp: new Date().toISOString(),
   };
 }

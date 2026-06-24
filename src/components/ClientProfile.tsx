@@ -17,12 +17,13 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { subscribeToClientPayments, addPayment, type ClientPayment } from "@/lib/payments";
 import { formatActivityTime, type ActivityLog, addClientNote } from "@/lib/activity";
-import { getRecordServiceDetails, getRecordServiceAmount, serviceLabel, type RegistryRecord } from "@/lib/records";
+import { getRecordServiceDetails, getRecordServiceAmount, serviceLabel, type RegistryRecord, type ServiceType, saveRecord, type Bucket } from "@/lib/records";
 import { StructuredDocumentUploader } from "@/components/StructuredDocumentUploader";
 import { InvoiceHistory } from "@/components/InvoiceHistory";
 import { InvoiceViewer } from "@/components/InvoiceViewer";
 import { WhatsAppQuickActions } from "@/components/WhatsAppQuickActions";
 import type { Invoice } from "@/lib/billing";
+import { toast } from "sonner";
 
 function normalizeActivityTimestamp(timestamp: unknown): string {
   if (!timestamp) return "";
@@ -55,18 +56,20 @@ interface Props {
   record: RegistryRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  serviceType?: ServiceType;
+  bucket?: Bucket;
 }
 
-export function ClientProfile({ record, open, onOpenChange }: Props) {
+export function ClientProfile({ record, open, onOpenChange, serviceType, bucket = "clients" }: Props) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [payments, setPayments] = useState<ClientPayment[]>([]);
   const [showAddPayment, setShowAddPayment] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
+  const [paymentForm, setPaymentForm] = useState({ serviceId: "", amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
   const [savingPayment, setSavingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [selectedService, setSelectedService] = useState<(typeof serviceDetails)[0] | null>(null);
+  const [selectedService, setSelectedService] = useState<any | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
   const actor = session?.username || "system";
   const actorName = session?.name || session?.username || "System";
 
+  const services = useMemo(() => record?.services ?? [], [record]);
   const serviceDetails = useMemo(() => (record ? getRecordServiceDetails(record) : []), [record]);
   const totalServiceAmount = useMemo(() => (record ? getRecordServiceAmount(record) : 0), [record]);
   const totalReceived = useMemo(() => payments.reduce((s, p) => s + p.amount, 0), [payments]);
@@ -134,6 +138,7 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
   );
 
   const saveNote = async () => {
+    if (!record) return;
     setNoteError(null);
     if (!noteDraft.trim()) {
       setNoteError("Please enter a note before saving.");
@@ -207,6 +212,103 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
   }, [record]);
 
   if (!record) return null;
+
+  if (serviceType) {
+    const matchingService = serviceDetails.find(s => s.serviceType === serviceType);
+    const servicePrice = matchingService?.price ?? 0;
+    const serviceReceived = matchingService?.amountReceived ?? 0;
+    const servicePending = Math.max(0, servicePrice - serviceReceived);
+    const serviceStatus = matchingService?.status || "Pending";
+    const serviceDueDate = matchingService?.dueDate;
+
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{serviceLabel(serviceType)} Detail — {record.name}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 p-4">
+            {/* Client & Vehicle Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <section className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">Client Info</h4>
+                <div className="text-sm space-y-2">
+                  <div><strong className="text-muted-foreground">Full Name:</strong> <span className="font-medium">{record.name}</span></div>
+                  <div><strong className="text-muted-foreground">Mobile Number:</strong> <span className="font-mono">{record.mo}</span></div>
+                  <div><strong className="text-muted-foreground">Group / Company:</strong> <span>{record.groupName || "—"}</span></div>
+                  <div><strong className="text-muted-foreground">C/O Address:</strong> <span>{record.co || "—"}</span></div>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">Vehicle Info</h4>
+                <div className="text-sm space-y-2">
+                  <div><strong className="text-muted-foreground">Vehicle Number:</strong> <span className="font-mono font-medium">{record.mvNo || "—"}</span></div>
+                  <div><strong className="text-muted-foreground">Chassis Number:</strong> <span className="font-mono">{record.chassisNo || "—"}</span></div>
+                  <div><strong className="text-muted-foreground">Engine Number:</strong> <span className="font-mono">{record.engineNo || "—"}</span></div>
+                </div>
+              </section>
+            </div>
+
+            {/* Service Details & Accounting */}
+            <section className="space-y-4 pt-4 border-t">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
+                {serviceType} Service Details
+              </h4>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 border rounded-xl bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground uppercase font-medium">Service Amount</div>
+                  <div className="text-2xl font-bold mt-1">₹{servicePrice.toLocaleString("en-IN")}</div>
+                </div>
+                <div className="p-4 border rounded-xl bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground uppercase font-medium">Received Amount</div>
+                  <div className="text-2xl font-bold text-green-600 mt-1">₹{serviceReceived.toLocaleString("en-IN")}</div>
+                </div>
+                <div className="p-4 border rounded-xl bg-card shadow-sm">
+                  <div className="text-xs text-muted-foreground uppercase font-medium">Pending Amount</div>
+                  <div className="text-2xl font-bold text-red-600 mt-1">₹{servicePending.toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-muted/10 p-4 rounded-xl border border-muted/30">
+                <div className="space-y-2">
+                  <div><strong className="text-muted-foreground">Status:</strong> <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ml-2 font-semibold ${
+                    serviceStatus === "Completed"
+                      ? "bg-green-500/15 text-green-700 border-green-500/30"
+                      : serviceStatus === "In Progress" || serviceStatus === "Active"
+                        ? "bg-blue-500/15 text-blue-700 border-blue-500/30"
+                        : "bg-muted text-muted-foreground border-border"
+                  }`}>{serviceStatus}</span></div>
+                  <div><strong className="text-muted-foreground">Due Date:</strong> <span className="ml-2">{serviceDueDate ? new Date(serviceDueDate).toLocaleDateString("en-IN") : "—"}</span></div>
+                </div>
+                <div className="space-y-2">
+                  <div><strong className="text-muted-foreground">Created Date:</strong> <span className="ml-2">{record.createdAt ? new Date(record.createdAt).toLocaleDateString("en-IN") : record.date || "—"}</span></div>
+                  <div><strong className="text-muted-foreground">Last Updated:</strong> <span className="ml-2">{record.lastUpdatedAt ? new Date(record.lastUpdatedAt).toLocaleString("en-IN") : "—"}</span></div>
+                </div>
+              </div>
+            </section>
+
+            {/* Documents section specific to this service type */}
+            <section className="space-y-3 pt-4 border-t">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">Documents</h4>
+              <StructuredDocumentUploader
+                customerId={record.id}
+                services={serviceDetails}
+                application={record.application}
+                work={record.work}
+              />
+            </section>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => onOpenChange(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -347,7 +449,7 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                 </div>
               ))}
               {serviceDetails.length === 0 && (
-                <div className="text-xs text-muted-foreground">No services recorded.</div>
+                <div className="text-xs text-muted-foreground">No service information available</div>
               )}
             </div>
           </section>
@@ -559,10 +661,13 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                     <div className="text-[10px] text-muted-foreground">Amount</div>
                     <div className="text-sm font-semibold">₹{(selectedService.price || 0).toLocaleString("en-IN")}</div>
                   </div>
-                  <div className="border-l border-r" />
-                  <div>
+                  <div className="border-l border-r">
                     <div className="text-[10px] text-muted-foreground">Paid</div>
-                    <div className="text-sm font-semibold text-green-600">₹0</div>
+                    <div className="text-sm font-semibold text-green-600">₹{(selectedService.amountReceived || 0).toLocaleString("en-IN")}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground">Pending</div>
+                    <div className="text-sm font-semibold text-red-600">₹{Math.max(0, (selectedService.price || 0) - (selectedService.amountReceived || 0)).toLocaleString("en-IN")}</div>
                   </div>
                 </div>
               </div>
@@ -581,13 +686,25 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
             </DialogHeader>
             <div className="space-y-3">
               <div>
+                <label className="text-sm font-medium">Service</label>
+                <Select value={paymentForm.serviceId} onValueChange={(v) => setPaymentForm({ ...paymentForm, serviceId: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a service" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {services.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{serviceLabel(s.serviceType)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <label className="text-sm font-medium">Amount</label>
                 <Input
                   type="number"
                   value={paymentForm.amount}
                   onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
                   placeholder="Enter amount"
-                  autoFocus
                 />
               </div>
 
@@ -645,6 +762,10 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                 onClick={async () => {
                   setPaymentError(null);
                   const amt = Number(paymentForm.amount || 0);
+                  if (!paymentForm.serviceId) {
+                    setPaymentError("Please select a service");
+                    return;
+                  }
                   if (!amt || amt <= 0) {
                     setPaymentError("Please enter a valid amount");
                     return;
@@ -653,6 +774,7 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                   try {
                     const saved = await addPayment({
                       clientId: record.id,
+                      serviceId: paymentForm.serviceId,
                       amount: amt,
                       transactionDate: paymentForm.transactionDate ? new Date(paymentForm.transactionDate).toISOString() : new Date().toISOString(),
                       paymentMode: paymentForm.paymentMode as any,
@@ -661,28 +783,44 @@ export function ClientProfile({ record, open, onOpenChange }: Props) {
                       referenceNumber: paymentForm.referenceNumber || "",
                       remarks: paymentForm.remarks || "",
                     });
-                    // Optimistically update UI in case realtime listener is delayed or fails
-                    setPayments((prev) => {
-                      try {
-                        if (!saved || !saved.id) return prev;
-                        if (prev.find((p) => p.id === saved.id)) return prev;
-                        return [saved as ClientPayment, ...prev];
-                      } catch (e) {
-                        return prev;
+                    
+                    // Update the amountReceived for the selected service on the record
+                    const updatedServices = serviceDetails.map(s => {
+                      if (s.serviceType === paymentForm.serviceId) {
+                        return {
+                          ...s,
+                          amountReceived: (s.amountReceived || 0) + amt
+                        };
                       }
+                      return s;
+                    });
+                    
+                    const updatedRecord = {
+                      ...record,
+                      services: updatedServices
+                    };
+
+                    await saveRecord(bucket, updatedRecord, actor);
+
+                    // Optimistically update UI
+                    setPayments((prev) => {
+                      if (!saved || !saved.id) return prev;
+                      return [saved as ClientPayment, ...prev];
                     });
                     setShowAddPayment(false);
-                    setPaymentForm({ amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
+                    setPaymentForm({ serviceId: "", amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
+                    toast.success("Payment recorded successfully!");
                   } catch (err) {
                     console.error("Failed to save payment", err);
                     setPaymentError("Failed to save payment. Try again.");
+                    toast.error(`Failed to save payment: ${err instanceof Error ? err.message : String(err)}`);
                   } finally {
                     setSavingPayment(false);
                   }
                 }}
                 disabled={savingPayment}
               >
-                {savingPayment ? "Savingâ€¦" : "Save Payment"}
+                {savingPayment ? "Saving…" : "Save Payment"}
               </Button>
             </div>
           </DialogContent>

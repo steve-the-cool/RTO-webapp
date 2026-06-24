@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Download, Printer } from "lucide-react";
-import { subscribeToRecords, getRecordServiceAmount, getRecordServiceDetails, getRecordPendingAmount, getRecordPaymentStatus, type RegistryRecord, type Bucket } from "@/lib/records";
+import { subscribeToRecords, getRecordServiceAmount, getRecordServiceDetails, getRecordPendingAmount, getRecordPaymentStatus, getRecordTotalReceived, type RegistryRecord, type Bucket } from "@/lib/records";
 import { generateAccountingPDF, printWindow } from "@/lib/pdfGenerator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -197,7 +197,7 @@ function AccountingDashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-3 text-right font-mono">₹{getRecordServiceAmount(record).toLocaleString("en-IN")}</td>
-                      <td className="px-6 py-3 text-right font-mono">₹{(record.amountReceived || 0).toLocaleString("en-IN")}</td>
+                      <td className="px-6 py-3 text-right font-mono">₹{getRecordTotalReceived(record).toLocaleString("en-IN")}</td>
                       <td className="px-6 py-3 text-right font-mono font-semibold text-amber-600">₹{pending.toLocaleString("en-IN")}</td>
                       <td className="px-6 py-3">
                         <span

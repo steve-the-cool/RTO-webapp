@@ -1,8 +1,8 @@
 import jsPDF from "jspdf";
-import { attachPdfToInvoice } from "./billing";
+import { attachPdfToInvoice, type Invoice } from "./billing";
 import type { RegistryRecord } from "./records";
 import type { Task } from "./tasks";
-import { staffLabel, getRecordServiceAmount, getRecordPaymentStatus, getRecordPendingAmount } from "./records";
+import { staffLabel, getRecordServiceAmount, getRecordPaymentStatus, getRecordPendingAmount, getRecordTotalReceived } from "./records";
 import { formatCurrency, formatDate, formatTime } from "./formatting";
 import { renderInvoiceToCanvas } from "./pdfInvoiceRenderer";
 
@@ -238,12 +238,12 @@ export function generateRecordPDF(record: RegistryRecord, bucket: "clients" | "l
   }
 
   // Accounting Information Section
-  if (getRecordServiceAmount(record) > 0 || record.amountReceived) {
+  if (getRecordServiceAmount(record) > 0 || getRecordTotalReceived(record) > 0) {
     yPos = addSectionTitle(doc, yPos + 2, "Accounting Information");
 
     const accountingFields = [
       ["Service Amount", formatCurrency(getRecordServiceAmount(record))],
-      ["Amount Received", formatCurrency(record.amountReceived)],
+      ["Amount Received", formatCurrency(getRecordTotalReceived(record))],
       ["Payment Status", getRecordPaymentStatus(record)],
       ["Payment Date", formatDate(record.paymentDate)],
     ];
@@ -451,7 +451,7 @@ export function generateAccountingPDF(
         String(record.srNo),
         record.name.substring(0, 20),
         formatCurrency(getRecordServiceAmount(record)).substring(0, 12),
-        formatCurrency(record.amountReceived).substring(0, 12),
+        formatCurrency(getRecordTotalReceived(record)).substring(0, 12),
         formatCurrency(pending).substring(0, 12),
         getRecordPaymentStatus(record),
       ];

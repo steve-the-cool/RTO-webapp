@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { initAuth, type StaffUser } from "@/lib/auth";
+import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 
@@ -164,6 +165,7 @@ function RootComponent() {
           </div>
         </div>
       )}
+      <Toaster />
     </QueryClientProvider>
   );
 }

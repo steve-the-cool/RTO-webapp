@@ -44,6 +44,7 @@ import ClientProfile from "@/components/ClientProfile";
 import { DuplicateDetectionDialog } from "@/components/DuplicateDetectionDialog";
 import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
 import { WhatsAppQuickActions } from "@/components/WhatsAppQuickActions";
+import { toast } from "sonner";
 
 interface Props {
   bucket: Bucket;
@@ -144,16 +145,26 @@ export function RecordTable({ bucket, title, description }: Props) {
   };
 
   const openEdit = (r: RegistryRecord) => {
-    // Initialize services[] as objects for the editor
-    const services = getRecordServiceDetails(r);
-    const normalizedServiceType = normalizeLegacyServiceType(r.serviceType, r.application, r.work);
-    const normalizedRecord = normalizedServiceType
-      ? { ...r, serviceType: normalizedServiceType }
-      : r;
-
-    setEditing({ ...normalizedRecord, services });
-    setOpen(true);
-  };
+  // Initialize services[] as objects for the editor
+  let services = getRecordServiceDetails(r);
+  // If no services exist but legacy accounting fields are present, create a default service entry
+  if ((!services || services.length === 0) && (r.serviceAmount !== undefined || r.amountReceived !== undefined)) {
+    const serviceType = normalizeLegacyServiceType(r.serviceType, r.application, r.work) || "Unknown";
+    services = [{
+      serviceType,
+      dueDate: r.serviceDueDate || "",
+      status: r.serviceStatus || "Active",
+      price: r.serviceAmount ?? 0,
+      amountReceived: r.amountReceived ?? 0,
+    }];
+  }
+  const normalizedServiceType = normalizeLegacyServiceType(r.serviceType, r.application, r.work);
+  const normalizedRecord = normalizedServiceType
+    ? { ...r, serviceType: normalizedServiceType }
+    : r;
+  setEditing({ ...normalizedRecord, services });
+  setOpen(true);
+};
 
   const initiateDelete = (r: RegistryRecord) => {
     setRecordToDelete(r);
@@ -308,20 +319,24 @@ export function RecordTable({ bucket, title, description }: Props) {
   const save = async () => {
     if (!editing) return;
     setSaving(true);
+    console.log("[RecordTable] Before save - Initiating client save flow");
+    console.log("[RecordTable] Data being submitted:", editing);
     try {
-      // Check for duplicates before saving
       await checkAndSave(
         editing.mvNo,
         editing.work,
         async () => {
+          console.log("[RecordTable] Save Callback - Writing record to database...");
           await saveRecord(bucket, editing, username);
           await syncTaskFromRecord(bucket, editing, username);
           setOpen(false);
+          toast.success("Client saved successfully!");
         },
         editing.id,
       );
     } catch (error) {
-      console.error("Error saving record:", error);
+      console.error("[RecordTable] Save error:", error);
+      toast.error(`Failed to save client: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSaving(false);
     }
@@ -785,7 +800,7 @@ export function RecordTable({ bucket, title, description }: Props) {
         username={username}
         onSuccess={handleDeleteSuccess}
       />
-      <ClientProfile record={viewRecord} open={viewOpen} onOpenChange={setViewOpen} />
+      <ClientProfile record={viewRecord} open={viewOpen} onOpenChange={setViewOpen} bucket={bucket} />
     </div>
   );
 }

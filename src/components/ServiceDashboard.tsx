@@ -2,17 +2,14 @@ import { useEffect, useState } from "react";
 import {
   getServiceClientsAll,
   getServiceStats,
-  getServiceRevenue,
-  getServiceAmountReceived,
-  getServicePendingAmount,
   getServiceDistributionSummary,
 } from "@/lib/services";
-import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus } from "@/lib/records";
+import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus, getRecordServiceDetails, hasLegacyAccounting } from "@/lib/records";
 import { RecordTable } from "@/components/RecordTable";
 import ClientProfile from "@/components/ClientProfile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Package, TrendingUp, DollarSign, Users } from "lucide-react";
+import { ArrowRight, Package, TrendingUp, DollarSign, Users, AlertCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 interface ServiceDashboardProps {
@@ -22,9 +19,9 @@ interface ServiceDashboardProps {
 export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
   const [records, setRecords] = useState<RegistryRecord[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0, completed: 0, pending: 0, onHold: 0 });
-  const [revenue, setRevenue] = useState(0);
-  const [amountReceived, setAmountReceived] = useState(0);
-  const [pendingAmount, setPendingAmount] = useState(0);
+  const [totalServiceAmount, setTotalServiceAmount] = useState(0);
+  const [totalReceived, setTotalReceived] = useState(0);
+  const [totalPending, setTotalPending] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedRecord, setSelectedRecord] = useState<RegistryRecord | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -42,12 +39,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
         setLoading(true);
         console.log(`[ServiceDashboard] LOADING: serviceType="${serviceType}"`);
         
-        const [recs, st, rev, recv, pend] = await Promise.all([
+        const [recs, st] = await Promise.all([
           getServiceClientsAll(serviceType),
           getServiceStats(serviceType),
-          getServiceRevenue(serviceType),
-          getServiceAmountReceived(serviceType),
-          getServicePendingAmount(serviceType),
         ]);
 
         // Validation: Ensure all records include the requested service
@@ -82,10 +76,22 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
 
         // Validation: Ensure stats match record data
         const statusMatch = {
-          active: recs.filter(r => r.status === "In Progress").length,
-          completed: recs.filter(r => r.status === "Completed").length,
-          pending: recs.filter(r => r.status === "Pending").length,
-          onHold: recs.filter(r => r.status === "On Hold").length,
+          active: recs.filter(r => {
+            const s = getRecordServiceDetails(r).find(sd => sd.serviceType === serviceType);
+            return s?.status === "In Progress" || s?.status === "Active";
+          }).length,
+          completed: recs.filter(r => {
+            const s = getRecordServiceDetails(r).find(sd => sd.serviceType === serviceType);
+            return s?.status === "Completed";
+          }).length,
+          pending: recs.filter(r => {
+            const s = getRecordServiceDetails(r).find(sd => sd.serviceType === serviceType);
+            return s?.status === "Pending" || !s?.status;
+          }).length,
+          onHold: recs.filter(r => {
+            const s = getRecordServiceDetails(r).find(sd => sd.serviceType === serviceType);
+            return s?.status === "On Hold";
+          }).length,
         };
 
         if (st.active !== statusMatch.active || st.completed !== statusMatch.completed) {
@@ -94,9 +100,21 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
 
         setRecords(recs);
         setStats(st);
-        setRevenue(rev);
-        setAmountReceived(recv);
-        setPendingAmount(pend);
+        // Compute service-specific aggregates
+        let serviceTotal = 0;
+        let receivedTotal = 0;
+        for (const r of recs) {
+          const details = getRecordServiceDetails(r);
+          const matching = details.find(s => s.serviceType === serviceType);
+          if (matching) {
+            serviceTotal += matching.price ?? 0;
+            receivedTotal += matching.amountReceived ?? 0;
+          }
+        }
+        setTotalServiceAmount(serviceTotal);
+        setTotalReceived(receivedTotal);
+        const pendingTotal = Math.max(0, serviceTotal - receivedTotal);
+        setTotalPending(pendingTotal);
       } catch (error) {
         console.error(`[ServiceDashboard] ERROR loading service data for "${serviceType}":`, error);
       } finally {
@@ -153,6 +171,16 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
         </Link>
       </div>
 
+      {/* Legacy Accounting warning banner */}
+      {records.some(hasLegacyAccounting) && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex gap-3">
+          <AlertCircle className="size-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-yellow-900">Legacy accounting detected. Please migrate client to service-wise accounting.</p>
+          </div>
+        </div>
+      )}
+
       {/* Statistics Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
@@ -178,7 +206,7 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <DollarSign className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{revenue.toLocaleString("en-IN")}</div>
+            <div className="text-2xl font-bold">₹{totalServiceAmount.toLocaleString("en-IN")}</div>
             <p className="text-xs text-muted-foreground mt-1">
               From {stats.total} {serviceType} services
             </p>
@@ -191,9 +219,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <TrendingUp className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">₹{amountReceived.toLocaleString("en-IN")}</div>
+            <div className="text-2xl font-bold text-green-600">₹{totalReceived.toLocaleString("en-IN")}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {revenue > 0 ? `${((amountReceived / revenue) * 100).toFixed(1)}% collected` : "No revenue yet"}
+              {totalServiceAmount > 0 ? `${((totalReceived / totalServiceAmount) * 100).toFixed(1)}% collected` : "No revenue yet"}
             </p>
           </CardContent>
         </Card>
@@ -204,9 +232,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <Package className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">₹{pendingAmount.toLocaleString("en-IN")}</div>
+            <div className="text-2xl font-bold text-red-600">₹{totalPending.toLocaleString("en-IN")}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {revenue > 0 ? `${((pendingAmount / revenue) * 100).toFixed(1)}% pending` : "No pending amounts"}
+              {totalServiceAmount > 0 ? `${((totalPending / totalServiceAmount) * 100).toFixed(1)}% pending` : "No pending amounts"}
             </p>
           </CardContent>
         </Card>
@@ -236,15 +264,26 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                         // Populate dashboard state so UI updates immediately
                         setRecords(recs);
                         const st = await getServiceStats(serviceType);
-                        const rev = await getServiceRevenue(serviceType);
-                        const recv = await getServiceAmountReceived(serviceType);
-                        const pend = await getServicePendingAmount(serviceType);
-                        setStats(st);
-                        setRevenue(rev);
-                        setAmountReceived(recv);
-                        setPendingAmount(pend);
 
-                        setDiagOutput(JSON.stringify({ requested: serviceType, found: recs.length, sample: recs.slice(0,5).map(r=>({id:r.id,name:r.name,services:getRecordServices(r)})), summary, stats: st, revenue: rev, received: recv, pending: pend }, null, 2));
+                        // Compute service‑specific aggregates for diagnostics
+                        let diagServiceTotal = 0;
+                        let diagReceivedTotal = 0;
+                        for (const r of recs) {
+                          const d = getRecordServiceDetails(r);
+                          const m = d.find(s => s.serviceType === serviceType);
+                          if (m) {
+                            diagServiceTotal += m.price ?? 0;
+                            diagReceivedTotal += m.amountReceived ?? 0;
+                          }
+                        }
+                        const diagPendingTotal = Math.max(0, diagServiceTotal - diagReceivedTotal);
+
+                        setStats(st);
+                        setTotalServiceAmount(diagServiceTotal);
+                        setTotalReceived(diagReceivedTotal);
+                        setTotalPending(diagPendingTotal);
+
+                        setDiagOutput(JSON.stringify({ requested: serviceType, found: recs.length, sample: recs.slice(0,5).map(r=>({id:r.id,name:r.name,services:getRecordServices(r)})), summary, stats: st, revenue: diagServiceTotal, received: diagReceivedTotal, pending: diagPendingTotal }, null, 2));
                       } catch (err) {
                         setDiagOutput(String(err));
                       } finally {
@@ -278,45 +317,55 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((r) => (
-                    <tr key={r.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => openWorkflow(r)}>
-                      <td className="px-3 py-3 font-medium">{r.srNo}</td>
-                      <td className="px-3 py-3 font-medium text-sky-600 underline decoration-dotted underline-offset-2">{r.name}</td>
-                      <td className="px-3 py-3 font-mono text-xs">{r.mvNo || "—"}</td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                            r.status === "Completed"
-                              ? "bg-green-500/15 text-green-700 border-green-500/30"
-                              : r.status === "In Progress"
-                                ? "bg-blue-500/15 text-blue-700 border-blue-500/30"
-                                : "bg-muted text-muted-foreground border-border"
-                          }`}
-                        >
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-xs">
-                        {r.serviceDueDate ? new Date(r.serviceDueDate).toLocaleDateString("en-IN") : "—"}
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs">
-                        ₹{getRecordServiceAmount(r).toLocaleString("en-IN")}
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs text-green-600">
-                        ₹{(r.amountReceived || 0).toLocaleString("en-IN")}
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs text-red-600">
-                        ₹{getRecordPendingAmount(r).toLocaleString("en-IN")}
-                      </td>
-                    </tr>
-                  ))}
+                  {records.map((r) => {
+                    const details = getRecordServiceDetails(r);
+                    const matchingService = details.find(s => s.serviceType === serviceType);
+                    const servicePrice = matchingService?.price ?? 0;
+                    const serviceReceived = matchingService?.amountReceived ?? 0;
+                    const servicePending = Math.max(0, servicePrice - serviceReceived);
+                    const serviceStatus = matchingService?.status || "Pending";
+                    const serviceDueDate = matchingService?.dueDate;
+
+                    return (
+                      <tr key={r.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => openWorkflow(r)}>
+                        <td className="px-3 py-3 font-medium">{r.srNo}</td>
+                        <td className="px-3 py-3 font-medium text-sky-600 underline decoration-dotted underline-offset-2">{r.name}</td>
+                        <td className="px-3 py-3 font-mono text-xs">{r.mvNo || "—"}</td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                              serviceStatus === "Completed"
+                                ? "bg-green-500/15 text-green-700 border-green-500/30"
+                                : serviceStatus === "In Progress" || serviceStatus === "Active"
+                                  ? "bg-blue-500/15 text-blue-700 border-blue-500/30"
+                                  : "bg-muted text-muted-foreground border-border"
+                            }`}
+                          >
+                            {serviceStatus}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-xs">
+                          {serviceDueDate ? new Date(serviceDueDate).toLocaleDateString("en-IN") : "—"}
+                        </td>
+                        <td className="px-3 py-3 font-mono text-xs">
+                          ₹{servicePrice.toLocaleString("en-IN")}
+                        </td>
+                        <td className="px-3 py-3 font-mono text-xs text-green-600">
+                          ₹{serviceReceived.toLocaleString("en-IN")}
+                        </td>
+                        <td className="px-3 py-3 font-mono text-xs text-red-600">
+                          ₹{servicePending.toLocaleString("en-IN")}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
       </div>
-      <ClientProfile record={selectedRecord} open={profileOpen} onOpenChange={setProfileOpen} />
+      <ClientProfile record={selectedRecord} open={profileOpen} onOpenChange={setProfileOpen} serviceType={serviceType} />
     </div>
   );
 }

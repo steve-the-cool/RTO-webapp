@@ -156,11 +156,29 @@ export async function getServiceStats(serviceType: ServiceType) {
 
   const stats = {
     total: records.length,
-    active: records.filter((r) => r.status === "In Progress").length,
-    completed: records.filter((r) => r.status === "Completed").length,
-    pending: records.filter((r) => r.status === "Pending").length,
-    onHold: records.filter((r) => r.status === "On Hold").length,
+    active: 0,
+    completed: 0,
+    pending: 0,
+    onHold: 0,
   };
+
+  for (const r of records) {
+    const details = getRecordServiceDetails(r);
+    const matchingService = details.find((s) => s.serviceType === serviceType);
+    const status = matchingService?.status || "Pending";
+    
+    if (status === "In Progress" || status === "Active") {
+      stats.active += 1;
+    } else if (status === "Completed") {
+      stats.completed += 1;
+    } else if (status === "Pending") {
+      stats.pending += 1;
+    } else if (status === "On Hold") {
+      stats.onHold += 1;
+    } else {
+      stats.pending += 1;
+    }
+  }
 
   return stats;
 }
@@ -176,10 +194,7 @@ export async function getServiceRevenue(serviceType: ServiceType): Promise<numbe
     if (details.length > 0) {
       return sum + details.reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0);
     }
-    
-    // Compatibility fallback for legacy records that do not expose detailed service prices.
-    const legacyMatch = r.serviceType === serviceType || getRecordServices(r).includes(serviceType);
-    return sum + (legacyMatch ? (r.serviceAmount || 0) : 0);
+    return sum;
   }, 0);
 }
 
