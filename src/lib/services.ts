@@ -3,184 +3,155 @@ import {
   query,
   where,
   getDocs,
-  type QueryConstraint,
 } from "firebase/firestore";
-import { computeFollowUps } from "./followups";
 import { db } from "./firebase";
-import { normalizeServiceType, normalizeLegacyServiceType, type Bucket, type RegistryRecord, type ServiceType, type RecordStatus, getRecordServices, getRecordServiceDetails } from "./records";
-import { recordMatchesService } from "./serviceFilters";
+import {
+  type Bucket,
+  type RegistryRecord,
+  type ServiceType,
+} from "./records";
 
 /**
- * Get all records for a specific service type across a bucket.
- * FILTERS BY: serviceType === requested value, and filters isDeleted in code.
- * This avoids requiring Firestore composite indexes.
+ * Get all records for a specific service type across all buckets.
+ * Fetches data from the V2 collections: registry_services_v2, registry_vehicles_v2, registry_clients_v2
  */
-export async function getServiceClients(
-  bucket: Bucket,
+export async function getServiceClientsAll(
   serviceType: ServiceType,
 ): Promise<RegistryRecord[]> {
-  const colName = `registry_${bucket}`;
+  console.log(`[getServiceClientsAll] START (V2): Fetching all records for serviceType="${serviceType}"`);
 
-  console.log(
-    `[getServiceClients] START: Querying ${colName} for serviceType="${serviceType}"`,
-  );
   try {
-    // Use a map to deduplicate results from multiple queries
-    const resultsMap: Map<string, RegistryRecord> = new Map();
+    const qServices = query(collection(db, "registry_services_v2"), where("serviceType", "==", serviceType));
+    const servicesSnap = await getDocs(qServices);
 
-    // Generate common variants to cover legacy data shapes (canonical, lowercase, slug)
-    const variants = Array.from(new Set([
-      String(serviceType),
-      String(serviceType).toLowerCase(),
-      String(serviceType).toLowerCase().replace(/\s+/g, "-"),
-    ]));
+    const vehiclesSnap = await getDocs(collection(db, "registry_vehicles_v2"));
+    const clientsSnap = await getDocs(collection(db, "registry_clients_v2"));
 
-    // Query `serviceTypes` array for each variant
-    for (const v of variants) {
-      try {
-        const q = query(collection(db, colName), where("serviceTypes", "array-contains", v as any));
-        const snap = await getDocs(q);
-        for (const d of snap.docs) {
-          const data = d.data() as RegistryRecord;
-          const rec = { id: d.id, ...data } as RegistryRecord;
-          if (!rec.isDeleted) resultsMap.set(d.id, rec);
-        }
-        if (snap.docs.length > 0) console.debug(`[getServiceClients] serviceTypes match for variant='${v}' in ${colName}: ${snap.docs.length}`);
-      } catch (err) {
-        console.warn(`[getServiceClients] serviceTypes query failed for ${colName} variant='${v}':`, err);
+    const vehiclesMap = new Map<string, any>();
+    vehiclesSnap.forEach((doc) => {
+      vehiclesMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
+
+    const clientsMap = new Map<string, any>();
+    clientsSnap.forEach((doc) => {
+      clientsMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
+
+    const records: RegistryRecord[] = [];
+    let srNo = 1;
+
+    servicesSnap.forEach((docSnap) => {
+      const service = { id: docSnap.id, ...docSnap.data() } as any;
+      const vehicle = vehiclesMap.get(service.vehicleId);
+      if (!vehicle) return;
+
+      const client = clientsMap.get(vehicle.clientId);
+      if (!client) return;
+
+      let status: any = "Pending";
+      if (service.taskStatus === "Completed") {
+        status = "Completed";
+      } else if (service.taskStatus === "On Hold") {
+        status = "On Hold";
+      } else if (service.taskStatus !== "Not Started") {
+        status = "In Progress";
       }
-    }
 
-    // Query legacy `services` array for each variant
-    for (const v of variants) {
-      try {
-        const q = query(collection(db, colName), where("services", "array-contains", v as any));
-        const snap = await getDocs(q);
-        for (const d of snap.docs) {
-          const data = d.data() as RegistryRecord;
-          const rec = { id: d.id, ...data } as RegistryRecord;
-          if (!rec.isDeleted) resultsMap.set(d.id, rec);
-        }
-        if (snap.docs.length > 0) console.debug(`[getServiceClients] services array match for variant='${v}' in ${colName}: ${snap.docs.length}`);
-      } catch (err) {
-        console.warn(`[getServiceClients] services legacy query failed for ${colName} variant='${v}':`, err);
-      }
-    }
+      const record: any = {
+        id: client.id,
+        srNo: srNo++,
+        date: service.createdAt || client.createdAt || new Date().toISOString(),
+        mvNo: vehicle.vehicleNumber,
+        application: service.serviceType,
+        work: service.notes || "",
+        name: client.name,
+        status: status,
+        mo: client.mobile || "",
+        co: client.address || "",
+        groupName: client.companyName || "",
+        assignee: service.assignedStaff || "",
+        createdAt: service.createdAt || client.createdAt,
+        serviceType: service.serviceType,
+        serviceStatus: service.taskStatus,
+        serviceDueDate: service.dueDate,
+        type: client.type || "client",
+        services: [
+          {
+            serviceType: service.serviceType,
+            dueDate: service.dueDate || "",
+            status: service.taskStatus || "Pending",
+            price: service.serviceAmount ?? 0,
+            amountReceived: service.amountReceived ?? 0,
+            assignee: service.assignedStaff || "",
+          }
+        ]
+      };
 
-    // Query legacy `serviceType` field equality using variants
-    for (const v of variants) {
-      try {
-        const q = query(collection(db, colName), where("serviceType", "==", v as any));
-        const snap = await getDocs(q);
-        for (const d of snap.docs) {
-          const data = d.data() as RegistryRecord;
-          const rec = { id: d.id, ...data } as RegistryRecord;
-          if (!rec.isDeleted) resultsMap.set(d.id, rec);
-        }
-        if (snap.docs.length > 0) console.debug(`[getServiceClients] serviceType field match for variant='${v}' in ${colName}: ${snap.docs.length}`);
-      } catch (err) {
-        console.warn(`[getServiceClients] serviceType legacy query failed for ${colName} variant='${v}':`, err);
-      }
-    }
+      records.push(record);
+    });
 
-    const results = Array.from(resultsMap.values());
-
-    console.log(
-      `[getServiceClients] SUCCESS: Found ${results.length} records in ${colName} for serviceType="${serviceType}"`,
-      { bucket, serviceType, count: results.length },
-    );
-
-    return results;
+    return records;
   } catch (error) {
-    console.error(
-      `[getServiceClients] ERROR: Failed to query ${colName} for serviceType="${serviceType}"`,
-      { bucket, serviceType, error },
-    );
-    // Return empty array on error instead of throwing
+    console.error(`[getServiceClientsAll] ERROR V2:`, error);
     return [];
   }
 }
 
 /**
- * Get all records for a specific service type across all buckets.
- * FILTERS BY: serviceType === requested value, isDeleted !== true
- * ACROSS: clients, leads, customers buckets
+ * Get all records for a specific service type across a specific bucket.
+ * Differentiates using V2 client record type ('client' | 'lead').
  */
-export async function getServiceClientsAll(
+export async function getServiceClients(
+  bucket: Bucket,
   serviceType: ServiceType,
 ): Promise<RegistryRecord[]> {
-  console.log(`[getServiceClientsAll] START: Fetching all records for serviceType="${serviceType}"`);
-
-  const buckets: Bucket[] = ["clients", "leads", "customers"];
-  
-  try {
-    const allRecords = await Promise.all(
-      buckets.map((b) => getServiceClients(b, serviceType)),
-    );
-    const flattened = allRecords.flat();
-    const matched = flattened.filter((r) => recordMatchesService(r, serviceType));
-
-    const totalCount = matched.length;
-    const rawCount = flattened.length;
-
-    console.log(
-      `[getServiceClientsAll] SUCCESS: Retrieved ${totalCount} matching records across ${buckets.length} buckets`,
-      {
-        serviceType,
-        totalRecords: totalCount,
-        rawRecords: rawCount,
-        buckets: buckets.map((b, i) => ({ bucket: b, count: allRecords[i].length })),
-      },
-    );
-
-    if (rawCount !== totalCount) {
-      console.warn(
-        `[getServiceClientsAll] WARNING: Filter mismatch detected (raw query results included non-matching records).`,
-        { expectedMatches: totalCount, rawResults: rawCount },
-      );
-    }
-    // Return records that matched the robust recordMatchesService filter
-    return matched;
-  } catch (error) {
-    console.error(`[getServiceClientsAll] ERROR: ${error}`, { serviceType, error });
-    return [];
-  }
-
+  const all = await getServiceClientsAll(serviceType);
+  const targetType = bucket === "leads" ? "lead" : "client";
+  return all.filter((r) => (r as any).type === targetType);
 }
 
 /**
  * Get service statistics for a specific service type.
  */
 export async function getServiceStats(serviceType: ServiceType) {
-  const records = await getServiceClientsAll(serviceType);
+  try {
+    const qServices = query(collection(db, "registry_services_v2"), where("serviceType", "==", serviceType));
+    const servicesSnap = await getDocs(qServices);
 
-  const stats = {
-    total: records.length,
-    active: 0,
-    completed: 0,
-    pending: 0,
-    onHold: 0,
-  };
+    const stats = {
+      total: servicesSnap.size,
+      active: 0,
+      completed: 0,
+      pending: 0,
+      onHold: 0,
+    };
 
-  for (const r of records) {
-    const details = getRecordServiceDetails(r);
-    const matchingService = details.find((s) => s.serviceType === serviceType);
-    const status = matchingService?.status || "Pending";
-    
-    if (status === "In Progress" || status === "Active") {
-      stats.active += 1;
-    } else if (status === "Completed") {
-      stats.completed += 1;
-    } else if (status === "Pending") {
-      stats.pending += 1;
-    } else if (status === "On Hold") {
-      stats.onHold += 1;
-    } else {
-      stats.pending += 1;
-    }
+    servicesSnap.forEach((doc) => {
+      const s = doc.data();
+      const status = s.taskStatus || "Not Started";
+      if (status === "Completed") {
+        stats.completed += 1;
+      } else if (
+        status === "In Progress" ||
+        status === "Documents Collected" ||
+        status === "Verification" ||
+        status === "Submitted" ||
+        status === "Approved" ||
+        status === "Active"
+      ) {
+        stats.active += 1;
+      } else if (status === "On Hold") {
+        stats.onHold += 1;
+      } else {
+        stats.pending += 1;
+      }
+    });
+
+    return stats;
+  } catch (error) {
+    console.error(`[getServiceStats] ERROR V2:`, error);
+    return { total: 0, active: 0, completed: 0, pending: 0, onHold: 0 };
   }
-
-  return stats;
 }
 
 /**
@@ -190,9 +161,10 @@ export async function getServiceRevenue(serviceType: ServiceType): Promise<numbe
   const records = await getServiceClientsAll(serviceType);
 
   return records.reduce((sum, r) => {
-    const details = getRecordServiceDetails(r).filter((detail) => detail.serviceType === serviceType);
-    if (details.length > 0) {
-      return sum + details.reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0);
+    const details = r.services || [];
+    const matching = details.filter((detail) => detail.serviceType === serviceType);
+    if (matching.length > 0) {
+      return sum + matching.reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0);
     }
     return sum;
   }, 0);
@@ -200,14 +172,14 @@ export async function getServiceRevenue(serviceType: ServiceType): Promise<numbe
 
 /**
  * Calculate total amount received for a specific service type.
- * NOW USES SERVICE-LEVEL ACCOUNTING: sums amountReceived from service details only.
  */
 export async function getServiceAmountReceived(serviceType: ServiceType): Promise<number> {
   const records = await getServiceClientsAll(serviceType);
   return records.reduce((sum, r) => {
-    const details = getRecordServiceDetails(r).filter((detail) => detail.serviceType === serviceType);
-    if (details.length > 0) {
-      return sum + details.reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0);
+    const details = r.services || [];
+    const matching = details.filter((detail) => detail.serviceType === serviceType);
+    if (matching.length > 0) {
+      return sum + matching.reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0);
     }
     return sum;
   }, 0);
@@ -219,87 +191,140 @@ export async function getServiceAmountReceived(serviceType: ServiceType): Promis
 export async function getServicePendingAmount(serviceType: ServiceType): Promise<number> {
   const revenue = await getServiceRevenue(serviceType);
   const received = await getServiceAmountReceived(serviceType);
-  return revenue - received;
+  return Math.max(0, revenue - received);
 }
 
 /**
  * Get records with upcoming service renewals (within N days).
  */
 export async function getUpcomingRenewals(daysFromNow: number = 30): Promise<RegistryRecord[]> {
-  const buckets: Bucket[] = ["clients", "leads", "customers"];
-  const allRecords = await Promise.all(
-    buckets.map(async (b) => {
-      const colName = `registry_${b}`;
-      const q = query(
-        collection(db, colName),
-        where("isDeleted", "!=", true),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RegistryRecord));
-    }),
-  );
+  try {
+    const servicesSnap = await getDocs(collection(db, "registry_services_v2"));
+    const vehiclesSnap = await getDocs(collection(db, "registry_vehicles_v2"));
+    const clientsSnap = await getDocs(collection(db, "registry_clients_v2"));
 
-  const flatRecords = allRecords.flat();
-  const followups = computeFollowUps(flatRecords);
-  const now = new Date();
+    const vehiclesMap = new Map<string, any>();
+    vehiclesSnap.forEach((doc) => {
+      vehiclesMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
 
-  const matched = followups.flat.filter((f) => typeof f.daysRemaining === "number" && f.daysRemaining >= 0 && f.daysRemaining <= daysFromNow);
-  const byId = new Map<string, RegistryRecord>();
-  for (const r of flatRecords) byId.set(r.id, r);
+    const clientsMap = new Map<string, any>();
+    clientsSnap.forEach((doc) => {
+      clientsMap.set(doc.id, { id: doc.id, ...doc.data() });
+    });
 
-  // Return unique full records
-  const out: RegistryRecord[] = [];
-  for (const m of matched) {
-    const rec = byId.get(m.clientId);
-    if (rec && !out.find((o) => o.id === rec.id)) out.push(rec);
+    const now = new Date();
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysFromNow);
+
+    const records: RegistryRecord[] = [];
+    let srNo = 1;
+
+    servicesSnap.forEach((docSnap) => {
+      const service = { id: docSnap.id, ...docSnap.data() } as any;
+      if (!service.dueDate) return;
+
+      const dueDate = new Date(service.dueDate);
+      if (isNaN(dueDate.getTime())) return;
+
+      const timeDiff = dueDate.getTime() - now.getTime();
+      const daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+      if (daysRemaining >= 0 && daysRemaining <= daysFromNow) {
+        const vehicle = vehiclesMap.get(service.vehicleId);
+        if (!vehicle) return;
+
+        const client = clientsMap.get(vehicle.clientId);
+        if (!client) return;
+
+        let status: any = "Pending";
+        if (service.taskStatus === "Completed") {
+          status = "Completed";
+        } else if (service.taskStatus === "On Hold") {
+          status = "On Hold";
+        } else if (service.taskStatus !== "Not Started") {
+          status = "In Progress";
+        }
+
+        const record: any = {
+          id: client.id,
+          srNo: srNo++,
+          date: service.createdAt || client.createdAt || new Date().toISOString(),
+          mvNo: vehicle.vehicleNumber,
+          application: service.serviceType,
+          work: service.notes || "",
+          name: client.name,
+          status: status,
+          mo: client.mobile || "",
+          co: client.address || "",
+          groupName: client.companyName || "",
+          assignee: service.assignedStaff || "",
+          createdAt: service.createdAt || client.createdAt,
+          serviceType: service.serviceType,
+          serviceStatus: service.taskStatus,
+          serviceDueDate: service.dueDate,
+          type: client.type || "client",
+          services: [
+            {
+              serviceType: service.serviceType,
+              dueDate: service.dueDate || "",
+              status: service.taskStatus || "Pending",
+              price: service.serviceAmount ?? 0,
+              amountReceived: service.amountReceived ?? 0,
+              assignee: service.assignedStaff || "",
+            }
+          ]
+        };
+
+        records.push(record);
+      }
+    });
+
+    return records;
+  } catch (error) {
+    console.error(`[getUpcomingRenewals] ERROR V2:`, error);
+    return [];
   }
-  return out;
 }
 
 /**
  * Get total revenue across all services.
  */
 export async function getTotalRevenue(): Promise<number> {
-  const buckets: Bucket[] = ["clients", "leads", "customers"];
-  const allRecords = await Promise.all(
-    buckets.map(async (b) => {
-      const colName = `registry_${b}`;
-      const q = query(
-        collection(db, colName),
-        where("isDeleted", "!=", true),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RegistryRecord));
-    }),
-  );
-
-  const flatRecords = allRecords.flat();
-  return flatRecords.reduce((sum, r) => sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.price || 0), 0), 0);
+  try {
+    const servicesSnap = await getDocs(collection(db, "registry_services_v2"));
+    let total = 0;
+    servicesSnap.forEach((doc) => {
+      const data = doc.data();
+      total += data.serviceAmount ?? 0;
+    });
+    return total;
+  } catch (error) {
+    console.error(`[getTotalRevenue] ERROR V2:`, error);
+    return 0;
+  }
 }
 
 /**
- * Get total amount received across all services (SERVICE-WISE ACCOUNTING).
+ * Get total amount received across all services.
  */
 export async function getTotalAmountReceived(): Promise<number> {
-  const buckets: Bucket[] = ["clients", "leads", "customers"];
-  const allRecords = await Promise.all(
-    buckets.map(async (b) => {
-      const colName = `registry_${b}`;
-      const q = query(
-        collection(db, colName),
-        where("isDeleted", "!=", true),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RegistryRecord));
-    }),
-  );
-
-  const flatRecords = allRecords.flat();
-  return flatRecords.reduce((sum, r) => sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0), 0);
+  try {
+    const servicesSnap = await getDocs(collection(db, "registry_services_v2"));
+    let total = 0;
+    servicesSnap.forEach((doc) => {
+      const data = doc.data();
+      total += data.amountReceived ?? 0;
+    });
+    return total;
+  } catch (error) {
+    console.error(`[getTotalAmountReceived] ERROR V2:`, error);
+    return 0;
+  }
 }
 
 /**
- * Get total pending amount across all services (SERVICE-WISE ACCOUNTING).
+ * Get total pending amount across all services.
  */
 export async function getTotalPendingAmount(): Promise<number> {
   const revenue = await getTotalRevenue();
@@ -311,21 +336,17 @@ export async function getTotalPendingAmount(): Promise<number> {
  * Get count of active services across all buckets.
  */
 export async function getActiveServicesCount(): Promise<number> {
-  const buckets: Bucket[] = ["clients", "leads", "customers"];
-  const allRecords = await Promise.all(
-    buckets.map(async (b) => {
-      const colName = `registry_${b}`;
-      const q = query(
-        collection(db, colName),
-        where("isDeleted", "!=", true),
-        where("status", "==", "In Progress"),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RegistryRecord));
-    }),
-  );
-
-  return allRecords.flat().length;
+  try {
+    const q = query(
+      collection(db, "registry_services_v2"),
+      where("taskStatus", "in", ["In Progress", "Documents Collected", "Verification", "Submitted", "Approved"])
+    );
+    const snap = await getDocs(q);
+    return snap.size;
+  } catch (error) {
+    console.error(`[getActiveServicesCount] ERROR V2:`, error);
+    return 0;
+  }
 }
 
 /**
@@ -356,80 +377,41 @@ export async function getRevenueByService() {
   return revenues.filter((r) => r.revenue > 0);
 }
 
-// ─── Validation & Debugging Helpers ───────────────────────────────────────────
-
 /**
  * Validate service filtering for a specific record.
- * Use for debugging to ensure a record appears in the correct service module only.
- * 
- * Example: validateRecordInService("client-123", "Insurance")
  */
 export async function validateRecordInService(
   recordId: string,
   expectedServiceType: string,
 ): Promise<{ isValid: boolean; message: string; details: any }> {
-  console.log(
-    `[validateRecordInService] Checking if record "${recordId}" belongs to service "${expectedServiceType}"`,
-  );
-
-  const buckets: Bucket[] = ["clients", "leads", "customers"];
-
   try {
-    // Find the record across all buckets
-    let targetRecord: RegistryRecord | null = null;
-    let targetBucket: Bucket | null = null;
+    const docSnap = await getDocs(
+      query(collection(db, "registry_services_v2"), where("id", "==", recordId))
+    );
 
-    for (const bucket of buckets) {
-      const colName = `registry_${bucket}`;
-      const docSnap = await getDocs(
-        query(collection(db, colName), where("id", "==", recordId)),
-      );
-      
-      if (!docSnap.empty) {
-        targetRecord = { id: docSnap.docs[0].id, ...docSnap.docs[0].data() } as RegistryRecord;
-        targetBucket = bucket;
-        break;
-      }
-    }
-
-    if (!targetRecord) {
+    if (docSnap.empty) {
       return {
         isValid: false,
-        message: `Record "${recordId}" not found in any bucket`,
+        message: `Record "${recordId}" not found in V2 services`,
         details: { recordId, expectedServiceType },
       };
     }
 
-    const actualServiceType = targetRecord.serviceType;
-    const isValid = actualServiceType === expectedServiceType;
-
-    console.log(
-      `[validateRecordInService] ${isValid ? "✓ VALID" : "✗ INVALID"}`,
-      {
-        recordId,
-        bucket: targetBucket,
-        clientName: targetRecord.name,
-        expectedServiceType,
-        actualServiceType,
-      },
-    );
+    const serviceData = docSnap.docs[0].data();
+    const isValid = serviceData.serviceType === expectedServiceType;
 
     return {
       isValid,
       message: isValid
-        ? `✓ Record "${targetRecord.name}" correctly has serviceType="${expectedServiceType}"`
-        : `✗ Record "${targetRecord.name}" has serviceType="${actualServiceType}" but expected "${expectedServiceType}"`,
+        ? `✓ Record correctly has serviceType="${expectedServiceType}"`
+        : `✗ Record has serviceType="${serviceData.serviceType}" but expected "${expectedServiceType}"`,
       details: {
         recordId,
-        bucket: targetBucket,
-        clientName: targetRecord.name,
         expectedServiceType,
-        actualServiceType,
-        mvNo: targetRecord.mvNo,
+        actualServiceType: serviceData.serviceType,
       },
     };
   } catch (error) {
-    console.error(`[validateRecordInService] Error validating record:`, error);
     return {
       isValid: false,
       message: `Error validating record: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -440,13 +422,8 @@ export async function validateRecordInService(
 
 /**
  * Get a summary of all records grouped by service type.
- * Use this to verify the complete distribution of records across services.
- * 
- * Example: const summary = await getServiceDistributionSummary();
  */
 export async function getServiceDistributionSummary() {
-  console.log(`[getServiceDistributionSummary] Building distribution summary...`);
-
   const serviceTypes = [
     "Insurance",
     "Fitness",
@@ -469,11 +446,6 @@ export async function getServiceDistributionSummary() {
   );
 
   const totalRecords = distribution.reduce((sum, d) => sum + d.count, 0);
-
-  console.log(
-    `[getServiceDistributionSummary] Complete: ${totalRecords} total records across ${serviceTypes.length} services`,
-    distribution,
-  );
 
   return {
     totalRecords,

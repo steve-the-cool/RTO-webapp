@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, useMemo } from "react";
+import { useState } from "react";
+import { useEffect } from "react";
+import { useMemo } from "react";
 import {
   Search,
   Car,
@@ -43,6 +45,8 @@ import { uploadBytesResumable, getDownloadURL, ref } from "firebase/storage";
 export const Route = createFileRoute("/dashboard/customers")({
   component: CustomersPage,
 });
+
+
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -262,7 +266,7 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
       });
 
       console.log("[uploadFileWithTimeout] uploadBytesResumable task created:", {
-        taskState: task.state,
+        taskState: task.snapshot.state,
       });
 
       task.on(
@@ -301,7 +305,7 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
             if (uploadTimeout) clearTimeout(uploadTimeout);
             try {
               console.log("[uploadFileWithTimeout] SUCCESS_CALLBACK - Upload complete, state:", {
-                taskState: task.state,
+                taskState: task.snapshot.state,
                 snapshotState: task.snapshot.state,
               });
               console.log("[uploadFileWithTimeout] Getting download URL from:", {
@@ -421,7 +425,7 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
                   <Paperclip className="size-4 text-muted-foreground flex-shrink-0" />
                   <div className="min-w-0">
                     <a
-                      href={att.downloadUrl}
+                      href={att.downloadURL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm font-medium text-primary hover:underline truncate block"
@@ -434,7 +438,7 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
                   </div>
                 </div>
                 <a
-                  href={att.downloadUrl}
+                  href={att.downloadURL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center size-8 rounded-md bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors flex-shrink-0"
@@ -650,9 +654,9 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
-                {d.downloadUrl && (
+                {d.downloadURL && (
                   <a
-                    href={d.downloadUrl}
+                    href={d.downloadURL}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="size-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"

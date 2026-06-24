@@ -6,7 +6,7 @@ import {
 } from "@/lib/services";
 import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus, getRecordServiceDetails, hasLegacyAccounting } from "@/lib/records";
 import { RecordTable } from "@/components/RecordTable";
-import ClientProfile from "@/components/ClientProfile";
+import { ClientDetailWorkspace } from "./ClientDetailWorkspace";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Package, TrendingUp, DollarSign, Users, AlertCircle } from "lucide-react";
@@ -365,7 +365,13 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
           </div>
         )}
       </div>
-      <ClientProfile record={selectedRecord} open={profileOpen} onOpenChange={setProfileOpen} serviceType={serviceType} />
+      {selectedRecord && (
+        <ClientDetailWorkspace
+          clientId={selectedRecord.id}
+          open={profileOpen}
+          onOpenChange={setProfileOpen}
+        />
+      )}
     </div>
   );
 }

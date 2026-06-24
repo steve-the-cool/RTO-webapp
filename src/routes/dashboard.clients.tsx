@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RecordTable } from "@/components/RecordTable";
+import { V2ClientList } from "@/components/V2ClientList";
 
 export const Route = createFileRoute("/dashboard/clients")({
   component: () => (
-    <RecordTable bucket="clients" title="Clients" description="Active client applications and renewals." />
+    <V2ClientList type="client" title="Clients" description="Active client profiles, vehicle assets, and service pipelines." />
   ),
 });
