@@ -38,6 +38,7 @@ import {
   FileText,
   Eye,
   Download,
+  Upload,
 } from "lucide-react";
 import {
   type Client,
@@ -56,10 +57,24 @@ import {
   type VehicleDocument,
 } from "@/lib/hierarchy";
 import { SERVICE_TYPES, serviceLabel, STAFF_USERS } from "@/lib/records";
+import { generatePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
-import { WhatsAppQuickActions } from "./WhatsAppQuickActions";
+import { WhatsAppMessagePanel } from "@/components/WhatsAppMessagePanel";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage, auth } from "@/lib/firebase";
+import { getSession } from "@/lib/auth";
+import { subscribeStaffPermissions, type RolePermissions } from "@/lib/permissions";
+import { secureDelete } from "@/lib/secureDelete";
+import {
+  type ClientDocument,
+  type VehicleDocumentInfo,
+  subscribeClientDocs,
+  subscribeVehicleDocs,
+  saveClientDocument,
+  saveVehicleDocument,
+  deleteClientDocEntry,
+  deleteVehicleDocEntry,
+} from "@/lib/structuredDocs";
 
 interface ClientDetailWorkspaceProps {
   clientId: string;
@@ -74,6 +89,27 @@ const TASK_STAGES: ServiceTaskStatus[] = [
   "Submitted",
   "Approved",
   "Completed",
+];
+
+const CLIENT_DOC_SLOTS = [
+  { key: "aadhaar", label: "Aadhaar Card" },
+  { key: "pan", label: "PAN Card" },
+  { key: "passport", label: "Passport" },
+  { key: "driving_license", label: "Driving License" },
+  { key: "photo", label: "Client Photo" },
+  { key: "address_proof", label: "Address Proof" },
+  { key: "other", label: "Other Client Documents" },
+];
+
+const VEHICLE_DOC_SLOTS = [
+  { key: "rc_book", label: "RC Book" },
+  { key: "insurance", label: "Insurance Copy" },
+  { key: "fitness", label: "Fitness Certificate" },
+  { key: "gujarat_permit", label: "Gujarat Permit" },
+  { key: "national_permit", label: "National Permit" },
+  { key: "tax", label: "Tax Documents" },
+  { key: "puc", label: "PUC Certificate" },
+  { key: "other", label: "Other Vehicle Documents" },
 ];
 
 export function ClientDetailWorkspace({
@@ -96,7 +132,39 @@ export function ClientDetailWorkspace({
   const [editingService, setEditingService] = useState<Partial<Service> | null>(null);
   const [serviceForm, setServiceForm] = useState<Partial<Service>>({});
 
-  const [previewDoc, setPreviewDoc] = useState<{ url: string; type: string; name: string } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; type: string; name: string } | null>(
+    null,
+  );
+
+  const [clientDocs, setClientDocs] = useState<ClientDocument[]>([]);
+  const [vehicleDocs, setVehicleDocs] = useState<VehicleDocumentInfo[]>([]);
+  const [docProgress, setDocProgress] = useState<Record<string, number>>({});
+  const [viewerDoc, setViewerDoc] = useState<{ url: string; name: string; isPdf: boolean } | null>(
+    null,
+  );
+  const [zoom, setZoom] = useState(1);
+
+  const [rolePermissions, setRolePermissions] = useState<any>(null);
+  const session = getSession();
+  const isAdmin = session?.role === "admin";
+  const canEdit = isAdmin || (rolePermissions?.editClients ?? true);
+
+  useEffect(() => {
+    const unsubPerms = subscribeStaffPermissions((p) => {
+      setRolePermissions(p);
+    });
+    return unsubPerms;
+  }, []);
+
+  useEffect(() => {
+    if (!clientId) return;
+    const unsubClientDocs = subscribeClientDocs(clientId, setClientDocs);
+    const unsubVehicleDocs = subscribeVehicleDocs(clientId, setVehicleDocs);
+    return () => {
+      unsubClientDocs();
+      unsubVehicleDocs();
+    };
+  }, [clientId]);
 
   // Load real-time client details (includes nested vehicles & services)
   useEffect(() => {
@@ -111,14 +179,25 @@ export function ClientDetailWorkspace({
 
   // Handle Client Save
   const handleEditClient = () => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (!details) return;
     setClientForm(details);
     setEditClientOpen(true);
   };
 
   const handleSaveClient = async () => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     try {
-      await saveClient(clientForm as Client);
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await saveClient(clientForm as Client, actorOverride);
       setEditClientOpen(false);
       toast.success("Client profile updated successfully!");
     } catch (error) {
@@ -129,6 +208,10 @@ export function ClientDetailWorkspace({
 
   // Handle Vehicle Save / Delete
   const handleOpenVehicleModal = (v?: Vehicle) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (v) {
       setEditingVehicle(v);
       setVehicleForm(v);
@@ -149,12 +232,19 @@ export function ClientDetailWorkspace({
   };
 
   const handleSaveVehicle = async () => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (!vehicleForm.vehicleNumber?.trim()) {
       toast.error("Vehicle Number is required");
       return;
     }
     try {
-      await saveVehicle(vehicleForm as Vehicle);
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await saveVehicle(vehicleForm as Vehicle, actorOverride);
       setVehicleModalOpen(false);
       toast.success(editingVehicle ? "Vehicle updated!" : "Vehicle added!");
     } catch (error) {
@@ -164,11 +254,20 @@ export function ClientDetailWorkspace({
   };
 
   const handleDeleteVehicle = async (vId: string) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this vehicle and all associated services?")) {
       return;
     }
     try {
-      await deleteVehicle(vId);
+      await secureDelete(
+  () => deleteVehicle(vId),
+  "Vehicle",
+  vId,
+  session?.uid ?? "unknown"
+);
       toast.success("Vehicle deleted successfully.");
     } catch (error) {
       console.error(error);
@@ -178,6 +277,10 @@ export function ClientDetailWorkspace({
 
   // Handle Service Save / Delete
   const handleOpenServiceModal = (vehicleId: string, s?: Service) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (s) {
       setEditingService(s);
       setServiceForm(s);
@@ -199,8 +302,15 @@ export function ClientDetailWorkspace({
   };
 
   const handleSaveService = async () => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     try {
-      await saveService(serviceForm as Service);
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await saveService(serviceForm as Service, actorOverride);
       setServiceModalOpen(false);
       toast.success(editingService ? "Service updated!" : "Service added!");
     } catch (error) {
@@ -210,11 +320,23 @@ export function ClientDetailWorkspace({
   };
 
   const handleDeleteService = async (sId: string) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this service?")) {
       return;
     }
     try {
-      await deleteService(sId);
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await secureDelete(
+  () => deleteService(sId, actorOverride),
+  "Service",
+  sId,
+  session?.uid ?? "unknown"
+);
       toast.success("Service deleted.");
     } catch (error) {
       console.error(error);
@@ -224,11 +346,21 @@ export function ClientDetailWorkspace({
 
   // Update Service Status directly (stepper)
   const handleUpdateServiceStatus = async (service: Service, status: ServiceTaskStatus) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     try {
-      await saveService({
-        ...service,
-        taskStatus: status,
-      });
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await saveService(
+        {
+          ...service,
+          taskStatus: status,
+        },
+        actorOverride,
+      );
       toast.success(`Service status updated to ${status}`);
     } catch (error) {
       console.error(error);
@@ -237,6 +369,10 @@ export function ClientDetailWorkspace({
   };
 
   const handleUploadDocument = (vehicleId: string) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".pdf,image/png,image/jpeg,image/jpg";
@@ -270,10 +406,11 @@ export function ClientDetailWorkspace({
         const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
 
         await new Promise<void>((resolve, reject) => {
-          uploadTask.on("state_changed",
+          uploadTask.on(
+            "state_changed",
             null,
             (error) => reject(error),
-            () => resolve()
+            () => resolve(),
           );
         });
 
@@ -287,10 +424,13 @@ export function ClientDetailWorkspace({
           storagePath,
           uploadedAt: new Date().toISOString(),
           uploadedBy: userEmail,
-          fileType: file.type.includes("pdf") ? "pdf" : "image"
+          fileType: file.type.includes("pdf") ? "pdf" : "image",
         };
 
-        await addVehicleDocument(vehicleId, newDoc);
+        const actorOverride = session
+          ? { name: session.name, uid: session.uid, role: session.role }
+          : undefined;
+        await addVehicleDocument(vehicleId, newDoc, actorOverride);
         toast.success("Document uploaded successfully!", { id: "upload-doc" });
       } catch (err: any) {
         console.error(err);
@@ -298,6 +438,103 @@ export function ClientDetailWorkspace({
       }
     };
     input.click();
+  };
+
+  const handleUploadClientDoc = async (category: string, file: File) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
+    const existing = clientDocs.find((d) => d.category === category) || null;
+    toast.loading(`Uploading ${category}...`, { id: `upload-client-${category}` });
+    try {
+      await saveClientDocument(clientId, category as any, file, existing, (pct) => {
+        setDocProgress((prev) => ({ ...prev, [`client-${category}`]: pct }));
+      });
+      toast.success("Document saved successfully!", { id: `upload-client-${category}` });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Upload failed: ${err.message || err}`, { id: `upload-client-${category}` });
+    } finally {
+      setDocProgress((prev) => {
+        const next = { ...prev };
+        delete next[`client-${category}`];
+        return next;
+      });
+    }
+  };
+
+  const handleUploadVehicleDoc = async (vehicleId: string, documentType: string, file: File) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
+    const existing =
+      vehicleDocs.find((d) => d.vehicleId === vehicleId && d.documentType === documentType) || null;
+    toast.loading(`Uploading ${documentType}...`, {
+      id: `upload-vehicle-${vehicleId}-${documentType}`,
+    });
+    try {
+      await saveVehicleDocument(clientId, vehicleId, documentType as any, file, existing, (pct) => {
+        setDocProgress((prev) => ({ ...prev, [`vehicle-${vehicleId}-${documentType}`]: pct }));
+      });
+      toast.success("Vehicle document saved successfully!", {
+        id: `upload-vehicle-${vehicleId}-${documentType}`,
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Upload failed: ${err.message || err}`, {
+        id: `upload-vehicle-${vehicleId}-${documentType}`,
+      });
+    } finally {
+      setDocProgress((prev) => {
+        const next = { ...prev };
+        delete next[`vehicle-${vehicleId}-${documentType}`];
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteClientDoc = async (docObj: ClientDocument) => {
+    if (!isAdmin) {
+      toast.error("Only administrators can delete documents");
+      return;
+    }
+    if (!confirm("Are you sure you want to delete this document?")) return;
+    toast.loading("Deleting document...", { id: "delete-doc" });
+    try {
+      await secureDelete(
+  () => deleteClientDocEntry(docObj),
+  "ClientDocument",
+  docObj.id,
+  session?.uid ?? "unknown"
+);
+      toast.success("Document deleted successfully!", { id: "delete-doc" });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Deletion failed: ${err.message || err}`, { id: "delete-doc" });
+    }
+  };
+
+  const handleDeleteVehicleDoc = async (docObj: VehicleDocumentInfo) => {
+    if (!isAdmin) {
+      toast.error("Only administrators can delete documents");
+      return;
+    }
+    if (!confirm("Are you sure you want to delete this document?")) return;
+    toast.loading("Deleting document...", { id: "delete-doc" });
+    try {
+      await secureDelete(
+  () => deleteVehicleDocEntry(docObj),
+  "VehicleDocument",
+  docObj.id,
+  session?.uid ?? "unknown"
+);
+      toast.success("Document deleted successfully!", { id: "delete-doc" });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Deletion failed: ${err.message || err}`, { id: "delete-doc" });
+    }
   };
 
   const handleDownloadDocument = async (url: string, fileName: string) => {
@@ -323,6 +560,10 @@ export function ClientDetailWorkspace({
   };
 
   const handleDeleteDocument = async (vehicleId: string, docId: string, storagePath: string) => {
+    if (!canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this document?")) return;
     toast.loading("Deleting document...", { id: "delete-doc" });
     try {
@@ -335,7 +576,10 @@ export function ClientDetailWorkspace({
       }
 
       // Delete metadata from Firestore
-      await deleteVehicleDocument(vehicleId, docId);
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await deleteVehicleDocument(vehicleId, docId, actorOverride);
       toast.success("Document deleted successfully!", { id: "delete-doc" });
     } catch (err: any) {
       console.error(err);
@@ -366,8 +610,10 @@ export function ClientDetailWorkspace({
 
   const serviceWiseAccounting = useMemo(() => {
     if (!details?.vehicles) return [];
-    const servicesByType: { [type: string]: { totalAmount: number; amountReceived: number; pendingAmount: number } } = {};
-    
+    const servicesByType: {
+      [type: string]: { totalAmount: number; amountReceived: number; pendingAmount: number };
+    } = {};
+
     details.vehicles.forEach((v: any) => {
       v.services.forEach((s: any) => {
         const type = s.serviceType;
@@ -383,7 +629,7 @@ export function ClientDetailWorkspace({
         servicesByType[type].pendingAmount += s.pendingAmount ?? 0;
       });
     });
-    
+
     return Object.entries(servicesByType).map(([type, accounting]) => ({
       serviceType: type,
       ...accounting,
@@ -402,7 +648,10 @@ export function ClientDetailWorkspace({
                 {details?.name || "Client Details"}
               </DialogTitle>
               {details && (
-                <Badge variant={details.type === "lead" ? "secondary" : "default"} className="capitalize">
+                <Badge
+                  variant={details.type === "lead" ? "secondary" : "default"}
+                  className="capitalize"
+                >
                   {details.type}
                 </Badge>
               )}
@@ -413,7 +662,38 @@ export function ClientDetailWorkspace({
           </div>
           {details && (
             <div className="flex gap-2 items-center">
-              <WhatsAppQuickActions mobile={details.mobile} name={details.name} />
+              <WhatsAppMessagePanel mobile={details.mobile} name={details.name} />
+              <Button
+                onClick={() => {
+                  generatePDF(
+                    "client-details",
+                    {
+                      name: details.name,
+                      mo: details.mobile,
+                      email: "",
+                      address: details.address || "",
+                      group: "",
+                      createdAt: "",
+                      createdBy: "",
+                      vehicles: (details.vehicles || []).map((v: any) => ({
+                        vehicleNumber: v.vehicleNumber,
+                        vehicleType: v.makeModel || "Commercial",
+                        status: "Active",
+                        services: (details.services || [])
+                          .filter((s: any) => s.vehicleId === v.id)
+                          .map((s: any) => s.type),
+                      })),
+                    },
+                    session?.username || "system",
+                  );
+                }}
+                variant="outline"
+                size="sm"
+                className="bg-red-50 text-red-700 hover:bg-red-100 border-red-200 gap-1.5"
+              >
+                <FileText className="size-4" />
+                Generate Client PDF
+              </Button>
               <Button onClick={handleEditClient} variant="outline" size="sm">
                 <Pencil className="size-4 mr-2" />
                 Edit Profile
@@ -467,7 +747,9 @@ export function ClientDetailWorkspace({
                   {details.notes && (
                     <div className="border-t pt-2 mt-2">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Notes</p>
-                      <p className="text-xs text-muted-foreground leading-normal mt-1">{details.notes}</p>
+                      <p className="text-xs text-muted-foreground leading-normal mt-1">
+                        {details.notes}
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -483,38 +765,61 @@ export function ClientDetailWorkspace({
                 <CardContent className="space-y-4 pt-2">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="p-3 border rounded-xl bg-background shadow-sm">
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold">Total Bill</span>
-                      <p className="text-xl font-bold mt-1 text-foreground">₹{details.accounting.totalAmount.toLocaleString("en-IN")}</p>
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold">
+                        Total Bill
+                      </span>
+                      <p className="text-xl font-bold mt-1 text-foreground">
+                        ₹{details.accounting.totalAmount.toLocaleString("en-IN")}
+                      </p>
                     </div>
                     <div className="p-3 border rounded-xl bg-background shadow-sm">
-                      <span className="text-[10px] text-green-700 uppercase font-bold">Received</span>
-                      <p className="text-xl font-bold mt-1 text-green-600">₹{details.accounting.amountReceived.toLocaleString("en-IN")}</p>
+                      <span className="text-[10px] text-green-700 uppercase font-bold">
+                        Received
+                      </span>
+                      <p className="text-xl font-bold mt-1 text-green-600">
+                        ₹{details.accounting.amountReceived.toLocaleString("en-IN")}
+                      </p>
                     </div>
                     <div className="p-3 border rounded-xl bg-background shadow-sm">
                       <span className="text-[10px] text-red-700 uppercase font-bold">Pending</span>
-                      <p className="text-xl font-bold mt-1 text-red-600">₹{details.accounting.pendingAmount.toLocaleString("en-IN")}</p>
+                      <p className="text-xl font-bold mt-1 text-red-600">
+                        ₹{details.accounting.pendingAmount.toLocaleString("en-IN")}
+                      </p>
                     </div>
                   </div>
 
                   {serviceWiseAccounting.length > 0 && (
                     <div className="border-t pt-3 space-y-2">
-                      <p className="text-[10px] uppercase font-bold tracking-wide text-muted-foreground">Accounting Summary by Service</p>
+                      <p className="text-[10px] uppercase font-bold tracking-wide text-muted-foreground">
+                        Accounting Summary by Service
+                      </p>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {serviceWiseAccounting.map((item) => (
-                          <div key={item.serviceType} className="p-2.5 border rounded-lg bg-background text-xs flex flex-col justify-between">
-                            <span className="font-semibold text-foreground mb-1.5">{serviceLabel(item.serviceType as any)}</span>
+                          <div
+                            key={item.serviceType}
+                            className="p-2.5 border rounded-lg bg-background text-xs flex flex-col justify-between"
+                          >
+                            <span className="font-semibold text-foreground mb-1.5">
+                              {serviceLabel(item.serviceType as any)}
+                            </span>
                             <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
                               <div>
                                 <span className="text-muted-foreground block">Total</span>
-                                <span className="font-bold">₹{item.totalAmount.toLocaleString("en-IN")}</span>
+                                <span className="font-bold">
+                                  ₹{item.totalAmount.toLocaleString("en-IN")}
+                                </span>
                               </div>
                               <div>
                                 <span className="text-green-700 block">Rec</span>
-                                <span className="font-bold text-green-600">₹{item.amountReceived.toLocaleString("en-IN")}</span>
+                                <span className="font-bold text-green-600">
+                                  ₹{item.amountReceived.toLocaleString("en-IN")}
+                                </span>
                               </div>
                               <div>
                                 <span className="text-red-700 block">Pend</span>
-                                <span className="font-bold text-red-600">₹{item.pendingAmount.toLocaleString("en-IN")}</span>
+                                <span className="font-bold text-red-600">
+                                  ₹{item.pendingAmount.toLocaleString("en-IN")}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -537,16 +842,29 @@ export function ClientDetailWorkspace({
                 </CardHeader>
                 <CardContent className="space-y-3 pt-2">
                   {activeTasks.map((t: any) => (
-                    <div key={t.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 border rounded-lg bg-card gap-2">
+                    <div
+                      key={t.id}
+                      className="flex flex-col sm:flex-row justify-between sm:items-center p-3 border rounded-lg bg-card gap-2"
+                    >
                       <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="font-mono text-xs">{t.vehicleNumber}</Badge>
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {t.vehicleNumber}
+                        </Badge>
                         <span className="font-semibold text-sm">{serviceLabel(t.serviceType)}</span>
-                        <Badge variant="secondary" className="text-[10px]">{t.taskStatus}</Badge>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {t.taskStatus}
+                        </Badge>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex flex-col text-right">
-                          <span className="text-xs font-semibold text-foreground">{t.progress}% Progress</span>
-                          {t.dueDate && <span className="text-[10px] text-muted-foreground mt-0.5">Due: {new Date(t.dueDate).toLocaleDateString("en-IN")}</span>}
+                          <span className="text-xs font-semibold text-foreground">
+                            {t.progress}% Progress
+                          </span>
+                          {t.dueDate && (
+                            <span className="text-[10px] text-muted-foreground mt-0.5">
+                              Due: {new Date(t.dueDate).toLocaleDateString("en-IN")}
+                            </span>
+                          )}
                         </div>
                         <div className="w-24 bg-muted h-2 rounded-full overflow-hidden">
                           <div className="h-full bg-primary" style={{ width: `${t.progress}%` }} />
@@ -557,6 +875,112 @@ export function ClientDetailWorkspace({
                 </CardContent>
               </Card>
             )}
+
+            {/* Structured Client Documents Section */}
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3 border-b">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <FileText className="size-4 text-primary" />
+                  Client Documents
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 divide-y">
+                {CLIENT_DOC_SLOTS.map((slot) => {
+                  const docObj = clientDocs.find((d) => d.category === slot.key) || null;
+                  const progress = docProgress[`client-${slot.key}`];
+                  return (
+                    <div
+                      key={slot.key}
+                      className="p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-card hover:bg-muted/5 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <span className="font-semibold text-sm text-foreground block">
+                          {slot.label}
+                        </span>
+                        {docObj ? (
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            <p className="font-medium text-foreground truncate max-w-md">
+                              {docObj.fileName}
+                            </p>
+                            <p>
+                              Uploaded by {docObj.uploadedBy} on{" "}
+                              {new Date(docObj.uploadedAt).toLocaleDateString("en-IN")}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground block">Not Uploaded</span>
+                        )}
+                        {progress !== undefined && (
+                          <div className="w-full max-w-[200px] mt-1.5">
+                            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary transition-all duration-300"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {docObj && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-xs gap-1"
+                              onClick={() => {
+                                const isPdf = docObj.fileName.toLowerCase().endsWith(".pdf");
+                                setViewerDoc({ url: docObj.url, name: slot.label, isPdf });
+                              }}
+                            >
+                              <Eye className="size-3.5" /> View
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-xs gap-1"
+                              onClick={() => handleDownloadDocument(docObj.url, docObj.fileName)}
+                            >
+                              <Download className="size-3.5" /> Download
+                            </Button>
+                          </>
+                        )}
+                        <label className="h-8 px-3 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer flex items-center justify-center text-xs font-semibold gap-1.5 transition-colors">
+                          <Upload className="size-3.5" />
+                          {docObj ? "Replace" : "Upload"}
+                          <input
+                            type="file"
+                            accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+                            onChange={(e) => {
+                              const file = e.currentTarget.files?.[0];
+                              if (file) handleUploadClientDoc(slot.key, file);
+                              e.currentTarget.value = "";
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                        {docObj && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            disabled={!isAdmin}
+                            title={
+                              !isAdmin
+                                ? "Only administrators can delete documents"
+                                : "Delete document"
+                            }
+                            onClick={() => handleDeleteClientDoc(docObj)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
 
             {/* Vehicles & nested Services section */}
             <div className="space-y-4">
@@ -573,53 +997,87 @@ export function ClientDetailWorkspace({
               {details.vehicles.length === 0 ? (
                 <div className="text-center py-10 border border-dashed rounded-2xl bg-muted/5">
                   <Car className="size-12 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No vehicles registered. Click Add Vehicle to get started.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No vehicles registered. Click Add Vehicle to get started.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-6">
                   {details.vehicles.map((v: any) => (
-                    <Card key={v.id} className="border shadow-sm overflow-hidden hover:border-primary/20 transition-all">
+                    <Card
+                      key={v.id}
+                      className="border shadow-sm overflow-hidden hover:border-primary/20 transition-all"
+                    >
                       <CardHeader className="bg-muted/10 px-5 py-4 border-b flex flex-row items-center justify-between flex-wrap gap-3">
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-lg font-bold tracking-tight text-primary">{v.vehicleNumber}</span>
-                          <Badge variant="outline" className="text-xs bg-background">{v.vehicleType}</Badge>
-                          <Badge className="text-xs" variant={v.status === "Completed" ? "default" : "secondary"}>
+                          <span className="font-mono text-lg font-bold tracking-tight text-primary">
+                            {v.vehicleNumber}
+                          </span>
+                          <Badge variant="outline" className="text-xs bg-background">
+                            {v.vehicleType}
+                          </Badge>
+                          <Badge
+                            className="text-xs"
+                            variant={v.status === "Completed" ? "default" : "secondary"}
+                          >
                             {v.status}
                           </Badge>
                         </div>
                         <div className="flex gap-1.5">
-                          <Button onClick={() => handleOpenServiceModal(v.id)} size="sm" variant="outline">
+                          <Button
+                            onClick={() => handleOpenServiceModal(v.id)}
+                            size="sm"
+                            variant="outline"
+                          >
                             <Plus className="size-3.5 mr-1" /> Add Service
                           </Button>
-                          <Button onClick={() => handleOpenVehicleModal(v)} size="icon" variant="ghost" className="h-8 w-8">
+                          <Button
+                            onClick={() => handleOpenVehicleModal(v)}
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                          >
                             <Pencil className="size-3.5" />
                           </Button>
-                          <Button onClick={() => handleDeleteVehicle(v.id)} size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                          <Button
+                            onClick={() => handleDeleteVehicle(v.id)}
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          >
                             <Trash2 className="size-3.5" />
                           </Button>
                         </div>
                       </CardHeader>
-                      
+
                       <CardContent className="p-0">
                         {/* Vehicle extra info cells */}
                         {(v.chassisNumber || v.engineNumber || v.registrationDate) && (
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 border-b text-xs bg-muted/5">
                             {v.chassisNumber && (
                               <div>
-                                <span className="font-bold text-muted-foreground uppercase block text-[9px] tracking-wider mb-0.5">Chassis Number</span>
+                                <span className="font-bold text-muted-foreground uppercase block text-[9px] tracking-wider mb-0.5">
+                                  Chassis Number
+                                </span>
                                 <span className="font-mono font-medium">{v.chassisNumber}</span>
                               </div>
                             )}
                             {v.engineNumber && (
                               <div>
-                                <span className="font-bold text-muted-foreground uppercase block text-[9px] tracking-wider mb-0.5">Engine Number</span>
+                                <span className="font-bold text-muted-foreground uppercase block text-[9px] tracking-wider mb-0.5">
+                                  Engine Number
+                                </span>
                                 <span className="font-mono font-medium">{v.engineNumber}</span>
                               </div>
                             )}
                             {v.registrationDate && (
                               <div>
-                                <span className="font-bold text-muted-foreground uppercase block text-[9px] tracking-wider mb-0.5">Reg Date</span>
-                                <span>{new Date(v.registrationDate).toLocaleDateString("en-IN")}</span>
+                                <span className="font-bold text-muted-foreground uppercase block text-[9px] tracking-wider mb-0.5">
+                                  Reg Date
+                                </span>
+                                <span>
+                                  {new Date(v.registrationDate).toLocaleDateString("en-IN")}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -637,7 +1095,9 @@ export function ClientDetailWorkspace({
                                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-semibold text-sm">{serviceLabel(s.serviceType)}</span>
+                                      <span className="font-semibold text-sm">
+                                        {serviceLabel(s.serviceType)}
+                                      </span>
                                       <Badge variant="outline" className="text-[10px]">
                                         {s.taskStatus}
                                       </Badge>
@@ -658,22 +1118,95 @@ export function ClientDetailWorkspace({
                                   {/* Service-level accounting numbers */}
                                   <div className="flex items-center gap-4 text-xs font-mono">
                                     <div className="text-right">
-                                      <span className="text-[9px] text-muted-foreground block uppercase font-bold">Amt</span>
-                                      <span className="font-bold text-foreground">₹{s.serviceAmount}</span>
+                                      <span className="text-[9px] text-muted-foreground block uppercase font-bold">
+                                        Amt
+                                      </span>
+                                      <span className="font-bold text-foreground">
+                                        ₹{s.serviceAmount}
+                                      </span>
                                     </div>
                                     <div className="text-right">
-                                      <span className="text-[9px] text-green-700 block uppercase font-bold">Rec</span>
-                                      <span className="font-bold text-green-600">₹{s.amountReceived}</span>
+                                      <span className="text-[9px] text-green-700 block uppercase font-bold">
+                                        Rec
+                                      </span>
+                                      <span className="font-bold text-green-600">
+                                        ₹{s.amountReceived}
+                                      </span>
                                     </div>
                                     <div className="text-right">
-                                      <span className="text-[9px] text-red-700 block uppercase font-bold">Pend</span>
-                                      <span className="font-bold text-red-600">₹{s.pendingAmount}</span>
+                                      <span className="text-[9px] text-red-700 block uppercase font-bold">
+                                        Pend
+                                      </span>
+                                      <span className="font-bold text-red-600">
+                                        ₹{s.pendingAmount}
+                                      </span>
                                     </div>
                                     <div className="flex gap-1 ml-2">
-                                      <Button onClick={() => handleOpenServiceModal(v.id, s)} size="icon" variant="ghost" className="h-8 w-8">
+                                      <Button
+                                        onClick={() => {
+                                          const pdfTypeMap: Record<string, string> = {
+                                            Insurance: "insurance",
+                                            Fitness: "fitness",
+                                            "Gujarat Permit": "gujarat-permit",
+                                            "National Permit": "national-permit",
+                                            Tax: "tax",
+                                            PUC: "puc",
+                                            "License Renewal": "license-renew",
+                                            "RC Transfer": "rc-transfer",
+                                            "HP Termination": "hp-termination",
+                                          };
+                                          const type = pdfTypeMap[s.serviceType] || "insurance";
+                                          generatePDF(
+                                            type,
+                                            {
+                                              policyNumber: s.serviceNo || s.applicationNo || "—",
+                                              company: s.companyName || "—",
+                                              startDate: s.startDate || "—",
+                                              expiryDate: s.dueDate || s.expiryDate || "—",
+                                              premiumAmount: s.serviceAmount || 0,
+                                              status: s.taskStatus || "—",
+                                              assignee: s.assignedTo || "—",
+                                              remarks: s.notes || "—",
+                                              vehicleNumber: v.vehicleNumber || "—",
+                                              inspectionDate: s.startDate || "—",
+                                              paymentAmount: s.serviceAmount || 0,
+                                              paymentStatus: "Paid",
+                                              permitNo: s.serviceNo || "—",
+                                              amount: s.serviceAmount || 0,
+                                              period: s.period || "—",
+                                              paidAmount: s.amountReceived || 0,
+                                              pendingAmount: s.pendingAmount || 0,
+                                              pucNo: s.serviceNo || "—",
+                                              issueDate: s.startDate || "—",
+                                              licenseNo: s.serviceNo || "—",
+                                              licenseType: s.serviceType || "—",
+                                              applicantName: details.name || "—",
+                                              applicationNo: s.applicationNo || "—",
+                                            },
+                                            session?.username || "system",
+                                          );
+                                        }}
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8 text-red-600 hover:bg-red-50"
+                                        title="Generate Service PDF"
+                                      >
+                                        <Download className="size-3.5" />
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleOpenServiceModal(v.id, s)}
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8"
+                                      >
                                         <Pencil className="size-3.5" />
                                       </Button>
-                                      <Button onClick={() => handleDeleteService(s.id)} size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                                      <Button
+                                        onClick={() => handleDeleteService(s.id)}
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                      >
                                         <Trash2 className="size-3.5" />
                                       </Button>
                                     </div>
@@ -683,10 +1216,14 @@ export function ClientDetailWorkspace({
                                 {/* Interactive task tracking pipeline */}
                                 <div className="space-y-2 border-t pt-3">
                                   <div className="flex items-center justify-between text-xs mb-1">
-                                    <span className="font-semibold text-muted-foreground">Pipeline Progression:</span>
-                                    <span className="font-mono text-primary font-bold">{s.progress}% Complete</span>
+                                    <span className="font-semibold text-muted-foreground">
+                                      Pipeline Progression:
+                                    </span>
+                                    <span className="font-mono text-primary font-bold">
+                                      {s.progress}% Complete
+                                    </span>
                                   </div>
-                                  
+
                                   {/* Progress Bar steps indicator */}
                                   <div className="flex flex-wrap gap-2">
                                     {TASK_STAGES.map((stage) => {
@@ -718,86 +1255,203 @@ export function ClientDetailWorkspace({
                           )}
                         </div>
 
-                        {/* Vehicle Documents Section */}
+                        {/* Structured Vehicle Documents Section */}
                         <div className="border-t p-5 bg-muted/5 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                              <FileText className="size-4 text-primary" />
-                              Vehicle Documents
-                            </h4>
-                            <Button
-                              onClick={() => handleUploadDocument(v.id)}
-                              size="sm"
-                              variant="outline"
-                              className="h-8 text-xs font-semibold gap-1.5"
-                            >
-                              <Plus className="size-3.5" />
-                              Upload Document
-                            </Button>
+                          <h4 className="font-semibold text-sm text-foreground flex items-center gap-2 border-b pb-2">
+                            <FileText className="size-4 text-primary" />
+                            Vehicle Documents
+                          </h4>
+
+                          <div className="grid gap-3">
+                            {VEHICLE_DOC_SLOTS.map((slot) => {
+                              const docObj =
+                                vehicleDocs.find(
+                                  (d) => d.vehicleId === v.id && d.documentType === slot.key,
+                                ) || null;
+                              const progress = docProgress[`vehicle-${v.id}-${slot.key}`];
+                              return (
+                                <div
+                                  key={slot.key}
+                                  className="p-3 border rounded-lg bg-background flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:shadow-sm transition-all"
+                                >
+                                  <div className="space-y-0.5">
+                                    <span className="font-semibold text-xs text-foreground block">
+                                      {slot.label}
+                                    </span>
+                                    {docObj ? (
+                                      <div className="text-[11px] text-muted-foreground">
+                                        <p className="font-medium text-foreground truncate max-w-xs">
+                                          {docObj.fileName}
+                                        </p>
+                                        <p>
+                                          Uploaded by {docObj.uploadedBy} on{" "}
+                                          {new Date(docObj.uploadedAt).toLocaleDateString("en-IN")}
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[11px] text-muted-foreground block">
+                                        Not Uploaded
+                                      </span>
+                                    )}
+                                    {progress !== undefined && (
+                                      <div className="w-full max-w-[150px] mt-1.5">
+                                        <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full bg-primary transition-all duration-300"
+                                            style={{ width: `${progress}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {docObj && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 text-[11px] px-2 gap-1"
+                                          onClick={() => {
+                                            const isPdf = docObj.fileName
+                                              .toLowerCase()
+                                              .endsWith(".pdf");
+                                            setViewerDoc({
+                                              url: docObj.url,
+                                              name: `${v.vehicleNumber} - ${slot.label}`,
+                                              isPdf,
+                                            });
+                                          }}
+                                        >
+                                          <Eye className="size-3" /> View
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 text-[11px] px-2 gap-1"
+                                          onClick={() =>
+                                            handleDownloadDocument(docObj.url, docObj.fileName)
+                                          }
+                                        >
+                                          <Download className="size-3" /> Download
+                                        </Button>
+                                      </>
+                                    )}
+                                    <label className="h-7 px-2.5 rounded-md bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer flex items-center justify-center text-[11px] font-semibold gap-1 transition-colors">
+                                      <Upload className="size-3" />
+                                      {docObj ? "Replace" : "Upload"}
+                                      <input
+                                        type="file"
+                                        accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+                                        onChange={(e) => {
+                                          const file = e.currentTarget.files?.[0];
+                                          if (file) handleUploadVehicleDoc(v.id, slot.key, file);
+                                          e.currentTarget.value = "";
+                                        }}
+                                        className="hidden"
+                                      />
+                                    </label>
+                                    {docObj && (
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        disabled={!isAdmin}
+                                        title={
+                                          !isAdmin
+                                            ? "Only administrators can delete documents"
+                                            : "Delete document"
+                                        }
+                                        onClick={() => handleDeleteVehicleDoc(docObj)}
+                                      >
+                                        <Trash2 className="size-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
 
-                          {(!v.documents || !Array.isArray(v.documents) || v.documents.filter((doc: any) => doc && (doc.fileUrl || doc.url)).length === 0) ? (
-                            <div className="text-center py-6 border border-dashed rounded-lg bg-background/50">
-                              <p className="text-xs text-muted-foreground">No documents uploaded for this vehicle.</p>
-                            </div>
-                          ) : (
-                            <div className="grid gap-2">
-                              {v.documents
-                                .filter((doc: any) => doc && (doc.fileUrl || doc.url))
-                                .map((doc: any, index: number) => {
-                                  const docUrl = doc.fileUrl || doc.url;
-                                  const docName = doc.fileName || doc.name || "Document";
-                                  const docId = doc.id || `doc-${index}-${docName}`;
-                                  const docType = doc.fileType || (docUrl.toLowerCase().includes(".pdf") ? "pdf" : "image");
-                                  const storagePath = doc.storagePath || "";
+                          {/* Backward Compatibility: Display Legacy Documents if any exist */}
+                          {v.documents &&
+                            Array.isArray(v.documents) &&
+                            v.documents.filter((doc: any) => doc && (doc.fileUrl || doc.url))
+                              .length > 0 && (
+                              <div className="mt-4 pt-4 border-t border-dashed">
+                                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide block mb-2">
+                                  Legacy Documents
+                                </span>
+                                <div className="grid gap-2">
+                                  {v.documents
+                                    .filter((doc: any) => doc && (doc.fileUrl || doc.url))
+                                    .map((doc: any, index: number) => {
+                                      const docUrl = doc.fileUrl || doc.url;
+                                      const docName = doc.fileName || doc.name || "Document";
+                                      const docId = doc.id || `doc-${index}-${docName}`;
+                                      const docType =
+                                        doc.fileType ||
+                                        (docUrl.toLowerCase().includes(".pdf") ? "pdf" : "image");
+                                      const storagePath = doc.storagePath || "";
 
-                                  return (
-                                    <div key={docId} className="flex items-center justify-between p-3 border rounded-lg bg-background hover:shadow-sm transition-all gap-4">
-                                      <div className="flex items-center gap-2.5 min-w-0">
-                                        <FileText className="size-4 text-muted-foreground shrink-0" />
-                                        <span className="text-xs font-medium truncate text-foreground" title={docName}>
-                                          {docName}
-                                        </span>
-                                        {doc.uploadedAt && (
-                                          <span className="text-[10px] text-muted-foreground hidden sm:inline shrink-0">
-                                            • {new Date(doc.uploadedAt).toLocaleDateString("en-IN")}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-8 w-8 hover:bg-muted"
-                                          onClick={() => setPreviewDoc({ url: docUrl, type: docType, name: docName })}
-                                          title="View Document"
+                                      return (
+                                        <div
+                                          key={docId}
+                                          className="flex items-center justify-between p-2.5 border border-dashed rounded-lg bg-background gap-3"
                                         >
-                                          <Eye className="size-3.5" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-8 w-8 hover:bg-muted"
-                                          onClick={() => handleDownloadDocument(docUrl, docName)}
-                                          title="Download Document"
-                                        >
-                                          <Download className="size-3.5" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                          onClick={() => handleDeleteDocument(v.id, docId, storagePath)}
-                                          title="Delete Document"
-                                        >
-                                          <Trash2 className="size-3.5" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          )}
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <FileText className="size-3.5 text-muted-foreground shrink-0" />
+                                            <span
+                                              className="text-xs truncate text-muted-foreground"
+                                              title={docName}
+                                            >
+                                              {docName}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 hover:bg-muted"
+                                              onClick={() =>
+                                                setViewerDoc({
+                                                  url: docUrl,
+                                                  name: docName,
+                                                  isPdf: docType === "pdf",
+                                                })
+                                              }
+                                              title="View Document"
+                                            >
+                                              <Eye className="size-3" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 hover:bg-muted"
+                                              onClick={() =>
+                                                handleDownloadDocument(docUrl, docName)
+                                              }
+                                              title="Download Document"
+                                            >
+                                              <Download className="size-3" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                              onClick={() =>
+                                                handleDeleteDocument(v.id, docId, storagePath)
+                                              }
+                                              title="Delete Document"
+                                            >
+                                              <Trash2 className="size-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            )}
                         </div>
                       </CardContent>
                     </Card>
@@ -820,24 +1474,25 @@ export function ClientDetailWorkspace({
             <DialogTitle className="truncate">{previewDoc?.name || "Document Preview"}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-auto flex items-center justify-center bg-muted/20 rounded-lg mt-2 relative">
-            {previewDoc && (
-              previewDoc.type === "pdf" ? (
+            {previewDoc &&
+              (previewDoc.type === "pdf" ? (
                 <iframe
-                  src={previewDoc.url}
+                  src={previewDoc?.url || ""}
                   className="w-full h-full border-0 rounded-lg"
-                  title={previewDoc.name}
+                  title={previewDoc?.name || "Document"}
                 />
               ) : (
                 <img
-                  src={previewDoc.url}
-                  alt={previewDoc.name}
+                  src={previewDoc?.url || ""}
+                  alt={previewDoc?.name || "Document"}
                   className="max-w-full max-h-full object-contain rounded-lg shadow-md"
                 />
-              )
-            )}
+              ))}
           </div>
           <DialogFooter className="pt-2 border-t mt-2 flex justify-between items-center sm:justify-between">
-            <span className="text-xs text-muted-foreground">Type: {previewDoc?.type?.toUpperCase() || ""}</span>
+            <span className="text-xs text-muted-foreground">
+              Type: {previewDoc?.type?.toUpperCase() || ""}
+            </span>
             <Button onClick={() => setPreviewDoc(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
@@ -909,7 +1564,9 @@ export function ClientDetailWorkspace({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditClientOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditClientOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleSaveClient}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
@@ -926,7 +1583,9 @@ export function ClientDetailWorkspace({
               <Label className="text-xs font-bold uppercase">Vehicle Number</Label>
               <Input
                 value={vehicleForm.vehicleNumber || ""}
-                onChange={(e) => setVehicleForm({ ...vehicleForm, vehicleNumber: e.target.value.toUpperCase() })}
+                onChange={(e) =>
+                  setVehicleForm({ ...vehicleForm, vehicleNumber: e.target.value.toUpperCase() })
+                }
                 placeholder="e.g. MH12AB1234"
               />
             </div>
@@ -957,7 +1616,9 @@ export function ClientDetailWorkspace({
               <Input
                 type="date"
                 value={vehicleForm.registrationDate || ""}
-                onChange={(e) => setVehicleForm({ ...vehicleForm, registrationDate: e.target.value })}
+                onChange={(e) =>
+                  setVehicleForm({ ...vehicleForm, registrationDate: e.target.value })
+                }
               />
             </div>
             <div className="space-y-1">
@@ -979,7 +1640,9 @@ export function ClientDetailWorkspace({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setVehicleModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setVehicleModalOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleSaveVehicle}>Save Vehicle</Button>
           </DialogFooter>
         </DialogContent>
@@ -1024,7 +1687,9 @@ export function ClientDetailWorkspace({
                 <Input
                   type="number"
                   value={serviceForm.serviceAmount ?? ""}
-                  onChange={(e) => setServiceForm({ ...serviceForm, serviceAmount: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setServiceForm({ ...serviceForm, serviceAmount: Number(e.target.value) })
+                  }
                 />
               </div>
               <div className="space-y-1">
@@ -1032,7 +1697,9 @@ export function ClientDetailWorkspace({
                 <Input
                   type="number"
                   value={serviceForm.amountReceived ?? ""}
-                  onChange={(e) => setServiceForm({ ...serviceForm, amountReceived: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setServiceForm({ ...serviceForm, amountReceived: Number(e.target.value) })
+                  }
                 />
               </div>
             </div>
@@ -1040,7 +1707,9 @@ export function ClientDetailWorkspace({
               <Label className="text-xs font-bold uppercase">Assigned Staff</Label>
               <Select
                 value={serviceForm.assignedStaff || "__none"}
-                onValueChange={(v: any) => setServiceForm({ ...serviceForm, assignedStaff: v === "__none" ? "" : v })}
+                onValueChange={(v: any) =>
+                  setServiceForm({ ...serviceForm, assignedStaff: v === "__none" ? "" : v })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Unassigned" />
@@ -1082,11 +1751,89 @@ export function ClientDetailWorkspace({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setServiceModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setServiceModalOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleSaveService}>Save Service</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Custom Structured Document Viewer Modal */}
+      {viewerDoc && (
+        <Dialog
+          open={!!viewerDoc}
+          onOpenChange={(open) => {
+            if (!open) {
+              setViewerDoc(null);
+              setZoom(1);
+            }
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col p-6">
+            <DialogHeader className="flex flex-row items-center justify-between border-b pb-3 mb-4 flex-wrap gap-2">
+              <div>
+                <DialogTitle className="text-lg font-bold">
+                  {viewerDoc?.name || "Document Viewer"}
+                </DialogTitle>
+              </div>
+              <div className="flex items-center gap-2 pr-6">
+                {!viewerDoc?.isPdf && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))}
+                    >
+                      Zoom -
+                    </Button>
+                    <span className="text-xs font-semibold px-2">{Math.round(zoom * 100)}%</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
+                    >
+                      Zoom +
+                    </Button>
+                  </>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    handleDownloadDocument(viewerDoc?.url || "", viewerDoc?.name || "document")
+                  }
+                >
+                  <Download className="size-4 mr-1.5" />
+                  Download
+                </Button>
+              </div>
+            </DialogHeader>
+            <div className="flex-1 min-h-[50vh] flex items-center justify-center bg-muted/20 rounded-xl border p-4 overflow-auto">
+              {viewerDoc?.isPdf ? (
+                <iframe
+                  src={`${viewerDoc?.url || ""}#toolbar=0&navpanes=0`}
+                  className="w-full h-[65vh] rounded-lg border shadow-inner"
+                  title={viewerDoc?.name || "Document"}
+                />
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center transition-transform duration-200"
+                  style={{ transform: `scale(${zoom})` }}
+                >
+                  <img
+                    src={viewerDoc?.url || ""}
+                    alt={viewerDoc?.name || "Document"}
+                    className="max-h-[60vh] object-contain rounded-lg shadow-md cursor-zoom-in"
+                    onClick={() => {
+                      setZoom((z) => (z === 1 ? 1.8 : 1));
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

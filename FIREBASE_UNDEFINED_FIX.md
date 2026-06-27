@@ -10,9 +10,11 @@
 ## ROOT CAUSE ANALYSIS
 
 ### The Problem
+
 Firestore **does not allow undefined values** in documents. When you send an object with `undefined` fields to `setDoc()`, Firestore rejects it.
 
 ### Where the Error Occurred
+
 **File:** `src/lib/tasks.ts`  
 **Function:** `createManualTask()` (line 345)  
 **Root Cause:** The function was building a Task object with optional fields that could be `undefined`, then sending the entire object to Firestore via `setDoc()`.
@@ -22,23 +24,24 @@ Firestore **does not allow undefined values** in documents. When you send an obj
 ## EXACT OFFENDING FIELDS
 
 ### In createManualTask() - BEFORE:
+
 ```typescript
 // Line 368-377: Building task object with potentially undefined fields
 const task: Task = {
   id,
   title: input.title,
-  description: input.description ?? "",        // ✅ Safe (defaults to "")
+  description: input.description ?? "", // ✅ Safe (defaults to "")
   assignee: input.assignee,
   status: "Assigned",
   priority: input.priority,
   done: false,
   createdAt: now,
   createdBy: input.createdBy,
-  dueDate: input.dueDate,                      // ❌ UNDEFINED WHEN dueDate NOT SET
-  reminderMinutes: input.reminderMinutes,      // ❌ UNDEFINED WHEN reminderMinutes NOT SET
+  dueDate: input.dueDate, // ❌ UNDEFINED WHEN dueDate NOT SET
+  reminderMinutes: input.reminderMinutes, // ❌ UNDEFINED WHEN reminderMinutes NOT SET
   associationType: input.associationType,
-  bucket: input.bucket,                         // ❌ UNDEFINED WHEN associationType IS "none"
-  recordId: input.recordId,                     // ❌ UNDEFINED WHEN associationType IS "none"
+  bucket: input.bucket, // ❌ UNDEFINED WHEN associationType IS "none"
+  recordId: input.recordId, // ❌ UNDEFINED WHEN associationType IS "none"
   manual: true,
   subtasks: [],
   progress: 0,
@@ -51,32 +54,33 @@ const task: Task = {
 };
 
 // Line 383-385: SENDING ENTIRE OBJECT TO FIRESTORE
-const { id: _id, ...data } = task;              // ❌ data still has undefined fields
-await setDoc(doc(db, COL, id), data);           // ❌ Firestore rejects undefined values
+const { id: _id, ...data } = task; // ❌ data still has undefined fields
+await setDoc(doc(db, COL, id), data); // ❌ Firestore rejects undefined values
 ```
 
 ### In Form Input (dashboard.tasks.tsx line 606-611) - SENDING undefined:
+
 ```typescript
 // Form builds parameters with potentially undefined values:
 const dueIso = dueDate ? new Date(...).toISOString() : undefined;  // ❌ undefined
-const bucket: Bucket | undefined = associationType === "client" 
-  ? "clients" 
-  : associationType === "lead" 
-    ? "leads" 
+const bucket: Bucket | undefined = associationType === "client"
+  ? "clients"
+  : associationType === "lead"
+    ? "leads"
     : undefined;  // ❌ undefined when "none"
 
 const rec = associationType === "none" ? undefined : recordId || undefined;  // ❌ undefined
 
 // Line 621-626: PASSING TO createManualTask WITH UNDEFINED VALUES
 const task = await createManualTask({
-  title: title.trim(), 
+  title: title.trim(),
   description,           // Could be ""
-  assignee, 
-  priority, 
+  assignee,
+  priority,
   status,
   dueDate: dueIso,       // ❌ UNDEFINED when no due date set
   reminderMinutes: Number(reminderMinutes) || 0,
-  associationType, 
+  associationType,
   bucket,                // ❌ UNDEFINED when associationType is "none"
   recordId: rec,         // ❌ UNDEFINED when associationType is "none"
   createdBy: actor,
@@ -84,6 +88,7 @@ const task = await createManualTask({
 ```
 
 ### In syncTaskFromRecord() - BEFORE:
+
 ```typescript
 // Line 592-603: Task object missing required fields
 const task: Task = {
@@ -110,7 +115,7 @@ const task: Task = {
 };
 
 const { id: _id, ...data } = task;
-await setDoc(doc(db, COL, id), data);  // ❌ Sends undefined fields
+await setDoc(doc(db, COL, id), data); // ❌ Sends undefined fields
 ```
 
 ---
@@ -120,6 +125,7 @@ await setDoc(doc(db, COL, id), data);  // ❌ Sends undefined fields
 Firestore best practice: **Only include fields that have actual values.**
 
 ### Fix 1: createManualTask() - AFTER:
+
 ```typescript
 // Build task object as before (for in-memory use)
 const task: Task = {
@@ -169,7 +175,7 @@ const data = {
   lastUpdatedBy: task.lastUpdatedBy,
   lastUpdatedAt: task.lastUpdatedAt,
   activityLogs: task.activityLogs,
-  
+
   // Optional fields - only include if they have values
   ...(task.dueDate ? { dueDate: task.dueDate } : {}),
   ...(task.reminderMinutes !== undefined ? { reminderMinutes: task.reminderMinutes } : {}),
@@ -177,10 +183,11 @@ const data = {
   ...(task.recordId ? { recordId: task.recordId } : {}),
 };
 
-await setDoc(doc(db, COL, id), data);  // ✅ SAFE: No undefined fields!
+await setDoc(doc(db, COL, id), data); // ✅ SAFE: No undefined fields!
 ```
 
 ### Fix 2: syncTaskFromRecord() - AFTER:
+
 ```typescript
 // Add lastUpdatedBy, lastUpdatedAt, activityLogs to task object
 const task: Task = {
@@ -202,9 +209,9 @@ const task: Task = {
   comments: [],
   attachments: [],
   activity: [activityEntry(actor, `Created from ${bucket}`)],
-  lastUpdatedBy: actor,      // ✅ NOW DEFINED
-  lastUpdatedAt: now,        // ✅ NOW DEFINED
-  activityLogs: [],          // ✅ NOW DEFINED
+  lastUpdatedBy: actor, // ✅ NOW DEFINED
+  lastUpdatedAt: now, // ✅ NOW DEFINED
+  activityLogs: [], // ✅ NOW DEFINED
 };
 
 // ✅ Build clean data object with only defined fields
@@ -231,7 +238,7 @@ const data = {
   activityLogs: task.activityLogs,
 };
 
-await setDoc(doc(db, COL, id), data);  // ✅ SAFE: No undefined fields!
+await setDoc(doc(db, COL, id), data); // ✅ SAFE: No undefined fields!
 ```
 
 ---
@@ -263,32 +270,37 @@ await setDoc(doc(db, COL, id), data);  // ✅ SAFE: No undefined fields!
 ## FIRESTORE BEST PRACTICES APPLIED
 
 ### Rule 1: Never Send Undefined to Firestore
+
 ❌ **Wrong:**
+
 ```typescript
 await setDoc(doc(db, "tasks", id), {
   title: "Task",
-  dueDate: undefined,  // ❌ Firestore error!
-  bucket: undefined,   // ❌ Firestore error!
+  dueDate: undefined, // ❌ Firestore error!
+  bucket: undefined, // ❌ Firestore error!
 });
 ```
 
 ✅ **Right:**
+
 ```typescript
 const data = {
   title: "Task",
-  ...(dueDate ? { dueDate } : {}),  // ✅ Omitted if undefined
-  ...(bucket ? { bucket } : {}),    // ✅ Omitted if undefined
+  ...(dueDate ? { dueDate } : {}), // ✅ Omitted if undefined
+  ...(bucket ? { bucket } : {}), // ✅ Omitted if undefined
 };
 await setDoc(doc(db, "tasks", id), data);
 ```
 
 ### Rule 2: null vs undefined
+
 - `undefined` = **NOT SENT** to Firestore (field doesn't exist)
 - `null` = **SENT** to Firestore (field exists with null value)
 
 Use conditional spreading to avoid `undefined` entirely.
 
 ### Rule 3: Always Initialize Optional Fields
+
 In memory, you can have `dueDate: undefined`, but don't send to Firestore.
 
 ---
@@ -298,11 +310,13 @@ In memory, you can have `dueDate: undefined`, but don't send to Firestore.
 **File:** `src/lib/tasks.ts`
 
 ### Function 1: createManualTask() (line 345)
+
 - **Change:** Added conditional spreading to exclude undefined optional fields
 - **Fields Protected:** dueDate, reminderMinutes, bucket, recordId
 - **Lines Modified:** 383-417
 
 ### Function 2: syncTaskFromRecord() (line 548)
+
 - **Change:** Added lastUpdatedBy, lastUpdatedAt, activityLogs to task object; added conditional spreading
 - **Fields Protected:** All fields explicitly defined before Firestore write
 - **Lines Modified:** 592-630
@@ -312,6 +326,7 @@ In memory, you can have `dueDate: undefined`, but don't send to Firestore.
 ## VERIFICATION
 
 ### Test Case 1: Create Task Without Due Date
+
 ```javascript
 // Form submits:
 {
@@ -351,6 +366,7 @@ In memory, you can have `dueDate: undefined`, but don't send to Firestore.
 ```
 
 ### Test Case 2: Create Task With All Fields
+
 ```javascript
 // Form submits with all fields:
 {
@@ -416,4 +432,3 @@ In memory, you can have `dueDate: undefined`, but don't send to Firestore.
 ✅ **Best Practice:** Always filter undefined before writing to Firestore
 
 The error **"FirebaseError: Unsupported field value: undefined"** is now resolved.
-

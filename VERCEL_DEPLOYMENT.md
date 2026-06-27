@@ -9,50 +9,61 @@ This project has been configured as a **Static SPA (Single Page Application)** f
 ## 📋 Changes Made for Vercel Compatibility
 
 ### 1. **vite.config.ts** - Vercel SPA Configuration
+
 **What Changed:**
+
 - Removed Cloudflare Workers-specific configuration
 - Configured TanStack Start for **client-side rendering only** (no SSR)
 - Disabled server entry point (`src/server.ts` is no longer compiled for production)
 - Set up Vite to generate a proper SPA structure with `index.html` as the entry point
 
 **Why:**
+
 - TanStack Start initially configured for Cloudflare Workers deployment (SSR model)
 - Vercel prefers static SPA deployment with client-side routing for Firebase-only backends
 - Simpler, faster deployment with better cold start performance
 - No backend server needed (Firebase handles all backend operations)
 
 ### 2. **package.json** - Removed Cloudflare Dependency
+
 **What Changed:**
+
 - Removed `@cloudflare/vite-plugin` from dependencies
 - Cleaned up Cloudflare-specific build tooling
 
 **Why:**
+
 - Cloudflare plugin only needed for Cloudflare Workers deployment
 - Vercel builds with Vite's standard configuration
 
 ### 3. **vercel.json** - New Deployment Configuration
+
 **What's Inside:**
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `buildCommand` | `bun run build` | Uses Bun package manager (already in use) |
-| `outputDirectory` | `dist/public/client` | Points to SPA build output |
-| `framework` | `vite` | Tells Vercel this is a Vite project |
-| `rewrites` | All routes → `/index.html` | Enables client-side routing |
-| `headers` | Cache control rules | Optimizes performance: assets cached 1 year, HTML revalidated always |
-| `env` | Firebase vars | Declares required environment variables |
+| Setting           | Value                      | Purpose                                                              |
+| ----------------- | -------------------------- | -------------------------------------------------------------------- |
+| `buildCommand`    | `bun run build`            | Uses Bun package manager (already in use)                            |
+| `outputDirectory` | `dist/public/client`       | Points to SPA build output                                           |
+| `framework`       | `vite`                     | Tells Vercel this is a Vite project                                  |
+| `rewrites`        | All routes → `/index.html` | Enables client-side routing                                          |
+| `headers`         | Cache control rules        | Optimizes performance: assets cached 1 year, HTML revalidated always |
+| `env`             | Firebase vars              | Declares required environment variables                              |
 
 **Key Routing Feature:**
+
 ```json
 "rewrites": [
   { "source": "/assets/:path*", "destination": "/assets/:path*" },  // Static assets bypass rewrite
   { "source": "/(.*)", "destination": "/index.html" }               // All other routes → SPA entry
 ]
 ```
+
 This ensures that routes like `/dashboard`, `/dashboard/tasks`, etc. are handled by React Router running in the browser.
 
 ### 4. **.vercelignore** - Build Optimization
+
 **Files Excluded from Deployment:**
+
 - Cloudflare configuration (`wrangler.jsonc`, `wrangler.lock`)
 - Development files (`.env`, `.git`)
 - Build cache and temporary files
@@ -62,11 +73,14 @@ This ensures that routes like `/dashboard`, `/dashboard/tasks`, etc. are handled
 **Result:** Faster deployments by skipping unnecessary files.
 
 ### 5. **.vercelenv.example** - Firebase Configuration Template
+
 **What It Is:**
+
 - **Template file** showing all required Firebase environment variables
 - **NOT an actual .env file** (should never be committed)
 
 **Variables Documented:**
+
 - `VITE_FIREBASE_API_KEY` - Public Firebase API key
 - `VITE_FIREBASE_AUTH_DOMAIN` - Firebase authentication domain
 - `VITE_FIREBASE_PROJECT_ID` - Firebase project ID
@@ -79,12 +93,14 @@ This ensures that routes like `/dashboard`, `/dashboard/tasks`, etc. are handled
 ## 🚀 Deployment Steps
 
 ### Step 1: Prepare Your Vercel Account
+
 ```bash
 # Make sure you have a Vercel account
 # Visit: https://vercel.com
 ```
 
 ### Step 2: Connect Your Repository
+
 ```bash
 # Option A: Push this repository to GitHub
 git add .
@@ -95,6 +111,7 @@ git push origin main
 ```
 
 ### Step 3: Set Environment Variables on Vercel
+
 1. Go to your Vercel project dashboard
 2. Click **Settings** → **Environment Variables**
 3. Add each Firebase variable from your Firebase project settings:
@@ -109,12 +126,14 @@ VITE_FIREBASE_APP_ID=xxx
 ```
 
 **How to Get These Values:**
+
 1. Go to Firebase Console: https://console.firebase.google.com
 2. Select your project
 3. Click ⚙️ **Settings** → **Project settings**
 4. Copy values from your `firebaseConfig` object
 
 ### Step 4: Deploy
+
 ```bash
 # Vercel auto-deploys on push to main/production branch
 # Or manually trigger through dashboard
@@ -131,6 +150,7 @@ https://your-project.vercel.app/dashboard/tasks
 ## ✨ What Now Works
 
 ### Routes (All SPA Client-Side Routing)
+
 ✅ `/` - Home page  
 ✅ `/dashboard` - Main dashboard  
 ✅ `/dashboard/tasks` - Tasks management  
@@ -139,9 +159,10 @@ https://your-project.vercel.app/dashboard/tasks
 ✅ `/dashboard/analytics` - Analytics/reports  
 ✅ `/dashboard/leads` - Leads management  
 ✅ `/dashboard/service/[type]` - Service-specific dashboards  
-✅ All other routes defined in `src/routes/`  
+✅ All other routes defined in `src/routes/`
 
 ### Features
+
 ✅ Firebase Authentication (client-side)  
 ✅ Firestore database operations  
 ✅ Firebase Storage file uploads  
@@ -149,27 +170,32 @@ https://your-project.vercel.app/dashboard/tasks
 ✅ All UI components and styling  
 ✅ PDF generation and downloads  
 ✅ WhatsApp integration  
-✅ Analytics and reporting  
+✅ Analytics and reporting
 
 ---
 
 ## 🔒 Security Notes
 
 ### Firebase Configuration is Public
+
 **All environment variables are prefixed with `VITE_` meaning they're embedded in client-side code.**
 
 ✅ **This is OK because:**
+
 - Firebase API keys are intentionally public
 - They only allow operations permitted by your Firestore/Storage rules
 - Real security is in your Firestore rules and Storage rules
 
 ❌ **Never store in client-side code:**
+
 - Service account keys
 - Admin API keys
 - Private API credentials
 
 ### Firestore Rules
+
 Ensure your `firestore.rules` properly validates:
+
 - Authentication status (`request.auth != null`)
 - User permissions (role-based access)
 - Data validation (required fields, types)
@@ -199,6 +225,7 @@ Vercel deploys only `dist/public/client/` as specified in `vercel.json`.
 ## 🧪 Local Testing Before Deployment
 
 ### 1. Test Build
+
 ```bash
 bun run build
 # Should complete without errors
@@ -206,6 +233,7 @@ bun run build
 ```
 
 ### 2. Test Preview
+
 ```bash
 bun run preview
 # Should serve app at http://localhost:4173
@@ -213,6 +241,7 @@ bun run preview
 ```
 
 ### 3. Test TypeScript
+
 ```bash
 npx tsc --noEmit
 # Should report: "No output"
@@ -220,6 +249,7 @@ npx tsc --noEmit
 ```
 
 ### 4. Test Linting
+
 ```bash
 bun run lint
 # Check for any code issues
@@ -230,21 +260,27 @@ bun run lint
 ## ⚠️ Troubleshooting
 
 ### Issue: 404 on Routes Like `/dashboard`
+
 **Solution:** Routes rewritten to `/index.html` by `vercel.json`. If this still happens:
+
 1. Check `vercel.json` exists in root
 2. Check `outputDirectory` is `dist/public/client`
 3. Check `rewrites` section is configured
 4. Redeploy with `vercel --prod --force`
 
 ### Issue: Firebase Variables Not Loading
+
 **Solution:**
+
 1. Add all 6 Firebase environment variables to Vercel project settings
 2. Verify they're all prefixed with `VITE_`
 3. Check variable names match `vite-env.d.ts` or Firebase config file
 4. Redeploy after adding variables (don't use old builds)
 
 ### Issue: Build Fails with Package Errors
+
 **Solution:**
+
 ```bash
 # Clear cache and reinstall
 rm -rf node_modules dist
@@ -253,7 +289,9 @@ bun run build
 ```
 
 ### Issue: CSS/Styling Not Applied
+
 **Solution:**
+
 1. Check `tailwindcss` is in dependencies (it is)
 2. Clear browser cache (Ctrl+Shift+Delete / Cmd+Shift+Delete)
 3. Check network tab for CSS file loading
@@ -264,15 +302,18 @@ bun run build
 ## 📦 Files Modified vs Created
 
 ### Modified Files
+
 1. **vite.config.ts** - Removed Cloudflare, configured for Vercel SPA
 2. **package.json** - Removed `@cloudflare/vite-plugin`
 3. **vercel.json** - Replaced simple rewrite with full SPA + Firebase config
 
 ### New Files
+
 1. **.vercelignore** - Optimization rules for Vercel builds
 2. **.vercelenv.example** - Documentation of required env vars
 
 ### NOT Modified (Should Still Work)
+
 - All source code in `src/` (routes, components, hooks, lib)
 - Firestore/Firebase integration code
 - UI components and styling
@@ -286,17 +327,21 @@ bun run build
 ### Vercel Cache Headers (Configured in vercel.json)
 
 **Static Assets (`/assets/*`):**
+
 ```
 Cache-Control: public, max-age=31536000, immutable
 ```
+
 - 1-year cache (31,536,000 seconds)
 - Only changed if filename changes (Vite content-hash)
 - Massive performance boost
 
 **HTML Entry Point (`/index.html`):**
+
 ```
 Cache-Control: public, max-age=0, must-revalidate
 ```
+
 - Always validate (always check for updates)
 - Ensures users get latest app version
 - SPA still works offline with service worker (if implemented)

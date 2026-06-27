@@ -3,6 +3,7 @@
 ## Architecture Overview
 
 ### Component Hierarchy
+
 ```
 RecordTable (src/components/RecordTable.tsx)
 ├── DuplicateDetectionDialog (src/components/DuplicateDetectionDialog.tsx)
@@ -20,6 +21,7 @@ Dashboard Routes
 ## Duplicate Detection Implementation
 
 ### Files Involved
+
 - `src/components/DuplicateDetectionDialog.tsx` - UI Component
 - `src/hooks/useDuplicateDetection.ts` - Hook for logic
 - `src/lib/records.ts` - Database query function
@@ -43,10 +45,10 @@ Filter out isDeleted records
 If duplicates exist:
     Show DuplicateDetectionDialog
     Wait for user action
-    
+
 If user clicks Cancel:
     Return (abort)
-    
+
 If user clicks Continue:
     Create activity log: "Duplicate warning overridden"
     Execute onSave() callback
@@ -57,6 +59,7 @@ If user clicks Continue:
 ### Code Examples
 
 #### Using the Hook
+
 ```typescript
 const {
   duplicateDialogOpen,
@@ -87,6 +90,7 @@ await checkAndSave(
 ```
 
 #### Query Function
+
 ```typescript
 export async function checkForDuplicates(
   bucket: Bucket,
@@ -94,26 +98,28 @@ export async function checkForDuplicates(
   work: string,
 ): Promise<RegistryRecord[]> {
   if (!mvNo || !work) return [];
-  
+
   const q = query(
     collection(db, colFor(bucket)),
     where("mvNo", "==", mvNo),
     where("work", "==", work),
   );
-  
+
   const snap = await getDocs(q);
   return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
-    .filter((r) => !r.isDeleted);  // Exclude soft-deleted
+    .map((d) => ({ id: d.id, ...d.data() }) as RegistryRecord)
+    .filter((r) => !r.isDeleted); // Exclude soft-deleted
 }
 ```
 
 ### Firestore Queries
+
 - Collection: `registry_clients`, `registry_leads`, `registry_customers`
 - Query: `where("mvNo", "==", X) AND where("work", "==", Y)`
 - Filter: Exclude records where `isDeleted === true`
 
 ### Activity Logging
+
 ```typescript
 // When user continues with duplicate
 const activity = createActivity(
@@ -131,6 +137,7 @@ const activity = createActivity(
 ## Secure Delete System Implementation
 
 ### Files Involved
+
 - `src/components/DeleteRecordDialog.tsx` - Admin delete dialog
 - `src/components/DeleteTaskDialog.tsx` - Task delete dialog
 - `src/lib/records.ts` - softDeleteRecord() function
@@ -142,25 +149,25 @@ const activity = createActivity(
 ```
 Dialog Open
     ↓
-Step: "verify" 
+Step: "verify"
     → User enters PIN
     → Verify PIN matches "1234"
     → If correct: move to "reason"
     → If incorrect: show error, stay on "verify"
-    
+
 Step: "reason"
     → User selects delete reason
     → Dropdown with 4 options
     → If selected: move to "confirm"
     → If not selected: show error, stay on "reason"
-    
+
 Step: "confirm"
     → Show confirmation with details
     → User reviews record name, reason, username
     → Click Delete Record → Execute softDelete()
     → Show loading state
     → Close dialog on success
-    
+
 Any Step: Cancel
     → Close dialog
     → Reset all state
@@ -169,6 +176,7 @@ Any Step: Cancel
 ### Code Examples
 
 #### Delete Button Integration
+
 ```typescript
 <Button
   variant="ghost"
@@ -187,6 +195,7 @@ const initiateDelete = (r: RegistryRecord) => {
 ```
 
 #### Soft Delete Function
+
 ```typescript
 export async function softDeleteRecord(
   bucket: Bucket,
@@ -195,14 +204,8 @@ export async function softDeleteRecord(
   reason: DeleteReason,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const deleteLog = createActivity(
-    actor,
-    "Record deleted",
-    "deleteReason",
-    "",
-    reason,
-  );
-  
+  const deleteLog = createActivity(actor, "Record deleted", "deleteReason", "", reason);
+
   await updateDoc(doc(db, colFor(bucket), id), {
     isDeleted: true,
     deletedAt: now,
@@ -214,6 +217,7 @@ export async function softDeleteRecord(
 ```
 
 #### Dialog Component Structure
+
 ```typescript
 interface DeleteRecordDialogProps {
   open: boolean;
@@ -236,6 +240,7 @@ type DialogStep = "verify" | "reason" | "confirm"
 ```
 
 ### Firestore Update
+
 - Document: `registry_clients/{id}`, `registry_leads/{id}`, `registry_tasks/{id}`
 - Operation: `updateDoc()`
 - Fields Updated:
@@ -246,6 +251,7 @@ type DialogStep = "verify" | "reason" | "confirm"
   - `activityLogs: arrayUnion(deleteLog)`
 
 ### Data Filtering
+
 ```typescript
 // In subscribeToRecords()
 export function subscribeToRecords(
@@ -255,8 +261,8 @@ export function subscribeToRecords(
   const q = query(collection(db, colFor(bucket)), orderBy("srNo"));
   return onSnapshot(q, (snap) => {
     const records = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
-      .filter((r) => !r.isDeleted);  // ← Key filtering
+      .map((d) => ({ id: d.id, ...d.data() }) as RegistryRecord)
+      .filter((r) => !r.isDeleted); // ← Key filtering
     cb(records);
   });
 }
@@ -267,6 +273,7 @@ export function subscribeToRecords(
 ## Group Name Field Implementation
 
 ### Files Involved
+
 - `src/lib/records.ts` - Interface update
 - `src/components/RecordTable.tsx` - Form field and table column
 - `src/lib/activity.ts` - Activity tracking (already existing)
@@ -288,10 +295,10 @@ export interface RegistryRecord {
   fitness: string;
   tax: string;
   co: string;
-  
+
   // NEW FIELD
-  groupName?: string;  // Optional, for backward compatibility
-  
+  groupName?: string; // Optional, for backward compatibility
+
   // Existing fields...
   assignee?: string;
   lastUpdatedBy?: string;
@@ -314,7 +321,7 @@ export interface RegistryRecord {
 
 // Tracking changes
 // When saved, if groupName changes from "X" to "Y":
-// Activity entry created: 
+// Activity entry created:
 // {
 //   action: "Updated groupName",
 //   oldValue: "X",
@@ -402,6 +409,7 @@ export function createActivity(
 ### Where Activities Are Created
 
 #### 1. Record Save (Field Changes)
+
 ```typescript
 // src/lib/records.ts - saveRecord()
 const tracked = ["status", "assignee", "priority", "work", "application"];
@@ -410,19 +418,14 @@ for (const field of tracked) {
   const newVal = (record as any)[field];
   if (oldVal !== newVal && newVal !== undefined && newVal !== "") {
     activities.push(
-      createActivity(
-        actor,
-        `Updated ${field}`,
-        field,
-        String(oldVal ?? "—"),
-        String(newVal),
-      ),
+      createActivity(actor, `Updated ${field}`, field, String(oldVal ?? "—"), String(newVal)),
     );
   }
 }
 ```
 
 #### 2. Duplicate Override
+
 ```typescript
 // src/hooks/useDuplicateDetection.ts
 const activity = createActivity(
@@ -435,15 +438,10 @@ const activity = createActivity(
 ```
 
 #### 3. Record Deletion
+
 ```typescript
 // src/lib/records.ts - softDeleteRecord()
-const deleteLog = createActivity(
-  actor,
-  "Record deleted",
-  "deleteReason",
-  "",
-  reason,
-);
+const deleteLog = createActivity(actor, "Record deleted", "deleteReason", "", reason);
 ```
 
 ### Activity Log Storage
@@ -454,7 +452,7 @@ const deleteLog = createActivity(
   id: "record-123",
   mvNo: "MV10001",
   // ... other fields ...
-  
+
   activityLogs: [
     {
       id: "uuid-1",
@@ -492,17 +490,9 @@ const deleteLog = createActivity(
 
 ```typescript
 // src/lib/records.ts
-export type DeleteReason = 
-  | "Duplicate Entry"
-  | "Wrong Customer"
-  | "Testing Data"
-  | "Other";
+export type DeleteReason = "Duplicate Entry" | "Wrong Customer" | "Testing Data" | "Other";
 
-export type RecordStatus = 
-  | "Pending"
-  | "In Progress"
-  | "Completed"
-  | "On Hold";
+export type RecordStatus = "Pending" | "In Progress" | "Completed" | "On Hold";
 
 export type Bucket = "clients" | "leads" | "customers";
 
@@ -531,16 +521,19 @@ export type StaffUser = {
 ## Performance Considerations
 
 ### Queries
+
 - `checkForDuplicates()`: Indexed query (mvNo + work)
 - Only active records queried (filtered post-query)
 - Firestore optimizes for multi-where queries
 
 ### UI Rendering
+
 - `useMemo` for filtered records (prevents re-render)
 - Dialogs use controlled state (React best practices)
 - Activity logs appended (not full replacement)
 
 ### Database Operations
+
 - Soft delete uses `updateDoc()` (smaller payload)
 - Activity logs use `arrayUnion()` (atomic append)
 - No cascading deletes (clean architecture)
@@ -550,6 +543,7 @@ export type StaffUser = {
 ## Error Handling
 
 ### Duplicate Detection
+
 ```typescript
 try {
   const dups = await checkForDuplicates(bucket, mvNo, work);
@@ -562,24 +556,24 @@ try {
 ```
 
 ### Delete Operations
+
 ```typescript
 try {
   await softDeleteRecord(bucket, recordId, username, reason);
   handleClose();
   onSuccess?.();
 } catch (err) {
-  setError(
-    `Failed to delete record: ${err instanceof Error ? err.message : "Unknown error"}`
-  );
+  setError(`Failed to delete record: ${err instanceof Error ? err.message : "Unknown error"}`);
 }
 ```
 
 ### Form Validation
+
 ```typescript
 const handleVerifyPin = () => {
   if (pin !== ADMIN_PIN) {
     setError("Invalid PIN. Please try again.");
-    return;  // Don't proceed
+    return; // Don't proceed
   }
   setError("");
   setStep("reason");
@@ -591,18 +585,21 @@ const handleVerifyPin = () => {
 ## Testing Considerations
 
 ### Unit Tests (Recommended)
+
 - `checkForDuplicates()` with various scenarios
 - `softDeleteRecord()` updates correct fields
 - `createActivity()` generates valid entries
 - `useDuplicateDetection` state transitions
 
 ### Integration Tests (Recommended)
+
 - Full duplicate detection flow
 - Complete delete process (all steps)
 - Group name search filtering
 - Activity logging accuracy
 
 ### E2E Tests (Recommended)
+
 - User can create record with duplicate warning
 - Admin can delete record with PIN
 - Staff cannot access delete
@@ -613,17 +610,20 @@ const handleVerifyPin = () => {
 ## Security Notes
 
 ### Admin PIN
+
 - ⚠️ Currently hardcoded as "1234"
 - Should be moved to secure config
 - Consider multi-factor auth in future
 - PIN never logged in activity logs
 
 ### Role-Based Access
+
 - Delete restricted to `role === "admin"`
 - Enforced client-side and server-side
 - Staff cannot modify delete buttons
 
 ### Soft Delete Safety
+
 - Records never permanently removed
 - Deletions audited with reason
 - Admin can review deletions

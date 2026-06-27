@@ -18,7 +18,9 @@ function oklchToRgb(colorStr: string): string {
     ctx.fillStyle = colorStr;
     ctx.fillRect(0, 0, 1, 1);
     const data = ctx.getImageData(0, 0, 1, 1).data;
-    console.log(`[PDF] Dynamically resolved color: ${colorStr} -> rgb(${data[0]}, ${data[1]}, ${data[2]})`);
+    console.log(
+      `[PDF] Dynamically resolved color: ${colorStr} -> rgb(${data[0]}, ${data[1]}, ${data[2]})`,
+    );
     return `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
   } catch (e) {
     console.warn("[PDF] Failed to convert color:", colorStr, e);
@@ -29,7 +31,7 @@ function oklchToRgb(colorStr: string): string {
 // Convert unsupported color functions in a style string
 function sanitizeCssText(cssText: string): string {
   let sanitized = cssText;
-  
+
   const oklchRegex = /oklch\([^)]+\)/gi;
   sanitized = sanitized.replace(oklchRegex, (match) => oklchToRgb(match));
 
@@ -42,7 +44,7 @@ function sanitizeCssText(cssText: string): string {
 export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanvasElement> {
   console.log("[PDF] Render Started");
   console.log("[PDF] Data Loaded");
-  
+
   // Step 2 Logs
   console.log("[PDF] Invoice Data", invoice);
   console.log("[PDF] Client", invoice.clientName);
@@ -111,7 +113,7 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
 
   console.log("[PDF] Template Found");
   console.log("[PDF] Captured element HTML length:", invoiceRef.current.innerHTML.length);
-  
+
   if (invoiceRef.current.innerHTML.trim().length === 0) {
     root.unmount();
     container.remove();
@@ -128,8 +130,10 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
 
   // Disable all other stylesheets to prevent html2canvas parsing errors
   const originalDisabled = new Map<HTMLStyleElement | HTMLLinkElement, boolean>();
-  const styleAndLinkElements = Array.from(document.querySelectorAll("style, link[rel='stylesheet']")) as (HTMLStyleElement | HTMLLinkElement)[];
-  
+  const styleAndLinkElements = Array.from(
+    document.querySelectorAll("style, link[rel='stylesheet']"),
+  ) as (HTMLStyleElement | HTMLLinkElement)[];
+
   for (const el of styleAndLinkElements) {
     if (el === styleElement) continue;
     originalDisabled.set(el, el.disabled);
@@ -150,18 +154,21 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
     });
 
     console.log("[PDF] Canvas Created");
-    
+
     // Restore style sheets
     for (const [el, wasDisabled] of originalDisabled.entries()) {
       el.disabled = wasDisabled;
     }
-    
+
     root.unmount();
     container.remove();
     return canvas;
   } catch (error) {
-    console.warn("[PDF] html2canvas error encountered, attempting fallback sanitization route", error);
-    
+    console.warn(
+      "[PDF] html2canvas error encountered, attempting fallback sanitization route",
+      error,
+    );
+
     // Fallback: If it failed, let's restore sheets first
     for (const [el, wasDisabled] of originalDisabled.entries()) {
       el.disabled = wasDisabled;
@@ -209,9 +216,9 @@ export async function renderInvoiceToCanvas(invoice: Invoice): Promise<HTMLCanva
 
       root.unmount();
       container.remove();
-      throw new Error(`Failed to render invoice to canvas: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+      throw new Error(
+        `Failed to render invoice to canvas: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+      );
     }
   }
 }
-
-

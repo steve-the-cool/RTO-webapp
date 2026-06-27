@@ -1,5 +1,12 @@
 // All Clients — Aggregates client data from all buckets with service history and metrics.
-import { subscribeToRecords, getRecordServiceDetails, getRecordServiceAmount, getRecordPaymentStatus, type RegistryRecord, type Bucket } from "./records";
+import {
+  subscribeToRecords,
+  getRecordServiceDetails,
+  getRecordServiceAmount,
+  getRecordPaymentStatus,
+  type RegistryRecord,
+  type Bucket,
+} from "./records";
 import { subscribeToCustomers, type CustomerProfile } from "./customers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -99,8 +106,8 @@ export function aggregateAllClients(
     for (const detail of serviceDetails) {
       const service: ClientService = {
         id: `${record.id}-${detail.serviceType ?? "unknown"}-${detail.dueDate ?? ""}`,
-        bucket: Object.entries(recordsByBucket).find(
-          ([, records]) => records.includes(record),
+        bucket: Object.entries(recordsByBucket).find(([, records]) =>
+          records.includes(record),
         )?.[0] as Bucket,
         date: record.date,
         application: record.application,
@@ -110,9 +117,14 @@ export function aggregateAllClients(
         dueDate: detail.dueDate,
         serviceAmount: detail.price ?? 0,
         amountReceived: detail.amountReceived ?? 0,
-        paymentStatus: detail.amountReceived !== undefined 
-          ? (detail.amountReceived >= (detail.price ?? 0) ? "Paid" : detail.amountReceived > 0 ? "Partially Paid" : "Unpaid")
-          : getRecordPaymentStatus(record),
+        paymentStatus:
+          detail.amountReceived !== undefined
+            ? detail.amountReceived >= (detail.price ?? 0)
+              ? "Paid"
+              : detail.amountReceived > 0
+                ? "Partially Paid"
+                : "Unpaid"
+            : getRecordPaymentStatus(record),
         activityLogs: record.activityLogs,
       };
 
@@ -143,7 +155,10 @@ export function aggregateAllClients(
       client.totalRevenue += recordRevenue;
     }
     // Update received from SERVICE-LEVEL accounting
-    const recordReceived = getRecordServiceDetails(record).reduce((sum, detail) => sum + (detail.amountReceived ?? 0), 0);
+    const recordReceived = getRecordServiceDetails(record).reduce(
+      (sum, detail) => sum + (detail.amountReceived ?? 0),
+      0,
+    );
     if (recordReceived) {
       client.totalReceived += recordReceived;
     }
@@ -256,9 +271,7 @@ export function aggregateAllClients(
  * Subscribe to all clients with live updates.
  * Automatically aggregates data from all buckets and customers.
  */
-export function subscribeToAllClients(
-  callback: (clients: AggregatedClient[]) => void,
-): () => void {
+export function subscribeToAllClients(callback: (clients: AggregatedClient[]) => void): () => void {
   const buckets: Bucket[] = ["clients", "leads"];
   const recordsByBucket: { [key in Bucket]?: RegistryRecord[] } = {
     clients: [],
@@ -280,7 +293,10 @@ export function subscribeToAllClients(
 
   const safeAggregate = () => {
     try {
-      return aggregateAllClients(recordsByBucket as { [key in Bucket]: RegistryRecord[] }, allCustomers);
+      return aggregateAllClients(
+        recordsByBucket as { [key in Bucket]: RegistryRecord[] },
+        allCustomers,
+      );
     } catch (error) {
       console.error("[subscribeToAllClients] Failed to aggregate clients:", error);
       errorState = true;
@@ -319,7 +335,10 @@ export function subscribeToAllClients(
         }
       },
       (error) => {
-        console.warn(`[subscribeToAllClients] ${bucket} subscription failed, continuing with empty records.`, error);
+        console.warn(
+          `[subscribeToAllClients] ${bucket} subscription failed, continuing with empty records.`,
+          error,
+        );
         ready[bucket] = true;
         if (initialLoadComplete) {
           const clients = safeAggregate();
@@ -348,7 +367,10 @@ export function subscribeToAllClients(
       }
     },
     (error) => {
-      console.warn("[subscribeToAllClients] Customer subscription failed, continuing with empty profiles.", error);
+      console.warn(
+        "[subscribeToAllClients] Customer subscription failed, continuing with empty profiles.",
+        error,
+      );
       ready.profiles = true;
       if (initialLoadComplete) {
         const clients = safeAggregate();
@@ -417,17 +439,20 @@ export function filterClients(
   // Apply search
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
-    result = result.filter((c) =>
-      [c.name, c.mobile, c.groupName, c.assignee, ...c.vehicles]
-        .filter(Boolean)
-        .some((v) => v.toLowerCase().includes(q)) ||
-      c.serviceTypes.some((type) => typeof type === "string" && type.toLowerCase().includes(q)) ||
-      c.statuses.some((status) => typeof status === "string" && status.toLowerCase().includes(q)) ||
-      c.allServices.some((service) =>
-        [service.work, service.application, service.serviceType, service.status, service.dueDate]
+    result = result.filter(
+      (c) =>
+        [c.name, c.mobile, c.groupName, c.assignee, ...c.vehicles]
           .filter(Boolean)
-          .some((value) => typeof value === "string" && value.toLowerCase().includes(q)),
-      ),
+          .some((v) => v.toLowerCase().includes(q)) ||
+        c.serviceTypes.some((type) => typeof type === "string" && type.toLowerCase().includes(q)) ||
+        c.statuses.some(
+          (status) => typeof status === "string" && status.toLowerCase().includes(q),
+        ) ||
+        c.allServices.some((service) =>
+          [service.work, service.application, service.serviceType, service.status, service.dueDate]
+            .filter(Boolean)
+            .some((value) => typeof value === "string" && value.toLowerCase().includes(q)),
+        ),
     );
   }
 
@@ -443,9 +468,7 @@ export function filterClients(
 
   if (filters.vehicleNumber) {
     const q = filters.vehicleNumber.toLowerCase();
-    result = result.filter((c) =>
-      c.vehicles.some((v) => v.toLowerCase().includes(q)),
-    );
+    result = result.filter((c) => c.vehicles.some((v) => v.toLowerCase().includes(q)));
   }
 
   if (filters.mobileNumber) {
@@ -455,9 +478,7 @@ export function filterClients(
 
   if (filters.assignedTo) {
     const q = filters.assignedTo.toLowerCase();
-    result = result.filter(
-      (c) => (c.assignee ?? "").toLowerCase().includes(q),
-    );
+    result = result.filter((c) => (c.assignee ?? "").toLowerCase().includes(q));
   }
 
   if (filters.serviceType && filters.serviceStatus) {
@@ -477,17 +498,14 @@ export function filterClients(
     result = result.filter((c) =>
       c.allServices.some(
         (service) =>
-          typeof service.serviceType === "string" &&
-          service.serviceType.toLowerCase() === q,
+          typeof service.serviceType === "string" && service.serviceType.toLowerCase() === q,
       ),
     );
   } else if (filters.serviceStatus) {
     const q = filters.serviceStatus.toLowerCase();
     result = result.filter((c) =>
       c.allServices.some(
-        (service) =>
-          typeof service.status === "string" &&
-          service.status.toLowerCase() === q,
+        (service) => typeof service.status === "string" && service.status.toLowerCase() === q,
       ),
     );
   }

@@ -59,7 +59,7 @@ export function subscribeToCustomers(
   return onSnapshot(
     q,
     (snap) => {
-      cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerProfile)));
+      cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CustomerProfile));
     },
     (error) => {
       console.error("[subscribeToCustomers] Firestore error:", error);

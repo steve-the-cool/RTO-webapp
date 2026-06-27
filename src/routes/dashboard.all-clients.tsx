@@ -21,12 +21,7 @@ import { formatActivityTime, getActivityDescription } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -79,9 +74,7 @@ function AllClientsPage() {
     return filterClients(clients, searchQuery, {
       status: statusFilter === "all" ? undefined : statusFilter,
       paymentStatus:
-        paymentFilter === "all"
-          ? undefined
-          : (paymentFilter as AggregatedClient["paymentStatus"]),
+        paymentFilter === "all" ? undefined : (paymentFilter as AggregatedClient["paymentStatus"]),
       serviceType: serviceTypeFilter === "all" ? undefined : serviceTypeFilter,
       serviceStatus: serviceStatusFilter === "all" ? undefined : serviceStatusFilter,
       groupName: groupFilter,
@@ -213,7 +206,10 @@ function AllClientsPage() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Select value={serviceTypeFilter} onValueChange={(val: any) => setServiceTypeFilter(val)}>
+            <Select
+              value={serviceTypeFilter}
+              onValueChange={(val: any) => setServiceTypeFilter(val)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -227,7 +223,10 @@ function AllClientsPage() {
               </SelectContent>
             </Select>
 
-            <Select value={serviceStatusFilter} onValueChange={(val: any) => setServiceStatusFilter(val)}>
+            <Select
+              value={serviceStatusFilter}
+              onValueChange={(val: any) => setServiceStatusFilter(val)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -317,12 +316,8 @@ function AllClientsPage() {
                     <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">
                       Client Name
                     </th>
-                    <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">
-                      Group
-                    </th>
-                    <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">
-                      Mobile
-                    </th>
+                    <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Group</th>
+                    <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Mobile</th>
                     <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">
                       Vehicles
                     </th>
@@ -466,9 +461,7 @@ function ClientRow({ client, onView }: ClientRowProps) {
         ₹{client.totalRevenue.toLocaleString("en-IN")}
       </td>
       <td className="px-4 py-3 text-center">
-        <Badge className={cn(paymentStatusColor, "border")}>
-          {client.paymentStatus}
-        </Badge>
+        <Badge className={cn(paymentStatusColor, "border")}>{client.paymentStatus}</Badge>
       </td>
       <td className="px-4 py-3 text-center">
         <Badge variant={client.isActive ? "default" : "secondary"}>
@@ -510,47 +503,35 @@ function ClientDetailsModal({ client, open, onOpenChange }: ClientDetailsModalPr
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase">
-                  Group Name
-                </p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Group Name</p>
                 <p className="text-sm font-medium">{client.groupName || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase">
-                  Mobile
-                </p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Mobile</p>
                 <p className="text-sm font-medium">{client.mobile || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase">
-                  Email
-                </p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Email</p>
                 <p className="text-sm font-medium">{client.email || "—"}</p>
               </div>
             </div>
 
             <div className="space-y-2">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase">
-                  Address
-                </p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Address</p>
                 <p className="text-sm font-medium">{client.address || "—"}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase">
                   Assigned Staff
                 </p>
-                <p className="text-sm font-medium">
-                  {staffLabel(client.assignee) || "—"}
-                </p>
+                <p className="text-sm font-medium">{staffLabel(client.assignee) || "—"}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase">
                   Last Activity
                 </p>
-                <p className="text-sm font-medium">
-                  {client.lastActivityDate || "—"}
-                </p>
+                <p className="text-sm font-medium">{client.lastActivityDate || "—"}</p>
               </div>
             </div>
           </div>
@@ -558,9 +539,7 @@ function ClientDetailsModal({ client, open, onOpenChange }: ClientDetailsModalPr
           {/* Vehicles */}
           {client.vehicles.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
-                Vehicles
-              </p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Vehicles</p>
               <div className="flex flex-wrap gap-2">
                 {client.vehicles.map((v) => (
                   <Badge key={v} className="text-sm">
@@ -576,40 +555,26 @@ function ClientDetailsModal({ client, open, onOpenChange }: ClientDetailsModalPr
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatBox label="Total Services" value={client.allServices.length} />
             <StatBox label="Active" value={client.activeServices} highlight="bg-blue-500" />
-            <StatBox
-              label="Pending"
-              value={client.pendingServices}
-              highlight="bg-amber-500"
-            />
-            <StatBox
-              label="Completed"
-              value={client.completedServices}
-              highlight="bg-green-500"
-            />
+            <StatBox label="Pending" value={client.pendingServices} highlight="bg-amber-500" />
+            <StatBox label="Completed" value={client.completedServices} highlight="bg-green-500" />
           </div>
 
           {/* Revenue Summary */}
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg bg-muted/50 p-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">
-                Total Revenue
-              </p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase">Total Revenue</p>
               <p className="text-lg font-bold mt-1">
                 ₹{client.totalRevenue.toLocaleString("en-IN")}
               </p>
             </div>
             <div className="rounded-lg bg-green-500/10 p-3">
-              <p className="text-xs font-semibold text-green-700 uppercase">
-                Amount Received
-              </p>
+              <p className="text-xs font-semibold text-green-700 uppercase">Amount Received</p>
               <p className="text-lg font-bold mt-1 text-green-700">
                 ₹{client.totalReceived.toLocaleString("en-IN")}
               </p>
             </div>
             <div className="rounded-lg bg-red-500/10 p-3">
-              <p className="text-xs font-semibold text-red-700 uppercase">
-                Pending Amount
-              </p>
+              <p className="text-xs font-semibold text-red-700 uppercase">Pending Amount</p>
               <p className="text-lg font-bold mt-1 text-red-700">
                 ₹{client.pendingRevenue.toLocaleString("en-IN")}
               </p>
@@ -623,26 +588,16 @@ function ClientDetailsModal({ client, open, onOpenChange }: ClientDetailsModalPr
             </p>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {client.allServices.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No services found
-                </p>
+                <p className="text-sm text-muted-foreground text-center py-4">No services found</p>
               ) : (
                 client.allServices
-                  .sort(
-                    (a, b) =>
-                      new Date(b.date).getTime() - new Date(a.date).getTime(),
-                  )
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map((service) => (
-                    <div
-                      key={service.id}
-                      className="rounded-lg border bg-muted/30 p-3"
-                    >
+                    <div key={service.id} className="rounded-lg border bg-muted/30 p-3">
                       <div
                         className="flex items-center justify-between cursor-pointer"
                         onClick={() =>
-                          setExpandedService(
-                            expandedService === service.id ? null : service.id,
-                          )
+                          setExpandedService(expandedService === service.id ? null : service.id)
                         }
                       >
                         <div className="flex-1">
@@ -688,26 +643,18 @@ function ClientDetailsModal({ client, open, onOpenChange }: ClientDetailsModalPr
                       {expandedService === service.id && service.activityLogs && (
                         <div className="mt-3 pt-3 border-t space-y-2">
                           {service.activityLogs.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">
-                              No activity logs
-                            </p>
+                            <p className="text-xs text-muted-foreground">No activity logs</p>
                           ) : (
                             service.activityLogs
                               .sort(
                                 (a, b) =>
-                                  new Date(b.timestamp).getTime() -
-                                  new Date(a.timestamp).getTime(),
+                                  new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
                               )
                               .slice(0, 5)
                               .map((log, idx) => (
-                                <div
-                                  key={idx}
-                                  className="text-xs text-muted-foreground"
-                                >
+                                <div key={idx} className="text-xs text-muted-foreground">
                                   <p>
-                                    <span className="font-medium">
-                                      {log.actor}
-                                    </span>{" "}
+                                    <span className="font-medium">{log.actor}</span>{" "}
                                     {getActivityDescription(log)} •{" "}
                                     {formatActivityTime(log.timestamp)}
                                   </p>
@@ -739,9 +686,7 @@ function StatBox({ label, value, highlight }: StatBoxProps) {
   return (
     <div className="rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-muted-foreground uppercase">
-          {label}
-        </p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase">{label}</p>
         {highlight && (
           <div className={cn(highlight, "text-white text-sm font-bold px-2 py-1 rounded")}>
             {value}

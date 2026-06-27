@@ -1,10 +1,33 @@
-import { createFileRoute, redirect, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  redirect,
+  Outlet,
+  Link,
+  useRouterState,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
 import {
-  LayoutDashboard, Users, UserPlus, CheckSquare,
-  UserCircle, BarChart3, DollarSign, LineChart,
-  Settings as SettingsIcon, LogOut, Menu, Globe, Target, Users2,
-  Shield, CheckCircle, Lightbulb, FileText, Zap, Receipt,
+  LayoutDashboard,
+  Users,
+  UserPlus,
+  CheckSquare,
+  UserCircle,
+  BarChart3,
+  DollarSign,
+  LineChart,
+  Settings as SettingsIcon,
+  LogOut,
+  Menu,
+  Globe,
+  Target,
+  Users2,
+  Shield,
+  CheckCircle,
+  Lightbulb,
+  FileText,
+  Zap,
+  Receipt,
 } from "lucide-react";
 import { getSession, logout, isAuthReady, type StaffUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -50,6 +73,7 @@ const GROUPS: NavGroup[] = [
       { to: "/dashboard/clients", label: "Clients", icon: Users },
       { to: "/dashboard/leads", label: "Leads", icon: UserPlus },
       { to: "/dashboard/tasks", label: "Tasks", icon: CheckSquare },
+      { to: "/dashboard/task-templates", label: "Task Templates", icon: FileText },
     ],
   },
   {
@@ -82,15 +106,13 @@ const GROUPS: NavGroup[] = [
     items: [
       { to: "/dashboard/accounting", label: "Accounting", icon: DollarSign },
       { to: "/dashboard/billing", label: "Billing", icon: Receipt },
-      { to: "/dashboard/analytics", label: "Analytics", icon: LineChart },
+      { to: "/dashboard/client-analytics", label: "Client Analytics", icon: LineChart },
       { to: "/dashboard/targets", label: "Target Management", icon: Target },
     ],
   },
   {
     heading: "System",
-    items: [
-      { to: "/dashboard/settings", label: "Settings", icon: SettingsIcon },
-    ],
+    items: [{ to: "/dashboard/settings", label: "Settings", icon: SettingsIcon }],
   },
 ];
 
@@ -117,17 +139,16 @@ function DashboardLayout() {
         const savedPosition = localStorage.getItem("sidebarScrollPosition");
         if (savedPosition) {
           const parsed = Number(savedPosition);
-          const maxScroll = sidebarRef.current.scrollHeight - sidebarRef.current.clientHeight;
-          const clamped = Math.max(0, Math.min(parsed, maxScroll));
-          sidebarRef.current.scrollTop = clamped;
-          console.log("[Sidebar] Restoring Position:", clamped);
+          sidebarRef.current.scrollTop = parsed;
+          console.log("[Sidebar] Restoring Position:", parsed);
         }
       }
     };
 
     restore();
-    // Secondary defer pass to account for layout shifts
-    const id = requestAnimationFrame(restore);
+    // Defer passes to account for layout shifts and render lag
+    const t1 = setTimeout(restore, 50);
+    const t2 = setTimeout(restore, 150);
 
     // Scroll main content to top on pathname changes
     const mainEl = document.querySelector("main");
@@ -135,7 +156,10 @@ function DashboardLayout() {
       mainEl.scrollTop = 0;
     }
 
-    return () => cancelAnimationFrame(id);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [pathname]);
 
   const handleSidebarScroll = (e: React.UIEvent<HTMLElement>) => {
@@ -144,9 +168,17 @@ function DashboardLayout() {
     console.log("[Sidebar] Saving Position:", scrollTop);
   };
 
-  const handleLogout = async () => { await logout(); navigate({ to: "/" }); };
+  const handleLogout = async () => {
+    await logout();
+    navigate({ to: "/" });
+  };
 
-  const initials = (user?.name ?? "U").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (user?.name ?? "U")
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-background">
@@ -157,7 +189,9 @@ function DashboardLayout() {
         )}
       >
         <div className="p-5 flex items-center gap-3 border-b border-sidebar-border">
-          <div className="size-9 rounded-lg bg-primary grid place-items-center font-bold text-primary-foreground">R</div>
+          <div className="size-9 rounded-lg bg-primary grid place-items-center font-bold text-primary-foreground">
+            R
+          </div>
           <div className="font-bold tracking-tight">REGISTRY PRO</div>
         </div>
 
@@ -173,7 +207,9 @@ function DashboardLayout() {
               </div>
               <div className="space-y-1">
                 {group.items.map((item) => {
-                  const active = item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/");
+                  const active = item.exact
+                    ? pathname === item.to
+                    : pathname === item.to || pathname.startsWith(item.to + "/");
                   const Icon = item.icon;
                   return (
                     <Link
@@ -205,7 +241,9 @@ function DashboardLayout() {
             <Globe className="size-4" /> View public site
           </a>
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="size-9 rounded-full bg-muted grid place-items-center text-xs font-bold">{initials}</div>
+            <div className="size-9 rounded-full bg-muted grid place-items-center text-xs font-bold">
+              {initials}
+            </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{user?.name ?? "—"}</div>
               <div className="text-xs text-sidebar-foreground/60 capitalize">{user?.role}</div>
@@ -231,7 +269,9 @@ function DashboardLayout() {
             <Menu className="size-5" />
           </Button>
           <h1 className="font-semibold">
-            {ALL_ITEMS.find((n) => (n.exact ? pathname === n.to : pathname === n.to || pathname.startsWith(n.to + "/")))?.label ?? "Dashboard"}
+            {ALL_ITEMS.find((n) =>
+              n.exact ? pathname === n.to : pathname === n.to || pathname.startsWith(n.to + "/"),
+            )?.label ?? "Dashboard"}
           </h1>
         </header>
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">

@@ -88,7 +88,9 @@ export function StructuredDocumentUploader({ customerId, services, application, 
 
     try {
       const updated = existingDoc
-        ? await updateDoc(existingDoc.id, customerId, targetName, type, file, (pct) => setState(type, { pct }))
+        ? await updateDoc(existingDoc.id, customerId, targetName, type, file, (pct) =>
+            setState(type, { pct }),
+          )
         : await addDoc(customerId, targetName, type, file, (pct) => setState(type, { pct }));
 
       setDocs((current) => {
@@ -126,7 +128,9 @@ export function StructuredDocumentUploader({ customerId, services, application, 
       <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
         <div>
           <div className="text-sm font-semibold">Client Documents</div>
-          <p className="text-xs text-muted-foreground">Use separate slots for each client document type.</p>
+          <p className="text-xs text-muted-foreground">
+            Use separate slots for each client document type.
+          </p>
         </div>
 
         <div className="grid gap-3">
@@ -135,12 +139,16 @@ export function StructuredDocumentUploader({ customerId, services, application, 
             const state = uploadState[docType] ?? { uploading: false, pct: 0 };
 
             return (
-              <div key={docType} className="rounded-xl border bg-card p-3 grid gap-2 sm:grid-cols-[1fr_auto] items-center">
+              <div
+                key={docType}
+                className="rounded-xl border bg-card p-3 grid gap-2 sm:grid-cols-[1fr_auto] items-center"
+              >
                 <div>
                   <div className="font-semibold">{docType}</div>
                   {existingDoc ? (
                     <div className="text-xs text-muted-foreground">
-                      Uploaded {new Date(existingDoc.addedAt).toLocaleDateString("en-IN")} • {formatFileSize(existingDoc.fileSize)}
+                      Uploaded {new Date(existingDoc.addedAt).toLocaleDateString("en-IN")} •{" "}
+                      {formatFileSize(existingDoc.fileSize)}
                     </div>
                   ) : (
                     <div className="text-xs text-muted-foreground">No document uploaded yet.</div>
@@ -160,13 +168,30 @@ export function StructuredDocumentUploader({ customerId, services, application, 
                     </a>
                   ) : null}
                   {existingDoc ? (
-                    <Button size="sm" variant="outline" onClick={() => handleReplace(docType)} disabled={state.uploading}>
-                      {state.uploading ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleReplace(docType)}
+                      disabled={state.uploading}
+                    >
+                      {state.uploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-4" />
+                      )}
                       Replace
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => handleUploadNew(docType)} disabled={state.uploading}>
-                      {state.uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                    <Button
+                      size="sm"
+                      onClick={() => handleUploadNew(docType)}
+                      disabled={state.uploading}
+                    >
+                      {state.uploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
                       Upload
                     </Button>
                   )}
@@ -174,7 +199,10 @@ export function StructuredDocumentUploader({ customerId, services, application, 
                 {state.uploading && (
                   <div className="sm:col-span-2">
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${state.pct}%` }} />
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${state.pct}%` }}
+                      />
                     </div>
                   </div>
                 )}
@@ -190,7 +218,9 @@ export function StructuredDocumentUploader({ customerId, services, application, 
       <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
         <div>
           <div className="text-sm font-semibold">Vehicle Documents</div>
-          <p className="text-xs text-muted-foreground">Upload vehicle-specific files under each document type.</p>
+          <p className="text-xs text-muted-foreground">
+            Upload vehicle-specific files under each document type.
+          </p>
         </div>
 
         <div className="grid gap-3">
@@ -199,12 +229,16 @@ export function StructuredDocumentUploader({ customerId, services, application, 
             const state = uploadState[docType] ?? { uploading: false, pct: 0 };
 
             return (
-              <div key={docType} className="rounded-xl border bg-card p-3 grid gap-2 sm:grid-cols-[1fr_auto] items-center">
+              <div
+                key={docType}
+                className="rounded-xl border bg-card p-3 grid gap-2 sm:grid-cols-[1fr_auto] items-center"
+              >
                 <div>
                   <div className="font-semibold">{docType}</div>
                   {existingDoc ? (
                     <div className="text-xs text-muted-foreground">
-                      Uploaded {new Date(existingDoc.addedAt).toLocaleDateString("en-IN")} • {formatFileSize(existingDoc.fileSize)}
+                      Uploaded {new Date(existingDoc.addedAt).toLocaleDateString("en-IN")} •{" "}
+                      {formatFileSize(existingDoc.fileSize)}
                     </div>
                   ) : (
                     <div className="text-xs text-muted-foreground">No document uploaded yet.</div>
@@ -224,13 +258,30 @@ export function StructuredDocumentUploader({ customerId, services, application, 
                     </a>
                   ) : null}
                   {existingDoc ? (
-                    <Button size="sm" variant="outline" onClick={() => handleReplace(docType)} disabled={state.uploading}>
-                      {state.uploading ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleReplace(docType)}
+                      disabled={state.uploading}
+                    >
+                      {state.uploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-4" />
+                      )}
                       Replace
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => handleUploadNew(docType)} disabled={state.uploading}>
-                      {state.uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                    <Button
+                      size="sm"
+                      onClick={() => handleUploadNew(docType)}
+                      disabled={state.uploading}
+                    >
+                      {state.uploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
                       Upload
                     </Button>
                   )}
@@ -238,7 +289,10 @@ export function StructuredDocumentUploader({ customerId, services, application, 
                 {state.uploading && (
                   <div className="sm:col-span-2">
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${state.pct}%` }} />
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${state.pct}%` }}
+                      />
                     </div>
                   </div>
                 )}
@@ -255,7 +309,9 @@ export function StructuredDocumentUploader({ customerId, services, application, 
         <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
           <div>
             <div className="text-sm font-semibold">Service Documents</div>
-            <p className="text-xs text-muted-foreground">This section appears automatically for selected services.</p>
+            <p className="text-xs text-muted-foreground">
+              This section appears automatically for selected services.
+            </p>
           </div>
 
           <div className="grid gap-3">
@@ -264,15 +320,21 @@ export function StructuredDocumentUploader({ customerId, services, application, 
               const state = uploadState[docType] ?? { uploading: false, pct: 0 };
 
               return (
-                <div key={docType} className="rounded-xl border bg-card p-3 grid gap-2 sm:grid-cols-[1fr_auto] items-center">
+                <div
+                  key={docType}
+                  className="rounded-xl border bg-card p-3 grid gap-2 sm:grid-cols-[1fr_auto] items-center"
+                >
                   <div>
                     <div className="font-semibold">{docType}</div>
                     {existingDoc ? (
                       <div className="text-xs text-muted-foreground">
-                        Uploaded {new Date(existingDoc.addedAt).toLocaleDateString("en-IN")} • {formatFileSize(existingDoc.fileSize)}
+                        Uploaded {new Date(existingDoc.addedAt).toLocaleDateString("en-IN")} •{" "}
+                        {formatFileSize(existingDoc.fileSize)}
                       </div>
                     ) : (
-                      <div className="text-xs text-muted-foreground">No document uploaded yet for this service.</div>
+                      <div className="text-xs text-muted-foreground">
+                        No document uploaded yet for this service.
+                      </div>
                     )}
                   </div>
 
@@ -289,13 +351,30 @@ export function StructuredDocumentUploader({ customerId, services, application, 
                       </a>
                     ) : null}
                     {existingDoc ? (
-                      <Button size="sm" variant="outline" onClick={() => handleReplace(docType)} disabled={state.uploading}>
-                        {state.uploading ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleReplace(docType)}
+                        disabled={state.uploading}
+                      >
+                        {state.uploading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="size-4" />
+                        )}
                         Replace
                       </Button>
                     ) : (
-                      <Button size="sm" onClick={() => handleUploadNew(docType)} disabled={state.uploading}>
-                        {state.uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                      <Button
+                        size="sm"
+                        onClick={() => handleUploadNew(docType)}
+                        disabled={state.uploading}
+                      >
+                        {state.uploading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Upload className="size-4" />
+                        )}
                         Upload
                       </Button>
                     )}
@@ -303,7 +382,10 @@ export function StructuredDocumentUploader({ customerId, services, application, 
                   {state.uploading && (
                     <div className="sm:col-span-2">
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${state.pct}%` }} />
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${state.pct}%` }}
+                        />
                       </div>
                     </div>
                   )}

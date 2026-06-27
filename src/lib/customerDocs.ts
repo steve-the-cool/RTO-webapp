@@ -55,12 +55,17 @@ export function subscribeToDocsFor(
     where("customerId", "==", customerId),
     orderBy("addedAt", "desc"),
   );
-  
+
   const unsub = onSnapshot(
     q,
     (snap) => {
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerDoc));
-      console.log("[subscribeToDocsFor] Retrieved", docs.length, "documents for customer:", customerId);
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CustomerDoc);
+      console.log(
+        "[subscribeToDocsFor] Retrieved",
+        docs.length,
+        "documents for customer:",
+        customerId,
+      );
       cb(docs);
     },
     (error) => {
@@ -74,12 +79,10 @@ export function subscribeToDocsFor(
 /**
  * Subscribe to all document entries in the system.
  */
-export function subscribeToAllDocs(
-  cb: (docs: CustomerDoc[]) => void,
-): () => void {
+export function subscribeToAllDocs(cb: (docs: CustomerDoc[]) => void): () => void {
   const q = query(collection(db, COL), orderBy("addedAt", "desc"));
   return onSnapshot(q, (snap) => {
-    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerDoc));
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CustomerDoc);
     cb(docs);
   });
 }
@@ -97,8 +100,17 @@ export async function addDoc(
   file?: File,
   onProgress?: (pct: number) => void,
 ): Promise<CustomerDoc> {
-  console.log("[addDoc] Starting upload for customer:", customerId, "name:", name, "type:", type, "file:", file?.name);
-  
+  console.log(
+    "[addDoc] Starting upload for customer:",
+    customerId,
+    "name:",
+    name,
+    "type:",
+    type,
+    "file:",
+    file?.name,
+  );
+
   const id = crypto.randomUUID();
   let storagePath: string | undefined;
   let downloadURL: string | undefined;
@@ -107,16 +119,20 @@ export async function addDoc(
 
   if (file) {
     const safeFileName = `${id}_${file.name}`;
-    storagePath = customerId === GENERAL_CUSTOMER_ID
-      ? `documents/general/attachments/${safeFileName}`
-      : `customers/${customerId}/attachments/${safeFileName}`;
+    storagePath =
+      customerId === GENERAL_CUSTOMER_ID
+        ? `documents/general/attachments/${safeFileName}`
+        : `customers/${customerId}/attachments/${safeFileName}`;
     const storageRef = ref(storage, storagePath);
-    
+
     console.log("[addDoc] Uploading file to:", storagePath);
-    
+
     try {
       downloadURL = await uploadFileWithRetry(storageRef, file, onProgress);
-      console.log("[addDoc] File uploaded successfully, URL:", downloadURL?.substring(0, 50) + "...");
+      console.log(
+        "[addDoc] File uploaded successfully, URL:",
+        downloadURL?.substring(0, 50) + "...",
+      );
       mimeType = file.type;
       fileSize = file.size;
     } catch (error) {
@@ -140,7 +156,7 @@ export async function addDoc(
   };
 
   console.log("[addDoc] Creating Firestore document:", docEntry);
-  
+
   try {
     const { id: _id, ...data } = docEntry;
     const docRef = doc(db, COL, id);
@@ -150,7 +166,9 @@ export async function addDoc(
     return docEntry;
   } catch (error) {
     console.error("[addDoc] Firestore write failed:", error);
-    throw new Error(`Failed to save document: ${error instanceof Error ? error.message : "Unknown error"}`);
+    throw new Error(
+      `Failed to save document: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
 }
 
@@ -166,9 +184,10 @@ export async function updateDoc(
   console.log("[updateDoc] Replacing document:", docId, "for customer:", customerId, "type:", type);
   const storageId = crypto.randomUUID();
   const safeFileName = `${storageId}_${file.name}`;
-  const storagePath = customerId === GENERAL_CUSTOMER_ID
-    ? `documents/general/attachments/${safeFileName}`
-    : `customers/${customerId}/attachments/${safeFileName}`;
+  const storagePath =
+    customerId === GENERAL_CUSTOMER_ID
+      ? `documents/general/attachments/${safeFileName}`
+      : `customers/${customerId}/attachments/${safeFileName}`;
   const storageRef = ref(storage, storagePath);
 
   let downloadURL: string;
@@ -210,7 +229,9 @@ export async function updateDoc(
     return updatedDoc;
   } catch (error) {
     console.error("[updateDoc] Firestore update failed:", error);
-    throw new Error(`Failed to update document: ${error instanceof Error ? error.message : "Unknown error"}`);
+    throw new Error(
+      `Failed to update document: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
 }
 
@@ -228,7 +249,9 @@ async function uploadFileWithRetry(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[uploadFileWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} for file: ${file.name}`);
+      console.log(
+        `[uploadFileWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} for file: ${file.name}`,
+      );
       const result = await uploadFileOnce(storageRef, file, onProgress);
       console.log(`[uploadFileWithRetry] Successfully uploaded on attempt ${attempt + 1}`);
       return result;
@@ -274,7 +297,11 @@ async function uploadFileOnce(
     uploadTimeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        reject(new Error("Upload timeout — file took too long to upload. Please try a smaller file or check your connection."));
+        reject(
+          new Error(
+            "Upload timeout — file took too long to upload. Please try a smaller file or check your connection.",
+          ),
+        );
       }
     }, 120000); // 2 minutes total
 

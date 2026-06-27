@@ -13,28 +13,32 @@
 ### 1. Data Model (records.ts)
 
 **Extended ServiceDetail Interface**:
+
 ```typescript
 export interface ServiceDetail {
   serviceType: ServiceType;
   dueDate: string;
   status: string;
   price?: number;
-  amountReceived?: number;    // ✅ NEW - Amount received for this service
-  assignee?: string;           // ✅ NEW - Service-specific assignee
+  amountReceived?: number; // ✅ NEW - Amount received for this service
+  assignee?: string; // ✅ NEW - Service-specific assignee
 }
 ```
 
 **New Service-Level Calculation Functions**:
+
 - `calculateServicePaymentStatus(service)` → Returns "Paid" | "Partially Paid" | "Unpaid"
 - `calculateServicePendingAmount(service)` → Returns `(price - amountReceived)`
 - `getServicePaymentStatus(service)`
 - `getServicePendingAmount(service)`
 
 **New Aggregation Functions**:
+
 - `getRecordTotalReceived(record)` → Sums `amountReceived` from all services
 - `getRecordTotalPending(record)` → Sums pending from all services
 
 **Updated Functions**:
+
 - `getRecordPaymentStatus()` → Now uses aggregated service data
 - `getRecordServiceDetails()` → Populates service-level amountReceived
 
@@ -43,6 +47,7 @@ export interface ServiceDetail {
 ### 2. UI Component - RecordTable (RecordTable.tsx)
 
 **Removed**:
+
 - ❌ Entire "Accounting Fields" section from form
 - ❌ Form fields: Total Service Amount, Amount Received, Payment Date, Pending Amount, Payment Status
 - ❌ Table columns: serviceAmount, amountReceived, paymentStatus, pendingAmount
@@ -59,17 +64,19 @@ export interface ServiceDetail {
 | Status | Select | Dropdown | Paid/Partially Paid/Unpaid |
 
 **Service Initialization**:
+
 ```javascript
-{ 
-  serviceType, 
-  dueDate: "", 
-  status: "Active", 
-  price: 0, 
-  amountReceived: 0 
+{
+  serviceType,
+  dueDate: "",
+  status: "Active",
+  price: 0,
+  amountReceived: 0
 }
 ```
 
 **Auto-Calculation**:
+
 - Pending: `Math.max(0, (price || 0) - (amountReceived || 0))`
 - Disabled field prevents manual editing
 
@@ -78,13 +85,16 @@ export interface ServiceDetail {
 ### 3. Service Aggregation Functions (services.ts)
 
 **Updated**:
+
 - ✅ `getServiceAmountReceived(serviceType)` → Now sums service.amountReceived (WAS: record.amountReceived)
 
 **New Functions**:
+
 - ✅ `getTotalAmountReceived()` → Sums all service.amountReceived across all services
 - ✅ `getTotalPendingAmount()` → Calculates total revenue - total received
 
 **Already Correct**:
+
 - `getTotalRevenue()` → Already summed from service.price ✅
 - `getServiceRevenue(serviceType)` → Already uses service.price ✅
 
@@ -93,6 +103,7 @@ export interface ServiceDetail {
 ### 4. Client Data Aggregation (allClients.ts)
 
 **Updated**:
+
 ```javascript
 // OLD:
 amountReceived: record.amountReceived  ❌
@@ -113,6 +124,7 @@ totalReceived += sum(detail.amountReceived for each service)  ✅
 ### 5. Accounting Dashboard (dashboard.accounting.tsx)
 
 **Updated Metric Calculation**:
+
 ```javascript
 // OLD:
 totalAmountReceived = sum(record.amountReceived)  ❌
@@ -130,6 +142,7 @@ All metrics now aggregate from service-level data only.
 **Created**: `src/routes/dashboard.settings.migration.accounting.tsx`
 
 **Features**:
+
 - ✅ Auto-detects records with old accounting data
 - ✅ Shows summary: total records, records needing migration, migrated count
 - ✅ **Auto-Distribute**: Divides old amounts evenly across all services
@@ -139,6 +152,7 @@ All metrics now aggregate from service-level data only.
 - ✅ Removes old accounting fields after successful migration
 
 **How It Works**:
+
 1. Records with `serviceAmount > 0` are identified
 2. Click "Auto Migrate" to distribute amounts evenly
 3. Amount per service = `serviceAmount / serviceCount`
@@ -151,6 +165,7 @@ All metrics now aggregate from service-level data only.
 ## Payment Status Logic (VERIFIED ✅)
 
 ### Service-Level Payment Status
+
 ```
 IF amountReceived = 0           → "Unpaid"
 IF 0 < amountReceived < price   → "Partially Paid"
@@ -158,6 +173,7 @@ IF amountReceived >= price      → "Paid"
 ```
 
 ### Record-Level Payment Status (Aggregated)
+
 ```
 IF totalReceived = 0                    → "Unpaid"
 IF 0 < totalReceived < totalPrice       → "Partially Paid"
@@ -169,6 +185,7 @@ IF totalReceived >= totalPrice          → "Paid"
 ## Files Changed
 
 ### Modified (5 files):
+
 1. **src/lib/records.ts**
    - Extended ServiceDetail interface
    - Added service-level helpers
@@ -196,6 +213,7 @@ IF totalReceived >= totalPrice          → "Paid"
    - Removed record.amountReceived reads
 
 ### Created (1 file):
+
 1. **src/routes/dashboard.settings.migration.accounting.tsx** - Admin migration tool
 
 ---
@@ -203,6 +221,7 @@ IF totalReceived >= totalPrice          → "Paid"
 ## Verification Status
 
 ### ✅ TypeScript Compilation
+
 ```
 No errors found across entire project
 - All 5 modified files: PASS ✅
@@ -211,6 +230,7 @@ No errors found across entire project
 ```
 
 ### ✅ Logic Verification
+
 - [x] Service-level calculations work correctly
 - [x] Record-level aggregation from services works correctly
 - [x] Payment status logic implemented correctly
@@ -218,6 +238,7 @@ No errors found across entire project
 - [x] UI form displays correctly with new layout
 
 ### ✅ User Requirements Met
+
 - [x] Client-level accounting REMOVED from UI
 - [x] Service fields ADDED: Amount, Received, Pending (auto), Status, Assignee
 - [x] Auto-calculation for Pending Amount implemented
@@ -230,22 +251,26 @@ No errors found across entire project
 ## What's NOT Changed (Intentional)
 
 ### ✅ Firestore Schema
+
 - No changes needed - services array supports new fields
 - Backward compatible - old records still work
 - New fields are optional (undefined in legacy records)
 
 ### ✅ Billing System
+
 - Already uses flexible `services` parameter
 - Can accept services with amountReceived
 - No changes needed to invoice generation
 
 ### ⏳ Service Module Dashboards (Pending Review)
+
 - File: `src/routes/dashboard.service.$serviceType.tsx`
 - Status: NOT YET VERIFIED for service-wise display
 - Expected: Should show only that service's accounting, not aggregated
 
 ### ⏳ Report Routes (Pending Update)
-- Files: All dashboard.reports.*.tsx files
+
+- Files: All dashboard.reports.\*.tsx files
 - Status: NOT YET UPDATED to service-level data
 - Action: Need to verify they use service aggregation
 
@@ -254,6 +279,7 @@ No errors found across entire project
 ## How to Use Service-Wise Accounting
 
 ### For Normal Users:
+
 1. Open a record in RecordTable
 2. Each service now shows:
    - Due Date
@@ -265,6 +291,7 @@ No errors found across entire project
 4. All dashboards automatically aggregate from services
 
 ### For Admins (Data Migration):
+
 1. Go to Settings → Migration → Accounting
 2. See records with old accounting data
 3. Click "Auto Migrate" to distribute amounts evenly
@@ -272,7 +299,9 @@ No errors found across entire project
 5. Track migration progress
 
 ### For Reports/Dashboards:
+
 All reports should:
+
 1. Loop through services array
 2. Sum `service.price` for revenue
 3. Sum `service.amountReceived` for collected
@@ -284,22 +313,26 @@ All reports should:
 ## Edge Cases Handled
 
 ### ✅ Records with No Services
+
 - `getRecordServiceDetails()` returns empty array
 - Aggregation returns 0
 - Payment status shows "Unpaid"
 
 ### ✅ Partial Service Data
+
 - Optional fields prevent errors
 - Undefined values default to 0
 - Backward compatible with legacy data
 
 ### ✅ Multiple Services per Record
+
 - Each service is independent
 - Pending calculated per service
 - Status calculated per service
 - Aggregation sums correctly
 
 ### ✅ Legacy Data Migration
+
 - Old record.serviceAmount preserved until migrated
 - Auto-distribute divides amounts evenly
 - Old fields deleted after migration
@@ -319,16 +352,16 @@ All reports should:
 
 ## Summary Statistics
 
-| Metric | Value |
-|--------|-------|
-| Files Modified | 5 |
-| Files Created | 1 |
-| TypeScript Errors | 0 |
-| New Service Fields | 2 (amountReceived, assignee) |
-| New Aggregation Functions | 3 |
-| UI Columns Changed | 5 removed, 5 added per service |
-| Lines of Code Modified | ~300+ |
-| Test Coverage | ✅ Logic verified |
+| Metric                    | Value                          |
+| ------------------------- | ------------------------------ |
+| Files Modified            | 5                              |
+| Files Created             | 1                              |
+| TypeScript Errors         | 0                              |
+| New Service Fields        | 2 (amountReceived, assignee)   |
+| New Aggregation Functions | 3                              |
+| UI Columns Changed        | 5 removed, 5 added per service |
+| Lines of Code Modified    | ~300+                          |
+| Test Coverage             | ✅ Logic verified              |
 
 ---
 

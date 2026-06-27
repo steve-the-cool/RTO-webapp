@@ -5,12 +5,15 @@
 Three major CRM features have been successfully implemented and are now available:
 
 ### 1️⃣ Duplicate Entry Detection
+
 Prevents duplicate records by warning users when they try to create entries with identical vehicle number + work type combinations.
 
-### 2️⃣ Secure Delete System  
+### 2️⃣ Secure Delete System
+
 Admin-only record deletion with PIN verification, deletion reasons, and complete audit trails.
 
 ### 3️⃣ Group Name Field
+
 Organize records by customer group/company for better tracking and organization.
 
 ---
@@ -27,16 +30,19 @@ Organize records by customer group/company for better tracking and organization.
 ## Getting Started
 
 ### For Users
+
 1. Read [USER_GUIDE.md](./USER_GUIDE.md) for complete usage instructions
 2. Demo credentials available on login page
 3. Test each feature in sandbox environment
 
 ### For Developers
+
 1. Check [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) for architecture
 2. Review [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md) for implementation details
 3. See component code in `src/components/` and hooks in `src/hooks/`
 
 ### For Project Managers
+
 1. Review [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md) - all items ✅
 2. Check [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md) for overview
 3. Production ready for deployment
@@ -46,18 +52,21 @@ Organize records by customer group/company for better tracking and organization.
 ## Feature Quick Reference
 
 ### Duplicate Detection
+
 **Where**: Clients, Leads, Records tables  
 **How**: Automatically checks on save  
 **Result**: Dialog warning if vehicle+work duplicate exists  
 **Action**: Continue anyway (logged) or Cancel
 
 ### Secure Delete
+
 **Where**: All record types  
 **Who**: Admin only (staff disabled)  
 **Process**: PIN → Reason → Confirm  
 **Result**: Soft delete (record marked deleted, not removed)
 
 ### Group Name
+
 **Where**: All record forms and tables  
 **What**: Optional company/group identifier  
 **Usage**: Search, filter, organize records  
@@ -98,22 +107,27 @@ Documentation/
 ## Configuration
 
 ### Admin PIN for Delete
+
 Currently: `1234` (for demo)
 
 **To Change** (in production):
+
 ```typescript
 // src/components/DeleteRecordDialog.tsx
 const ADMIN_PIN = "XXXX"; // Change this value
 ```
 
 ### Delete Reasons
+
 Available options (immutable):
+
 - `Duplicate Entry`
 - `Wrong Customer`
 - `Testing Data`
 - `Other`
 
 ### Firestore Collections
+
 - `registry_clients` - Client records with soft delete support
 - `registry_leads` - Lead records with soft delete support
 - `registry_customers` - Customer profiles
@@ -124,7 +138,9 @@ Available options (immutable):
 ## Database Schema Changes
 
 ### New Fields in RegistryRecord
+
 All fields are **optional** (backward compatible):
+
 ```typescript
 groupName?: string           // Customer group/company name
 isDeleted?: boolean         // Soft delete flag
@@ -134,7 +150,9 @@ deleteReason?: DeleteReason // Why it was deleted
 ```
 
 ### Activity Log Structure
+
 Already existed, now used for:
+
 - Duplicate warning overrides
 - Field changes
 - Record deletions
@@ -144,24 +162,27 @@ Already existed, now used for:
 ## API Overview
 
 ### Duplicate Detection
+
 ```typescript
 // Hook
-useDuplicateDetection({ bucket, actor })
+useDuplicateDetection({ bucket, actor });
 
 // Function
-checkForDuplicates(bucket, mvNo, work)  // → Promise<RegistryRecord[]>
+checkForDuplicates(bucket, mvNo, work); // → Promise<RegistryRecord[]>
 ```
 
 ### Soft Delete
+
 ```typescript
 // Records
-softDeleteRecord(bucket, id, actor, reason)
+softDeleteRecord(bucket, id, actor, reason);
 
 // Tasks
-softDeleteTask(id, actor, reason)
+softDeleteTask(id, actor, reason);
 ```
 
 ### Activity Logging
+
 ```typescript
 createActivity(actor, action, field?, oldValue?, newValue?)
 ```
@@ -171,18 +192,21 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 ## Validation Rules
 
 ### Duplicate Detection
+
 - Vehicle number AND work type must both match
 - Case-sensitive matching
 - Excludes soft-deleted records
 - Empty fields skip check
 
 ### Delete Operation
+
 - Role must be "admin"
 - PIN must match exactly (1234)
 - Deletion reason required (4 options)
 - Creates activity log entry automatically
 
 ### Group Name
+
 - Optional field
 - Any string value accepted
 - Included in search filtering
@@ -193,6 +217,7 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 ## Common Tasks
 
 ### For Admin: Delete a Record
+
 1. Click trash icon (enabled for admin only)
 2. Enter PIN: `1234`
 3. Select deletion reason
@@ -200,6 +225,7 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 5. Record becomes hidden from all lists
 
 ### For User: Create Record Safely
+
 1. Fill in all fields
 2. Click Save
 3. If duplicate warning appears:
@@ -209,6 +235,7 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 4. Record saved and logged
 
 ### For User: Search by Group
+
 1. Navigate to Clients/Leads table
 2. Type company name in search box
 3. Results filter automatically
@@ -219,18 +246,23 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 ## Troubleshooting
 
 ### Issue: Delete button is disabled
+
 **Solution**: Only admins can delete. Use admin account or contact admin.
 
 ### Issue: Duplicate dialog keeps appearing
+
 **Solution**: Check vehicle number and work type. Must match existing record exactly.
 
 ### Issue: Group name not showing in table
+
 **Solution**: Edit record to add group name field - it's optional.
 
 ### Issue: Wrong PIN error
+
 **Solution**: Demo PIN is `1234`. No spaces or extra characters.
 
 ### Issue: Records disappear unexpectedly
+
 **Solution**: They were soft-deleted. Soft-deleted records hide automatically.
 
 ---
@@ -238,6 +270,7 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 ## Performance Tips
 
 ✅ **Already Optimized:**
+
 - Duplicate query uses Firestore indexes
 - Soft delete uses efficient filtering
 - Activity logs append atomically
@@ -258,6 +291,7 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 ## Deployment Steps
 
 ### Pre-Deployment
+
 - [x] Build succeeds: `npm run build`
 - [x] No TypeScript errors
 - [x] All tests pass
@@ -265,6 +299,7 @@ createActivity(actor, action, field?, oldValue?, newValue?)
 - [x] Database schema compatible
 
 ### Deploy
+
 ```bash
 # Build for production
 npm run build
@@ -277,6 +312,7 @@ npm run start
 ```
 
 ### Post-Deployment
+
 - [ ] Verify duplicate detection works
 - [ ] Test delete permissions (admin vs staff)
 - [ ] Check activity logging
@@ -288,11 +324,13 @@ npm run start
 ## Support Resources
 
 📖 **Documentation**
+
 - [USER_GUIDE.md](./USER_GUIDE.md) - Feature usage guide
 - [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md) - Developer reference
 - [REQUIREMENTS_CHECKLIST.md](./REQUIREMENTS_CHECKLIST.md) - Feature verification
 
 🔍 **Code**
+
 - `src/components/DuplicateDetectionDialog.tsx`
 - `src/components/DeleteRecordDialog.tsx`
 - `src/hooks/useDuplicateDetection.ts`
@@ -305,9 +343,9 @@ See TECHNICAL_REFERENCE.md for architecture details and code examples.
 
 ## Version History
 
-| Version | Date | Status |
-|---------|------|--------|
-| 1.0 | 2026-06-13 | ✅ Production Ready |
+| Version | Date       | Status              |
+| ------- | ---------- | ------------------- |
+| 1.0     | 2026-06-13 | ✅ Production Ready |
 
 ---
 

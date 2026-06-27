@@ -101,9 +101,7 @@ async function enrichTargetWithRealCount(target: Target): Promise<Target> {
  * Subscribe to all targets with live updates (with real completed counts).
  * Returns an unsubscribe function for cleanup.
  */
-export function subscribeToTargets(
-  callback: (targets: TargetMetrics[]) => void,
-): () => void {
+export function subscribeToTargets(callback: (targets: TargetMetrics[]) => void): () => void {
   const q = query(collection(db, TARGETS_COLLECTION));
 
   const unsub = onSnapshot(q, (snapshot) => {
@@ -166,7 +164,13 @@ export async function createOrInitializeTarget(
   if (existing) {
     // Update existing
     const targetRef = doc(db, TARGETS_COLLECTION, existing.id);
-    const activity = createActivity(actor, "Created", "target", `${existing.target}`, `${targetValue}`);
+    const activity = createActivity(
+      actor,
+      "Created",
+      "target",
+      `${existing.target}`,
+      `${targetValue}`,
+    );
 
     await updateDoc(targetRef, {
       target: targetValue,
@@ -179,14 +183,17 @@ export async function createOrInitializeTarget(
     const targetRef = doc(collection(db, TARGETS_COLLECTION));
     const activity = createActivity(actor, "Created", "target", "0", `${targetValue}`);
 
-    await setDoc(targetRef, removeUndefined({
-      category,
-      target: targetValue,
-      completed: 0,
-      lastUpdatedBy: actor,
-      lastUpdatedAt: new Date().toISOString(),
-      activityLogs: [activity],
-    } as Target));
+    await setDoc(
+      targetRef,
+      removeUndefined({
+        category,
+        target: targetValue,
+        completed: 0,
+        lastUpdatedBy: actor,
+        lastUpdatedAt: new Date().toISOString(),
+        activityLogs: [activity],
+      } as Target),
+    );
   }
 }
 
@@ -206,13 +213,7 @@ export async function updateTargetValue(
   }
 
   const currentTarget = snapshot.data().target;
-  const activity = createActivity(
-    actor,
-    "Updated",
-    "target",
-    `${currentTarget}`,
-    `${newTarget}`,
-  );
+  const activity = createActivity(actor, "Updated", "target", `${currentTarget}`, `${newTarget}`);
 
   await updateDoc(targetRef, {
     target: newTarget,
@@ -257,10 +258,7 @@ export async function updateCompletedCount(
 /**
  * Increment completed count by 1.
  */
-export async function incrementCompleted(
-  id: string,
-  actor: string,
-): Promise<void> {
+export async function incrementCompleted(id: string, actor: string): Promise<void> {
   const targetRef = doc(db, TARGETS_COLLECTION, id);
   const snapshot = await getDoc(targetRef);
 

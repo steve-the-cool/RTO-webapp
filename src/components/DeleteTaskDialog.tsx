@@ -86,9 +86,7 @@ export function DeleteTaskDialog({
       handleClose();
       onSuccess?.();
     } catch (err) {
-      setError(
-        `Failed to delete task: ${err instanceof Error ? err.message : "Unknown error"}`
-      );
+      setError(`Failed to delete task: ${err instanceof Error ? err.message : "Unknown error"}`);
       setLoading(false);
     }
   };
@@ -176,9 +174,7 @@ export function DeleteTaskDialog({
           {/* STEP 3: Confirmation */}
           {step === "confirm" && (
             <div className="space-y-3 rounded-lg bg-red-50 p-3">
-              <p className="text-sm font-medium text-gray-900">
-                ⚠️ This action cannot be undone.
-              </p>
+              <p className="text-sm font-medium text-gray-900">⚠️ This action cannot be undone.</p>
               <div className="text-xs text-gray-700 space-y-1">
                 <p>
                   <strong>Task:</strong> {taskTitle}

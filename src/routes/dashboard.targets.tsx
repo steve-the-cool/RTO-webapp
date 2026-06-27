@@ -11,12 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -199,9 +194,14 @@ function TargetsPage() {
                       interval={0}
                       tick={{ fontSize: 12 }}
                     />
-                    <YAxis domain={[0, 100]} label={{ value: "Percentage (%)", angle: -90, position: "insideLeft" }} />
+                    <YAxis
+                      domain={[0, 100]}
+                      label={{ value: "Percentage (%)", angle: -90, position: "insideLeft" }}
+                    />
                     <Tooltip
-                      formatter={(value) => `${typeof value === "number" ? value.toFixed(2) : value}%`}
+                      formatter={(value) =>
+                        `${typeof value === "number" ? value.toFixed(2) : value}%`
+                      }
                       contentStyle={{
                         backgroundColor: "rgba(0, 0, 0, 0.8)",
                         border: "none",
@@ -259,14 +259,13 @@ function TargetsPage() {
                       label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                     >
                       {targets.map((entry) => (
-                        <Cell
-                          key={`cell-${entry.id}`}
-                          fill={CATEGORY_COLORS[entry.category]}
-                        />
+                        <Cell key={`cell-${entry.id}`} fill={CATEGORY_COLORS[entry.category]} />
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value) => `${typeof value === "number" ? Math.round(value as number) : value}`}
+                      formatter={(value) =>
+                        `${typeof value === "number" ? Math.round(value as number) : value}`
+                      }
                       contentStyle={{
                         backgroundColor: "rgba(0, 0, 0, 0.8)",
                         border: "none",
@@ -386,16 +385,18 @@ function TargetCard({ target, onEdit, onCompleteChange }: TargetCardProps) {
         {/* Achievement */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Achievement</span>
-          <span className={cn(
-            "font-bold",
-            target.achievementPercentage >= 100
-              ? "text-green-600"
-              : target.achievementPercentage >= 75
-                ? "text-blue-600"
-                : target.achievementPercentage >= 50
-                  ? "text-amber-600"
-                  : "text-red-600",
-          )}>
+          <span
+            className={cn(
+              "font-bold",
+              target.achievementPercentage >= 100
+                ? "text-green-600"
+                : target.achievementPercentage >= 75
+                  ? "text-blue-600"
+                  : target.achievementPercentage >= 50
+                    ? "text-amber-600"
+                    : "text-red-600",
+            )}
+          >
             {target.achievementPercentage.toFixed(1)}%
           </span>
         </div>
@@ -425,9 +426,7 @@ function TargetFormDialog({
   const [selectedCategory, setSelectedCategory] = useState<TargetCategory | "">(
     editingTarget?.category || "",
   );
-  const [targetValue, setTargetValue] = useState(
-    editingTarget ? String(editingTarget.target) : "",
-  );
+  const [targetValue, setTargetValue] = useState(editingTarget ? String(editingTarget.target) : "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState("");
 
@@ -468,11 +467,7 @@ function TargetFormDialog({
       if (editingTarget) {
         await updateTargetValue(editingTarget.id, value, session.username);
       } else {
-        await createOrInitializeTarget(
-          selectedCategory as TargetCategory,
-          value,
-          session.username,
-        );
+        await createOrInitializeTarget(selectedCategory as TargetCategory, value, session.username);
       }
 
       onSuccess();
@@ -490,9 +485,7 @@ function TargetFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {editingTarget ? "Edit Target" : "Set New Target"}
-          </DialogTitle>
+          <DialogTitle>{editingTarget ? "Edit Target" : "Set New Target"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -540,11 +533,7 @@ function TargetFormDialog({
 
           {/* Buttons */}
           <div className="flex gap-2 justify-end">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
@@ -553,8 +542,10 @@ function TargetFormDialog({
                   <Loader2 className="size-4 animate-spin mr-2" />
                   Saving...
                 </>
+              ) : editingTarget ? (
+                "Update"
               ) : (
-                editingTarget ? "Update" : "Create"
+                "Create"
               )}
             </Button>
           </div>

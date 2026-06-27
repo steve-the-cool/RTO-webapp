@@ -1,10 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  Outlet,
-  Link,
-  createRootRouteWithContext,
-  useRouter,
-} from "@tanstack/react-router";
+import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { initAuth, type StaffUser } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
@@ -74,10 +69,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Registry Pro — Office Dashboard" },
-      { name: "description", content: "Office dashboard for RTO services: track clients, leads, renewals and applications." },
+      {
+        name: "description",
+        content:
+          "Office dashboard for RTO services: track clients, leads, renewals and applications.",
+      },
       { name: "author", content: "Registry Pro" },
       { property: "og:title", content: "Registry Pro — Office Dashboard" },
-      { property: "og:description", content: "Office dashboard for RTO services: track clients, leads, renewals and applications." },
+      {
+        property: "og:description",
+        content:
+          "Office dashboard for RTO services: track clients, leads, renewals and applications.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -140,12 +143,24 @@ function RootComponent() {
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="max-w-xl w-full text-center border rounded-lg p-6 bg-card">
           <h2 className="text-lg font-semibold">Something went wrong</h2>
-          <p className="text-sm text-muted-foreground my-3">An unexpected error occurred. You can try refreshing the page or returning to the dashboard.</p>
+          <p className="text-sm text-muted-foreground my-3">
+            An unexpected error occurred. You can try refreshing the page or returning to the
+            dashboard.
+          </p>
           <div className="flex items-center justify-center gap-2">
-            <button onClick={() => window.location.reload()} className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded">Reload</button>
-            <a href="/" className="inline-flex items-center px-4 py-2 border rounded">Go home</a>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded"
+            >
+              Reload
+            </button>
+            <a href="/" className="inline-flex items-center px-4 py-2 border rounded">
+              Go home
+            </a>
           </div>
-          <pre className="text-xs text-muted-foreground mt-4 text-left overflow-auto max-h-40">{String(fatalError && fatalError.stack)}</pre>
+          <pre className="text-xs text-muted-foreground mt-4 text-left overflow-auto max-h-40">
+            {String(fatalError && fatalError.stack)}
+          </pre>
         </div>
       </div>
     );

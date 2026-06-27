@@ -1,10 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  getMigrationStatus,
-  migrateExistingRecords,
-  getUnmigratedRecords,
-} from "@/lib/migration";
+import { getMigrationStatus, migrateExistingRecords, getUnmigratedRecords } from "@/lib/migration";
 import { runV2Migration, type MigrationReport } from "@/lib/migration-v2";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,13 +27,20 @@ function MigrationPage() {
   const [status, setStatus] = useState<MigrationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [migrating, setMigrating] = useState(false);
-  const [message, setMessage] = useState<{ type: "info" | "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "info" | "success" | "error";
+    text: string;
+  } | null>(null);
 
   const [v2Report, setV2Report] = useState<MigrationReport | null>(null);
   const [v2Migrating, setV2Migrating] = useState(false);
 
   const startV2Migration = async () => {
-    if (!confirm("Run V2 hierarchy migration to convert old records to Client -> Vehicle -> Service models?")) {
+    if (
+      !confirm(
+        "Run V2 hierarchy migration to convert old records to Client -> Vehicle -> Service models?",
+      )
+    ) {
       return;
     }
     try {
@@ -71,7 +74,11 @@ function MigrationPage() {
   };
 
   const runMigration = async () => {
-    if (!confirm("Run migration to add serviceType to unmigrated records? This will update your database.")) {
+    if (
+      !confirm(
+        "Run migration to add serviceType to unmigrated records? This will update your database.",
+      )
+    ) {
       return;
     }
 
@@ -197,9 +204,17 @@ function MigrationPage() {
 
       {/* Message */}
       {message && (
-        <Card className={message.type === "success" ? "border-green-500/50 bg-green-500/5" : "border-red-500/50 bg-red-500/5"}>
+        <Card
+          className={
+            message.type === "success"
+              ? "border-green-500/50 bg-green-500/5"
+              : "border-red-500/50 bg-red-500/5"
+          }
+        >
           <CardContent className="pt-6">
-            <p className={message.type === "success" ? "text-green-700" : "text-red-700"}>{message.text}</p>
+            <p className={message.type === "success" ? "text-green-700" : "text-red-700"}>
+              {message.text}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -218,8 +233,8 @@ function MigrationPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Running the migration will automatically assign service types to unmigrated records based on their work
-              description. This is a one-time operation.
+              Running the migration will automatically assign service types to unmigrated records
+              based on their work description. This is a one-time operation.
             </p>
 
             <Button onClick={runMigration} disabled={migrating} className="w-full">
@@ -259,7 +274,9 @@ function MigrationPage() {
       {status.unmigratedRecords > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Unmigrated Records ({status.unmigratedRecords})</CardTitle>
+            <CardTitle className="text-sm">
+              Unmigrated Records ({status.unmigratedRecords})
+            </CardTitle>
             <CardDescription>Records that need serviceType assignment</CardDescription>
           </CardHeader>
           <CardContent>
@@ -275,7 +292,9 @@ function MigrationPage() {
                       {record.bucket} • {record.work || "No work description"}
                     </p>
                   </div>
-                  <span className="text-xs px-2 py-1 rounded bg-orange-500/15 text-orange-700">Pending</span>
+                  <span className="text-xs px-2 py-1 rounded bg-orange-500/15 text-orange-700">
+                    Pending
+                  </span>
                 </div>
               ))}
             </div>
@@ -291,12 +310,15 @@ function MigrationPage() {
             Client → Vehicle → Service Hierarchy Migration (V2)
           </CardTitle>
           <CardDescription>
-            Migrate legacy flat records to the new normalized Client-Vehicle-Service relational structure.
+            Migrate legacy flat records to the new normalized Client-Vehicle-Service relational
+            structure.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            This will scan registry clients, leads, and customer profiles, then create normalized records inside the new collections (`registry_clients_v2`, `registry_vehicles_v2`, `registry_services_v2`) in batches. Existing records will remain completely intact.
+            This will scan registry clients, leads, and customer profiles, then create normalized
+            records inside the new collections (`registry_clients_v2`, `registry_vehicles_v2`,
+            `registry_services_v2`) in batches. Existing records will remain completely intact.
           </p>
 
           <Button onClick={startV2Migration} disabled={v2Migrating} className="w-full">
@@ -315,7 +337,9 @@ function MigrationPage() {
 
           {v2Report && (
             <div className="mt-4 p-3 border rounded bg-background text-xs space-y-1 font-mono">
-              <p className={v2Report.success ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+              <p
+                className={v2Report.success ? "text-green-600 font-bold" : "text-red-600 font-bold"}
+              >
                 Status: {v2Report.success ? "SUCCESS" : "FAILED"}
               </p>
               <p>Total Legacy Docs Scanned: {v2Report.totalRecordsScanned}</p>
@@ -325,7 +349,9 @@ function MigrationPage() {
               {v2Report.errors.length > 0 && (
                 <div className="mt-2 text-red-500">
                   <p className="font-bold">Errors:</p>
-                  {v2Report.errors.map((e, idx) => <p key={idx}>{e}</p>)}
+                  {v2Report.errors.map((e, idx) => (
+                    <p key={idx}>{e}</p>
+                  ))}
                 </div>
               )}
             </div>

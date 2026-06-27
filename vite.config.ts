@@ -1,12 +1,12 @@
 /**
  * Vercel SPA Configuration for TanStack Start + React Router
- * 
+ *
  * This configuration builds a pure client-side SPA (no SSR, no server bundle).
  * - TanStack Router handles all routing in the browser
  * - React runs entirely on the client
  * - Firebase handles all backend operations
  * - Vercel serves static files from dist/client
- * 
+ *
  * Key: NOT using @lovable.dev/vite-tanstack-config because it defaults to SSR.
  * Instead, we use standard Vite + React plugins for SPA mode.
  */
@@ -18,12 +18,7 @@ import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  plugins: [
-    TanStackRouterVite(),
-    react(),
-    tailwindcss(),
-    tsconfigPaths(),
-  ],
+  plugins: [TanStackRouterVite(), react(), tailwindcss(), tsconfigPaths()],
   build: {
     // Build client-side bundle only (no SSR)
     outDir: "dist/client",

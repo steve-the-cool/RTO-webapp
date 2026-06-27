@@ -8,7 +8,11 @@ interface LastUpdatedInfoProps {
   className?: string;
 }
 
-export function LastUpdatedInfo({ lastUpdatedBy, lastUpdatedAt, className = "" }: LastUpdatedInfoProps) {
+export function LastUpdatedInfo({
+  lastUpdatedBy,
+  lastUpdatedAt,
+  className = "",
+}: LastUpdatedInfoProps) {
   if (!lastUpdatedBy && !lastUpdatedAt) {
     return null;
   }
@@ -18,7 +22,9 @@ export function LastUpdatedInfo({ lastUpdatedBy, lastUpdatedAt, className = "" }
       {lastUpdatedBy && (
         <div className="flex items-center gap-1.5">
           <User className="h-4 w-4 text-gray-400" />
-          <span>Updated by <span className="font-medium text-gray-900">{lastUpdatedBy}</span></span>
+          <span>
+            Updated by <span className="font-medium text-gray-900">{lastUpdatedBy}</span>
+          </span>
         </div>
       )}
       {lastUpdatedAt && (

@@ -49,9 +49,14 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
             <p className="text-2xl font-bold text-slate-800">{safeText(invoice.invoiceNumber)}</p>
             <div className="mt-2 text-sm text-slate-700">
               <p>Invoice Date: {formatDate(invoice.invoiceDate)}</p>
-              <p>Billing Period: {formatDate(invoice.billingPeriodStart)} to {formatDate(invoice.billingPeriodEnd)}</p>
+              <p>
+                Billing Period: {formatDate(invoice.billingPeriodStart)} to{" "}
+                {formatDate(invoice.billingPeriodEnd)}
+              </p>
             </div>
-            <span className={`inline-flex mt-3 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(invoice.status || "")}`}>
+            <span
+              className={`inline-flex mt-3 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(invoice.status || "")}`}
+            >
               {safeText(invoice.status)}
             </span>
           </div>
@@ -80,7 +85,9 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
             <p className="font-medium">{safeText(invoice.clientName)}</p>
             <p>Mobile: {safeText(invoice.clientMobile)}</p>
             <p>Address: {safeText(invoice.clientAddress)}</p>
-            <p>Vehicle: {safeText(invoice.vehicleNumber)} ({safeText(invoice.vehicleType)})</p>
+            <p>
+              Vehicle: {safeText(invoice.vehicleNumber)} ({safeText(invoice.vehicleType)})
+            </p>
             <p className="text-slate-500">Client ID: {safeText(invoice.clientId)}</p>
           </div>
         </div>
@@ -92,7 +99,9 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
             </div>
             <div className="flex justify-between">
               <span className="font-medium text-slate-700">Billing Period:</span>
-              <span>{formatDate(invoice.billingPeriodStart)} to {formatDate(invoice.billingPeriodEnd)}</span>
+              <span>
+                {formatDate(invoice.billingPeriodStart)} to {formatDate(invoice.billingPeriodEnd)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="font-medium text-slate-700">Created By:</span>
@@ -130,7 +139,9 @@ export function InvoiceDocument({ invoice }: InvoiceDocumentProps) {
                   <td className="px-4 py-2 text-right">{formatCurrency(service.unitPrice)}</td>
                   <td className="px-4 py-2 text-right">{formatCurrency(service.amount)}</td>
                   <td className="px-4 py-2 text-right">{formatCurrency(service.tax)}</td>
-                  <td className="px-4 py-2 text-right font-medium">{formatCurrency(service.total)}</td>
+                  <td className="px-4 py-2 text-right font-medium">
+                    {formatCurrency(service.total)}
+                  </td>
                 </tr>
               ))}
             </tbody>

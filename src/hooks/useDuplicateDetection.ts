@@ -66,7 +66,9 @@ export function useDuplicateDetection({ bucket, actor }: UseDuplicateDetectionPr
     } catch (error) {
       console.error("Error saving after duplicate override:", error);
       setLoading(false);
-      toast.error(`Failed to save client after override: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(
+        `Failed to save client after override: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   };
 

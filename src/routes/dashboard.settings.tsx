@@ -7,6 +7,13 @@ import { Switch } from "@/components/ui/switch";
 import { getForceCapsSetting, setForceCapsSetting } from "@/lib/capitalize-settings";
 import { getMigrationStatus } from "@/lib/migration";
 import { ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { getSession } from "@/lib/auth";
+import { seedDefaultUsers } from "@/lib/userService";
+import {
+  type RolePermissions,
+  saveStaffPermissions,
+  subscribeStaffPermissions,
+} from "@/lib/permissions";
 
 interface Settings {
   officeName: string;
@@ -17,13 +24,34 @@ interface Settings {
 const KEY = "registry-settings";
 const DEFAULTS: Settings = { officeName: "Registry Pro", branch: "Branch 042", contact: "" };
 
+// Default staff permission fallback to prevent null crashes
+const defaultPermissions = {
+  createClients: false,
+  editClients: false,
+  deleteClients: false,
+  createTasks: false,
+  editTasks: false,
+  deleteTasks: false,
+  financeAccess: false,
+  reportsAccess: false,
+  settingsAccess: false,
+};
+
 export const Route = createFileRoute("/dashboard/settings")({ component: SettingsPage });
 
 function SettingsPage() {
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [forceCaps, setForceCapsState] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [migrationStatus, setMigrationStatus] = useState<{ unmigratedRecords: number } | null>(null);
+  const [migrationStatus, setMigrationStatus] = useState<{ unmigratedRecords: number } | null>(
+    null,
+  );
+
+  const [permissions, setPermissions] = useState<RolePermissions>(defaultPermissions);
+  const [permsSaved, setPermsSaved] = useState(false);
+
+  const session = getSession();
+  const isAdmin = session?.role === "admin";
 
   useEffect(() => {
     try {
@@ -31,17 +59,36 @@ function SettingsPage() {
       if (raw) setS({ ...DEFAULTS, ...JSON.parse(raw) });
     } catch {}
     setForceCapsState(getForceCapsSetting());
-    
+
     // Load migration status
     getMigrationStatus()
-      .then(status => setMigrationStatus({ unmigratedRecords: status.unmigratedRecords }))
-      .catch(err => console.error("Error loading migration status:", err));
+      .then((status) => setMigrationStatus({ unmigratedRecords: status.unmigratedRecords }))
+      .catch((err) => console.error("Error loading migration status:", err));
+
+    // Subscribe to staff permissions
+    const unsubPerms = subscribeStaffPermissions((p) => {
+      setPermissions(p ?? defaultPermissions);
+    });
+    return () => {
+      unsubPerms();
+    };
   }, []);
 
   const save = () => {
     localStorage.setItem(KEY, JSON.stringify(s));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSavePermissions = async () => {
+    if (!permissions) return;
+    try {
+      await saveStaffPermissions(permissions);
+      setPermsSaved(true);
+      setTimeout(() => setPermsSaved(false), 2000);
+    } catch (err) {
+      console.error("[Settings] Failed to save staff permissions:", err);
+    }
   };
 
   const toggleForceCaps = (enabled: boolean) => {
@@ -53,7 +100,14 @@ function SettingsPage() {
 
   const reset = () => {
     if (!confirm("Clear ALL local data (records, tasks, documents)?")) return;
-    ["registry-clients", "registry-leads", "registry-applications", "registry-customers", "registry-tasks", "registry-documents"].forEach((k) => localStorage.removeItem(k));
+    [
+      "registry-clients",
+      "registry-leads",
+      "registry-applications",
+      "registry-customers",
+      "registry-tasks",
+      "registry-documents",
+    ].forEach((k) => localStorage.removeItem(k));
     alert("Data cleared. Reload to reseed.");
   };
 
@@ -67,7 +121,10 @@ function SettingsPage() {
       <div className="rounded-xl border bg-card p-6 space-y-4">
         <div className="space-y-1.5">
           <Label>Office name</Label>
-          <Input value={s.officeName} onChange={(e) => setS({ ...s, officeName: e.target.value })} />
+          <Input
+            value={s.officeName}
+            onChange={(e) => setS({ ...s, officeName: e.target.value })}
+          />
         </div>
         <div className="space-y-1.5">
           <Label>Branch</Label>
@@ -75,12 +132,18 @@ function SettingsPage() {
         </div>
         <div className="space-y-1.5">
           <Label>Contact phone</Label>
-          <Input value={s.contact} onChange={(e) => setS({ ...s, contact: e.target.value })} placeholder="9876543210" />
+          <Input
+            value={s.contact}
+            onChange={(e) => setS({ ...s, contact: e.target.value })}
+            placeholder="9876543210"
+          />
         </div>
         <div className="flex items-center justify-between pt-3 border-t">
           <div className="space-y-0.5">
             <Label>Force capital letters</Label>
-            <p className="text-xs text-muted-foreground">Automatically convert text inputs to uppercase</p>
+            <p className="text-xs text-muted-foreground">
+              Automatically convert text inputs to uppercase
+            </p>
           </div>
           <Switch checked={forceCaps} onCheckedChange={toggleForceCaps} />
         </div>
@@ -90,10 +153,88 @@ function SettingsPage() {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="mt-4 space-y-2">
+          <Link to="/dashboard/settings/users">
+            <Button variant="outline">User Management</Button>
+          </Link>
+          <Button variant="secondary" onClick={async () => {
+            try {
+              await seedDefaultUsers();
+              alert('Default users created successfully.');
+            } catch (e) {
+              console.error(e);
+              alert('Failed to create default users.');
+            }
+          }}>Create Default Users</Button>
+        </div>
+      )}
+        <div className="rounded-xl border bg-card p-6 space-y-4">
+          <div>
+            <h3 className="font-semibold text-lg">Staff Role Permissions</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure client management permissions for employee/staff roles.
+            </p>
+          </div>
+          <div className="space-y-4 pt-3 border-t">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Staff can create clients</Label>
+                <p className="text-xs text-muted-foreground">
+                  Allow employees to add new client and lead records
+                </p>
+              </div>
+              <Switch
+                checked={permissions.createClients}
+                onCheckedChange={(checked) =>
+                  setPermissions(prev => ({ ...(prev ?? defaultPermissions), createClients: checked }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Staff can edit clients</Label>
+                <p className="text-xs text-muted-foreground">
+                  Allow employees to edit client profile fields
+                </p>
+              </div>
+              <Switch
+                checked={permissions.editClients}
+                onCheckedChange={(checked) =>
+                  setPermissions(prev => ({ ...(prev ?? defaultPermissions), editClients: checked }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Staff can delete clients</Label>
+                <p className="text-xs text-muted-foreground">
+                  Allow employees to delete clients (normally Admin only)
+                </p>
+              </div>
+              <Switch
+                checked={permissions.deleteClients}
+                onCheckedChange={(checked) =>
+                  setPermissions(prev => ({ ...(prev ?? defaultPermissions), deleteClients: checked }))
+                }
+              />
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <Button onClick={handleSavePermissions}>Save Permissions</Button>
+              {permsSaved && <span className="text-sm text-success">Permissions saved.</span>}
+            </div>
+          </div>
+        </div>
+
+
       <div className="rounded-xl border border-destructive/30 bg-card p-6 space-y-3">
         <h3 className="font-semibold text-destructive">Danger zone</h3>
-        <p className="text-sm text-muted-foreground">Permanently delete all locally stored records and tasks.</p>
-        <Button variant="destructive" onClick={reset}>Clear all data</Button>
+        <p className="text-sm text-muted-foreground">
+          Permanently delete all locally stored records and tasks.
+        </p>
+        <Button variant="destructive" onClick={reset}>
+          Clear all data
+        </Button>
       </div>
 
       {migrationStatus && migrationStatus.unmigratedRecords > 0 && (
@@ -104,7 +245,8 @@ function SettingsPage() {
               <div>
                 <h3 className="font-semibold text-orange-700">Service Type Migration Required</h3>
                 <p className="text-sm text-orange-600 mt-1">
-                  {migrationStatus.unmigratedRecords} record(s) need to be migrated to support service module filtering.
+                  {migrationStatus.unmigratedRecords} record(s) need to be migrated to support
+                  service module filtering.
                 </p>
               </div>
               <Link to="/dashboard/settings/migration" className="inline-block">
@@ -125,7 +267,8 @@ function SettingsPage() {
             <div>
               <h3 className="font-semibold text-green-700">All Records Migrated</h3>
               <p className="text-sm text-green-600 mt-1">
-                All records have been successfully migrated and are ready for service module filtering.
+                All records have been successfully migrated and are ready for service module
+                filtering.
               </p>
             </div>
           </div>

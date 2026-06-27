@@ -1,27 +1,21 @@
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "./firebase";
-import {
-  type Bucket,
-  type RegistryRecord,
-  type ServiceType,
-} from "./records";
+import { type Bucket, type RegistryRecord, type ServiceType } from "./records";
 
 /**
  * Get all records for a specific service type across all buckets.
  * Fetches data from the V2 collections: registry_services_v2, registry_vehicles_v2, registry_clients_v2
  */
-export async function getServiceClientsAll(
-  serviceType: ServiceType,
-): Promise<RegistryRecord[]> {
-  console.log(`[getServiceClientsAll] START (V2): Fetching all records for serviceType="${serviceType}"`);
+export async function getServiceClientsAll(serviceType: ServiceType): Promise<RegistryRecord[]> {
+  console.log(
+    `[getServiceClientsAll] START (V2): Fetching all records for serviceType="${serviceType}"`,
+  );
 
   try {
-    const qServices = query(collection(db, "registry_services_v2"), where("serviceType", "==", serviceType));
+    const qServices = query(
+      collection(db, "registry_services_v2"),
+      where("serviceType", "==", serviceType),
+    );
     const servicesSnap = await getDocs(qServices);
 
     const vehiclesSnap = await getDocs(collection(db, "registry_vehicles_v2"));
@@ -88,8 +82,8 @@ export async function getServiceClientsAll(
             vehicleNumber: vehicle.vehicleNumber,
             vehicleType: vehicle.vehicleType,
             notes: service.notes || "",
-          }
-        ]
+          },
+        ],
       };
 
       records.push(record);
@@ -120,7 +114,10 @@ export async function getServiceClients(
  */
 export async function getServiceStats(serviceType: ServiceType) {
   try {
-    const qServices = query(collection(db, "registry_services_v2"), where("serviceType", "==", serviceType));
+    const qServices = query(
+      collection(db, "registry_services_v2"),
+      where("serviceType", "==", serviceType),
+    );
     const servicesSnap = await getDocs(qServices);
 
     const stats = {
@@ -184,7 +181,9 @@ export async function getServiceAmountReceived(serviceType: ServiceType): Promis
     const details = r.services || [];
     const matching = details.filter((detail) => detail.serviceType === serviceType);
     if (matching.length > 0) {
-      return sum + matching.reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0);
+      return (
+        sum + matching.reduce((serviceSum, detail) => serviceSum + (detail.amountReceived || 0), 0)
+      );
     }
     return sum;
   }, 0);
@@ -277,8 +276,8 @@ export async function getUpcomingRenewals(daysFromNow: number = 30): Promise<Reg
               price: service.serviceAmount ?? 0,
               amountReceived: service.amountReceived ?? 0,
               assignee: service.assignedStaff || "",
-            }
-          ]
+            },
+          ],
         };
 
         records.push(record);
@@ -344,7 +343,13 @@ export async function getActiveServicesCount(): Promise<number> {
   try {
     const q = query(
       collection(db, "registry_services_v2"),
-      where("taskStatus", "in", ["In Progress", "Documents Collected", "Verification", "Submitted", "Approved"])
+      where("taskStatus", "in", [
+        "In Progress",
+        "Documents Collected",
+        "Verification",
+        "Submitted",
+        "Approved",
+      ]),
     );
     const snap = await getDocs(q);
     return snap.size;
@@ -391,7 +396,7 @@ export async function validateRecordInService(
 ): Promise<{ isValid: boolean; message: string; details: any }> {
   try {
     const docSnap = await getDocs(
-      query(collection(db, "registry_services_v2"), where("id", "==", recordId))
+      query(collection(db, "registry_services_v2"), where("id", "==", recordId)),
     );
 
     if (docSnap.empty) {

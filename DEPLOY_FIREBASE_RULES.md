@@ -7,27 +7,33 @@
 ## QUICK START: Manual Deployment via Firebase Console
 
 ### Step 1: Go to Firebase Console
+
 **URL:** https://console.firebase.google.com
 
 ### Step 2: Select Your Project
+
 1. Look for **"rto-web-app-v2"** in the project list
 2. Click to open it
 
 ### Step 3: Navigate to Storage Rules
+
 1. Click **"Storage"** in the left sidebar
 2. Click the **"Rules"** tab (next to "Files" tab)
 
 ### Step 4: Copy Updated Rules
+
 1. Open the file: **storage.rules** in VS Code (in your project root)
 2. Select ALL content (Ctrl+A)
 3. Copy (Ctrl+C)
 
 ### Step 5: Replace Rules in Firebase Console
+
 1. In Firebase Console Rules editor, select ALL existing text (Ctrl+A)
 2. Delete it
 3. Paste the new content (Ctrl+V)
 
 ### Step 6: Publish Rules
+
 1. Click the **"Publish"** button (top right)
 2. Wait for confirmation message: **"Rules updated successfully"**
 
@@ -55,6 +61,7 @@
 ## What Happens Internally After Publishing
 
 **Old behavior (before rules deployment):**
+
 ```
 User clicks Upload
     ↓
@@ -72,6 +79,7 @@ After 120 seconds: TIMEOUT ERROR
 ```
 
 **New behavior (after rules deployment):**
+
 ```
 User clicks Upload
     ↓
@@ -110,6 +118,7 @@ match /customers/{customerId}/attachments/{filename} {
 ```
 
 This allows any authenticated user to:
+
 - ✅ Upload files to `/customers/{customerId}/attachments/` up to 10 MB
 - ✅ Delete their own attachment files
 - ❌ Cannot upload files larger than 10 MB
@@ -136,19 +145,23 @@ This allows any authenticated user to:
 ## ❌ Troubleshooting
 
 ### Rules Still Show Old Content
+
 - **Issue:** Might be browser cache
 - **Fix:** Hard refresh Firebase Console (Ctrl+Shift+R)
 
 ### Still Getting "Upload timeout" Error
+
 - **Issue:** Rules might not have published successfully
 - **Fix:** Check Firebase Console → Storage → Rules for `/customers/{customerId}/attachments/` rule
 - If missing, repeat Step 4-6
 
 ### Upload Starts But Stops at X%
+
 - **Issue:** File might be too large (>10 MB)
 - **Fix:** Ensure file is less than 10 MB
 
 ### Cannot See File in Firebase Storage
+
 - **Issue:** Upload may have failed silently
 - **Fix:** Check browser console (F12) for error messages with [uploadFileWithTimeout] prefix
 

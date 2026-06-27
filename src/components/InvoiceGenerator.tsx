@@ -35,6 +35,8 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
   const [autoStartDate, setAutoStartDate] = useState<string>("");
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<any[]>([]);
+  const [collectionDate, setCollectionDate] = useState("");
+  const [askBhaylubha, setAskBhaylubha] = useState(false);
 
   const session = getSession();
   const createdBy = session?.username || "system";
@@ -77,7 +79,7 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
           const res = await calculateInvoiceAmount(selectedClient.id, selectedServices);
           setUnitPrice(String(res.totalAmount));
           setBreakdown(res.breakdown);
-          
+
           // Debugging logs requested by prompt
           console.log("[Billing] Selected Client", selectedClient.id);
           console.log("[Billing] Selected Services", selectedServices);
@@ -142,8 +144,11 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
   }, [selectedClient, billingStartDate, billingEndDate, selectedServices, unitPrice]);
 
   // Filter clients by search
-  const filteredClients = clients.filter((c) =>
-    searchTerm === "" || c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.mobile?.includes(searchTerm),
+  const filteredClients = clients.filter(
+    (c) =>
+      searchTerm === "" ||
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.mobile?.includes(searchTerm),
   );
 
   // Handle service selection
@@ -163,7 +168,15 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
 
   // Create invoice
   const handleCreateInvoice = async () => {
-    console.log({ step: "BUTTON_CLICKED", selectedClient, billingStartDate, billingEndDate, selectedServices, unitPrice, isFormValid });
+    console.log({
+      step: "BUTTON_CLICKED",
+      selectedClient,
+      billingStartDate,
+      billingEndDate,
+      selectedServices,
+      unitPrice,
+      isFormValid,
+    });
 
     if (!selectedClient) {
       setError("Please select a client");
@@ -194,7 +207,9 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
       const price = item.amount;
       const tax = price * 0.18;
       return {
-        serviceId: item.serviceId || `svc-${Date.now()}-${item.serviceName.replace(/\s+/g, "-")}-${item.vehicleNumber}`,
+        serviceId:
+          item.serviceId ||
+          `svc-${Date.now()}-${item.serviceName.replace(/\s+/g, "-")}-${item.vehicleNumber}`,
         serviceName: item.serviceName,
         vehicleNumber: item.vehicleNumber,
         quantity: 1,
@@ -223,6 +238,8 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
         billingStartDate,
         billingEndDate,
         createdBy,
+        collectionDate,
+        askBhaylubha,
       );
 
       console.log({ step: "INVOICE_CREATED", invoice });
@@ -235,6 +252,8 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
       setSelectedServices([]);
       setValidationMsg(null);
       setBreakdown([]);
+      setCollectionDate("");
+      setAskBhaylubha(false);
 
       onInvoiceCreated?.(invoice);
 
@@ -282,9 +301,17 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
         )}
 
         {validationMsg && (
-          <div className={`mb-4 p-3 rounded-lg flex items-start gap-2 ${validationMsg.includes("✓") ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-            <AlertCircle className={`size-5 mt-0.5 flex-shrink-0 ${validationMsg.includes("✓") ? "text-green-600" : "text-red-600"}`} />
-            <p className={`text-sm ${validationMsg.includes("✓") ? "text-green-700" : "text-red-700"}`}>{validationMsg}</p>
+          <div
+            className={`mb-4 p-3 rounded-lg flex items-start gap-2 ${validationMsg.includes("✓") ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}
+          >
+            <AlertCircle
+              className={`size-5 mt-0.5 flex-shrink-0 ${validationMsg.includes("✓") ? "text-green-600" : "text-red-600"}`}
+            />
+            <p
+              className={`text-sm ${validationMsg.includes("✓") ? "text-green-700" : "text-red-700"}`}
+            >
+              {validationMsg}
+            </p>
           </div>
         )}
 
@@ -324,7 +351,8 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
               <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm font-medium">{selectedClient.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {selectedClient.mobile} {selectedClient.companyName ? `• ${selectedClient.companyName}` : ""}
+                  {selectedClient.mobile}{" "}
+                  {selectedClient.companyName ? `• ${selectedClient.companyName}` : ""}
                 </p>
               </div>
             )}
@@ -383,15 +411,20 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
           {/* Breakdown of selected services across vehicles */}
           {selectedClient && selectedServices.length > 0 && breakdown.length > 0 && (
             <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-border space-y-2">
-              <h4 className="text-xs font-bold uppercase text-muted-foreground tracking-wide">Invoice Breakdown</h4>
+              <h4 className="text-xs font-bold uppercase text-muted-foreground tracking-wide">
+                Invoice Breakdown
+              </h4>
               <div className="space-y-2.5 text-xs">
                 {selectedServices.map((serviceName) => {
                   const serviceItems = breakdown.filter((item) => item.serviceName === serviceName);
                   if (serviceItems.length === 0) return null;
                   const serviceSubtotal = serviceItems.reduce((sum, item) => sum + item.amount, 0);
-                  
+
                   return (
-                    <div key={serviceName} className="border-b border-gray-200/60 pb-1.5 last:border-b-0 last:pb-0">
+                    <div
+                      key={serviceName}
+                      className="border-b border-gray-200/60 pb-1.5 last:border-b-0 last:pb-0"
+                    >
                       <div className="font-semibold text-foreground">{serviceName}</div>
                       <div className="mt-1 space-y-0.5 pl-2 text-muted-foreground font-mono text-[11px]">
                         {serviceItems.map((item, idx) => (
@@ -428,9 +461,48 @@ export function InvoiceGenerator({ onInvoiceCreated }: InvoiceGeneratorProps) {
             />
             {unitPrice && Number(unitPrice) > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                Tax (18%): ₹{(Number(unitPrice) * 0.18).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Total: ₹{(Number(unitPrice) * 1.18).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Tax (18%): ₹
+                {(Number(unitPrice) * 0.18).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                | Total: ₹
+                {(Number(unitPrice) * 1.18).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </p>
             )}
+          </div>
+
+          {/* Collection Date & Ask Bhaylubha Checkbox */}
+          <div className="grid gap-4 sm:grid-cols-2 bg-slate-50 p-4 border rounded-lg">
+            <div>
+              <label className="text-xs font-bold text-gray-500 uppercase block mb-1">
+                Planned Collection Date
+              </label>
+              <Input
+                type="date"
+                value={collectionDate}
+                onChange={(e) => setCollectionDate(e.target.value)}
+                className="bg-white"
+              />
+            </div>
+            <div className="flex items-center gap-2 pl-2">
+              <input
+                id="generatorAskBhay"
+                type="checkbox"
+                checked={askBhaylubha}
+                onChange={(e) => setAskBhaylubha(e.target.checked)}
+                className="size-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label
+                htmlFor="generatorAskBhay"
+                className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+              >
+                Require Bhaylubha Approval
+              </label>
+            </div>
           </div>
 
           {/* Create Button */}

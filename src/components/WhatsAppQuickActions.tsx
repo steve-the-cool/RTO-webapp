@@ -30,13 +30,11 @@ const MESSAGE_TEMPLATES: MessageTemplate[] = [
   },
   {
     label: "💑 Anniversary Wishes",
-    message: () =>
-      "Wishing you a wonderful anniversary. Thank you for your trust.",
+    message: () => "Wishing you a wonderful anniversary. Thank you for your trust.",
   },
   {
     label: "⭐ Feedback Request",
-    message: () =>
-      "Thank you for choosing our services. Please share your valuable feedback.",
+    message: () => "Thank you for choosing our services. Please share your valuable feedback.",
   },
   {
     label: "🙏 Thank You Message",
@@ -101,9 +99,7 @@ export function WhatsAppQuickActions({ mobile, name }: WhatsAppQuickActionsProps
           <MessageCircle className="size-4" />
           WhatsApp Actions
         </Label>
-        {isDisabled && (
-          <span className="text-xs text-red-600">Mobile number required</span>
-        )}
+        {isDisabled && <span className="text-xs text-red-600">Mobile number required</span>}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -150,9 +146,7 @@ export function WhatsAppQuickActions({ mobile, name }: WhatsAppQuickActionsProps
                 placeholder="Type your message here..."
                 className="min-h-32 text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                {customMessage.length} characters
-              </p>
+              <p className="text-xs text-muted-foreground">{customMessage.length} characters</p>
             </div>
             {!isDisabled && (
               <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
@@ -161,11 +155,7 @@ export function WhatsAppQuickActions({ mobile, name }: WhatsAppQuickActionsProps
             )}
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCustomDialogOpen(false)}
-              disabled={sending}
-            >
+            <Button variant="outline" onClick={() => setCustomDialogOpen(false)} disabled={sending}>
               Cancel
             </Button>
             <Button

@@ -3,6 +3,7 @@
 ## 📊 Data Structure
 
 ### Old System (Removed ❌)
+
 ```typescript
 // Client Record Level (NO LONGER USED)
 {
@@ -18,6 +19,7 @@
 ```
 
 ### New System (Current ✅)
+
 ```typescript
 // Services Array (SINGLE SOURCE OF TRUTH)
 {
@@ -58,6 +60,7 @@
 ## 🧮 Calculation Examples
 
 ### Pending Amount Calculation (Per Service)
+
 ```javascript
 const service = {
   serviceType: "Insurance",
@@ -70,44 +73,38 @@ const pending = Math.max(0, (service.price || 0) - (service.amountReceived || 0)
 ```
 
 ### Payment Status Calculation (Per Service)
+
 ```javascript
 function getServicePaymentStatus(service) {
   const received = service.amountReceived || 0;
   const amount = service.price || 0;
-  
+
   if (received === 0) return "Unpaid";
   if (received >= amount) return "Paid";
-  return "Partially Paid";  // 0 < received < amount
+  return "Partially Paid"; // 0 < received < amount
 }
 
 // Examples:
-getServicePaymentStatus({ price: 5000, amountReceived: 0 });      // "Unpaid"
-getServicePaymentStatus({ price: 5000, amountReceived: 2000 });   // "Partially Paid"
-getServicePaymentStatus({ price: 5000, amountReceived: 5000 });   // "Paid"
+getServicePaymentStatus({ price: 5000, amountReceived: 0 }); // "Unpaid"
+getServicePaymentStatus({ price: 5000, amountReceived: 2000 }); // "Partially Paid"
+getServicePaymentStatus({ price: 5000, amountReceived: 5000 }); // "Paid"
 ```
 
 ### Record-Level Aggregation (From Services)
+
 ```javascript
 function getRecordMetrics(record) {
   const services = record.services || [];
-  
-  const totalPrice = services.reduce(
-    (sum, s) => sum + (s.price || 0), 
-    0
-  );
-  
-  const totalReceived = services.reduce(
-    (sum, s) => sum + (s.amountReceived || 0), 
-    0
-  );
-  
+
+  const totalPrice = services.reduce((sum, s) => sum + (s.price || 0), 0);
+
+  const totalReceived = services.reduce((sum, s) => sum + (s.amountReceived || 0), 0);
+
   const totalPending = Math.max(0, totalPrice - totalReceived);
-  
-  const paymentStatus = 
-    totalReceived === 0 ? "Unpaid" :
-    totalReceived >= totalPrice ? "Paid" :
-    "Partially Paid";
-  
+
+  const paymentStatus =
+    totalReceived === 0 ? "Unpaid" : totalReceived >= totalPrice ? "Paid" : "Partially Paid";
+
   return { totalPrice, totalReceived, totalPending, paymentStatus };
 }
 
@@ -126,12 +123,13 @@ const metrics = getRecordMetrics(record);
 ## 🎯 Common Operations
 
 ### Reading Service Accounting
+
 ```javascript
 // Get service details with accounting info
 const serviceDetails = getRecordServiceDetails(record);
 // Returns array with all service info including amountReceived
 
-serviceDetails.forEach(service => {
+serviceDetails.forEach((service) => {
   console.log(`${service.serviceType}:`);
   console.log(`  Amount: ₹${service.price}`);
   console.log(`  Received: ₹${service.amountReceived ?? 0}`);
@@ -140,30 +138,27 @@ serviceDetails.forEach(service => {
 ```
 
 ### Updating Service Amount Received
+
 ```javascript
 // Update a specific service's amountReceived
 const updatedRecord = {
   ...record,
-  services: record.services.map(s =>
-    s.serviceType === "Insurance"
-      ? { ...s, amountReceived: 3000 }
-      : s
-  )
+  services: record.services.map((s) =>
+    s.serviceType === "Insurance" ? { ...s, amountReceived: 3000 } : s,
+  ),
 };
 
 await saveRecord(bucket, updatedRecord, currentUser);
 ```
 
 ### Aggregating Across Multiple Records
+
 ```javascript
 // Get total revenue across all clients
 async function getTotalRevenue() {
   const records = await getAllRecords();
   return records.reduce((sum, record) => {
-    const serviceTotal = (record.services || []).reduce(
-      (sum, s) => sum + (s.price || 0),
-      0
-    );
+    const serviceTotal = (record.services || []).reduce((sum, s) => sum + (s.price || 0), 0);
     return sum + serviceTotal;
   }, 0);
 }
@@ -174,7 +169,7 @@ async function getTotalCollected() {
   return records.reduce((sum, record) => {
     const serviceTotal = (record.services || []).reduce(
       (sum, s) => sum + (s.amountReceived || 0),
-      0
+      0,
     );
     return sum + serviceTotal;
   }, 0);
@@ -186,6 +181,7 @@ async function getTotalCollected() {
 ## 📱 UI Examples
 
 ### Service Row in Form (RecordTable)
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Service: [Insurance ▼] Due: [2024-02-15] Amount: [5000]        │
@@ -199,6 +195,7 @@ async function getTotalCollected() {
 ```
 
 ### Dashboard Card Example
+
 ```
 ┌──────────────────────────────────┐
 │ Total Revenue                    │
@@ -212,6 +209,7 @@ async function getTotalCollected() {
 ```
 
 ### Service Module Dashboard (Example)
+
 ```
 Filter: Insurance services only
 
@@ -232,6 +230,7 @@ Service-specific status:
 ## 🔄 Migration Example
 
 ### Before Migration (Legacy Data)
+
 ```javascript
 {
   id: "client-456",
@@ -247,6 +246,7 @@ Service-specific status:
 ```
 
 ### After Auto-Migration
+
 ```javascript
 {
   id: "client-456",
@@ -309,18 +309,21 @@ getTotalPendingAmount(): Promise<number>  // NEW: Calculates total pending
 ## ⚠️ Important Notes
 
 ### ✅ What to Do
+
 - Always read amounts from service-level data
 - Always aggregate from services array for dashboard totals
 - Use helper functions for calculations
 - Update amountReceived on individual services
 
 ### ❌ What NOT to Do
+
 - Don't read from record.serviceAmount anymore
 - Don't read from record.amountReceived anymore
 - Don't use record.paymentStatus for accounting
 - Don't calculate pending from record-level data
 
 ### 🔄 Migration Checklist
+
 - [ ] Identify records with old accounting data
 - [ ] Run admin migration tool to auto-distribute
 - [ ] Verify service amounts are correct
@@ -332,15 +335,19 @@ getTotalPendingAmount(): Promise<number>  // NEW: Calculates total pending
 ## 📞 Quick Troubleshooting
 
 ### Issue: Dashboard shows $0
+
 **Solution**: Check if services array is populated with `price` values
 
 ### Issue: Payment status incorrect
+
 **Solution**: Verify `amountReceived` field exists on service and is less than `price`
 
 ### Issue: Pending amount wrong
+
 **Solution**: Check calculation: pending = Math.max(0, price - amountReceived)
 
 ### Issue: Old accounting fields still present
+
 **Solution**: Run migration tool to remove old fields
 
 ---

@@ -63,17 +63,24 @@ export function InvoiceHistory({ clientId, onViewInvoice }: InvoiceHistoryProps)
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="font-semibold">{invoice.invoiceNumber}</h4>
-                <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(invoice.status)}`}>
+                <span
+                  className={`text-xs px-2 py-1 rounded-full ${getStatusColor(invoice.status)}`}
+                >
                   {invoice.status}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4 mt-2 text-sm text-muted-foreground">
                 <div>
-                  <span className="font-medium">Invoice Date:</span> {formatDate(invoice.invoiceDate)}
+                  <span className="font-medium">Invoice Date:</span>{" "}
+                  {formatDate(invoice.invoiceDate)}
                 </div>
                 <div>
                   <span className="font-medium">Billing Period:</span>{" "}
                   {formatDate(invoice.billingPeriodStart)} to {formatDate(invoice.billingPeriodEnd)}
+                </div>
+                <div>
+                  <span className="font-medium">Collection Date:</span>{" "}
+                  {invoice.collectionDate ? formatDate(invoice.collectionDate) : "Not Scheduled"}
                 </div>
                 <div>
                   <span className="font-medium">Amount:</span> {formatCurrency(invoice.totalAmount)}
@@ -101,12 +108,7 @@ export function InvoiceHistory({ clientId, onViewInvoice }: InvoiceHistoryProps)
               >
                 <Download className="size-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={printWindow}
-                title="Print Invoice"
-              >
+              <Button variant="outline" size="sm" onClick={printWindow} title="Print Invoice">
                 <Printer className="size-4" />
               </Button>
             </div>

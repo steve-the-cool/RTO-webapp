@@ -1,6 +1,5 @@
 // Tasks — Firestore-backed task management.
-import 
-{
+import {
   collection,
   query,
   where,
@@ -10,6 +9,7 @@ import
   setDoc,
   updateDoc,
   deleteDoc,
+  addDoc,
   arrayUnion,
   Timestamp,
 } from "firebase/firestore";
@@ -49,15 +49,33 @@ export interface TaskAttachment {
   addedBy: string;
 }
 
+export interface SubtaskRemark {
+  id: string;
+  text: string;
+  author: string;
+  at: string;
+}
+
 export interface TaskSubtask {
   id: string;
   title: string;
   completed: boolean;
+  assignedTo?: string;
+  dueDate?: string;
+  completedBy?: string;
+  completedOn?: string;
+  completedAt?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+  remarks?: SubtaskRemark[];
 }
 
 export interface Task {
   id: string;
   title: string;
+  serviceName?: string;
   description?: string;
   assignee: string;
   status: TaskStatus;
@@ -69,6 +87,7 @@ export interface Task {
   reminderMinutes?: number;
   associationType: AssociationType;
   recordId?: string;
+  vehicleId?: string;
   bucket?: Bucket;
   manual: boolean;
   readBy?: string;
@@ -86,6 +105,10 @@ export interface Task {
   deletedAt?: string;
   deletedBy?: string;
   deleteReason?: DeleteReason;
+  templateId?: string;
+  lastRemark?: string;
+  lastRemarkBy?: string;
+  lastRemarkAt?: string;
 }
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
@@ -99,11 +122,8 @@ const COL = "registry_tasks";
  */
 export function removeUndefined<T>(obj: T): T {
   // Handle arrays: filter out undefined items and recurse
-  if (Array.isArray(obj)) 
-  {
-      return obj
-      .filter((item) => item !== undefined)
-      .map((item) => removeUndefined(item)) as T;
+  if (Array.isArray(obj)) {
+    return obj.filter((item) => item !== undefined).map((item) => removeUndefined(item)) as T;
   }
 
   // Handle objects: filter out undefined properties and recurse
@@ -111,7 +131,7 @@ export function removeUndefined<T>(obj: T): T {
     return Object.fromEntries(
       Object.entries(obj)
         .filter(([_, v]) => v !== undefined)
-        .map(([k, v]) => [k, removeUndefined(v)])
+        .map(([k, v]) => [k, removeUndefined(v)]),
     ) as T;
   }
 
@@ -192,7 +212,9 @@ export async function toggleSubtask(
   const isCompleted = progress === 100 && subtasks.length > 0;
 
   // Determine activity message
-  const message = wasCompleted ? `Completed subtask: ${subtask.title}` : `Reopened subtask: ${subtask.title}`;
+  const message = wasCompleted
+    ? `Completed subtask: ${subtask.title}`
+    : `Reopened subtask: ${subtask.title}`;
   const entry = activityEntry(actor, message);
   const actLog = createActivity(actor, message, "subtask", "", subtask.title);
 
@@ -242,11 +264,7 @@ export async function toggleSubtask(
 /**
  * Add a new subtask to a task.
  */
-export async function addSubtask(
-  taskId: string,
-  title: string,
-  actor: string,
-): Promise<void> {
+export async function addSubtask(taskId: string, title: string, actor: string): Promise<void> {
   console.log("➕ Adding subtask to task:", taskId, "title:", title);
 
   const { getDoc } = await import("firebase/firestore");
@@ -302,18 +320,13 @@ export async function reassignTask(
   const task = taskDoc.data() as Task;
   const prevAssignee = task.assignee;
 
-  const message = actor === newAssignee
-    ? `Task taken over by ${actor}`
-    : `Task reassigned from ${prevAssignee} to ${newAssignee}`;
+  const message =
+    actor === newAssignee
+      ? `Task taken over by ${actor}`
+      : `Task reassigned from ${prevAssignee} to ${newAssignee}`;
 
   const entry = activityEntry(actor, message);
-  const actLog = createActivity(
-    actor,
-    message,
-    "assignee",
-    prevAssignee,
-    newAssignee,
-  );
+  const actLog = createActivity(actor, message, "assignee", prevAssignee, newAssignee);
 
   const now = new Date().toISOString();
   const cleanLog = removeUndefined(actLog);
@@ -374,7 +387,7 @@ export function subscribeToTasks(cb: (tasks: Task[]) => void): () => void {
   const q = query(collection(db, COL), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snap) => {
     const tasks = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as Task))
+      .map((d) => ({ id: d.id, ...d.data() }) as Task)
       .filter((t) => !t.isDeleted); // Hide soft-deleted tasks
     cb(tasks);
   });
@@ -384,16 +397,26 @@ export function subscribeToTasks(cb: (tasks: Task[]) => void): () => void {
  * Subscribe to live task updates for a specific recordId (client/lead/customer).
  * Returns an unsubscribe function for useEffect cleanup.
  */
-export function subscribeToTasksForRecord(recordId: string, cb: (tasks: Task[]) => void): () => void {
-  const q = query(collection(db, COL), where("recordId", "==", recordId), orderBy("createdAt", "desc"));
+export function subscribeToTasksForRecord(
+  recordId: string,
+  cb: (tasks: Task[]) => void,
+): () => void {
+  const q = query(
+    collection(db, COL),
+    where("recordId", "==", recordId),
+    orderBy("createdAt", "desc"),
+  );
   return onSnapshot(q, (snap) => {
-    const tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Task)).filter((t) => !t.isDeleted);
+    const tasks = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as Task)
+      .filter((t) => !t.isDeleted);
     cb(tasks);
   });
 }
 
 export interface CreateTaskInput {
   title: string;
+  serviceName?: string;
   description?: string;
   assignee: string;
   priority: TaskPriority;
@@ -403,7 +426,10 @@ export interface CreateTaskInput {
   associationType: AssociationType;
   bucket?: Bucket;
   recordId?: string;
+  vehicleId?: string;
   createdBy: string;
+  subtasks?: TaskSubtask[];
+  templateId?: string;
 }
 
 export async function createManualTask(input: CreateTaskInput): Promise<Task> {
@@ -426,6 +452,7 @@ export async function createManualTask(input: CreateTaskInput): Promise<Task> {
   const task: Task = {
     id,
     title: input.title,
+    serviceName: input.serviceName,
     description: input.description ?? "",
     assignee: input.assignee,
     status: "Assigned",
@@ -438,21 +465,24 @@ export async function createManualTask(input: CreateTaskInput): Promise<Task> {
     associationType: input.associationType,
     bucket: input.bucket,
     recordId: input.recordId,
+    vehicleId: input.vehicleId,
     manual: true,
-    subtasks: [],
-    progress: 0,
+    subtasks: input.subtasks ?? [],
+    progress: input.subtasks ? calculateProgress(input.subtasks) : 0,
     comments: [],
     attachments: [],
     activity: [activityEntry(input.createdBy, "Task created")],
     lastUpdatedBy: input.createdBy,
     lastUpdatedAt: now,
     activityLogs: [initActivity],
+    templateId: input.templateId ?? "",
   };
 
   try {
     // Build data object, excluding undefined fields (Firestore doesn't allow undefined)
     const data = {
       title: task.title,
+      serviceName: task.serviceName,
       description: task.description,
       assignee: task.assignee,
       status: task.status,
@@ -470,23 +500,36 @@ export async function createManualTask(input: CreateTaskInput): Promise<Task> {
       lastUpdatedBy: task.lastUpdatedBy,
       lastUpdatedAt: task.lastUpdatedAt,
       activityLogs: task.activityLogs,
+      templateId: task.templateId,
       // Conditionally include optional fields only if they have values
       ...(task.dueDate ? { dueDate: task.dueDate } : {}),
       ...(task.reminderMinutes !== undefined ? { reminderMinutes: task.reminderMinutes } : {}),
       ...(task.bucket ? { bucket: task.bucket } : {}),
       ...(task.recordId ? { recordId: task.recordId } : {}),
+      ...(task.vehicleId ? { vehicleId: task.vehicleId } : {}),
     };
-    
+
     // CRITICAL: Remove all undefined values recursively before sending to Firestore
     const cleanData = removeUndefined(data);
     console.log("📋 createManualTask RAW DATA:", data);
     console.log("📋 createManualTask CLEAN DATA:", cleanData);
-    console.log("📋 createManualTask REMOVED FIELDS:", Object.keys(data).filter(k => !(k in cleanData)));
-    
+    console.log(
+      "📋 createManualTask REMOVED FIELDS:",
+      Object.keys(data).filter((k) => !(k in cleanData)),
+    );
+
     await setDoc(doc(db, COL, id), cleanData);
     console.log("✅ Task created successfully:", id);
     if (task.associationType === "client" && task.recordId) {
-      await logClientActivity(task.recordId, task.createdBy, task.createdBy, "Task Created", "task", "", task.title);
+      await logClientActivity(
+        task.recordId,
+        task.createdBy,
+        task.createdBy,
+        "Task Created",
+        "task",
+        "",
+        task.title,
+      );
     }
     return task;
   } catch (error) {
@@ -522,13 +565,7 @@ export async function updateTask(
     if (newVal !== undefined && oldVal !== newVal) {
       console.log(`  Changed ${field}: ${oldVal} → ${newVal}`);
       activities.push(
-        createActivity(
-          actor,
-          `Updated ${field}`,
-          field,
-          String(oldVal ?? "—"),
-          String(newVal),
-        ),
+        createActivity(actor, `Updated ${field}`, field, String(oldVal ?? "—"), String(newVal)),
       );
     }
   }
@@ -557,7 +594,15 @@ export async function updateTask(
     await updateDoc(doc(db, COL, taskId), cleanUpdates);
     console.log("✅ Task updated successfully");
     if (existing.associationType === "client" && existing.recordId) {
-      await logClientActivity(existing.recordId, actor, actor, note || "Task Updated", "task", "", patch.title || existing.title);
+      await logClientActivity(
+        existing.recordId,
+        actor,
+        actor,
+        note || "Task Updated",
+        "task",
+        "",
+        patch.title || existing.title,
+      );
     }
   } catch (error) {
     console.error("❌ Failed to update task:", error);
@@ -571,9 +616,15 @@ export async function setTaskDone(taskId: string, done: boolean, actor = "system
   const taskData = taskDoc.exists() ? (taskDoc.data() as Task) : null;
 
   const entry = activityEntry(actor, done ? "Marked complete" : "Reopened");
-  const actLog = createActivity(actor, done ? "Marked complete" : "Reopened", "status", done ? "Assigned" : "Completed", done ? "Completed" : "Assigned");
+  const actLog = createActivity(
+    actor,
+    done ? "Marked complete" : "Reopened",
+    "status",
+    done ? "Assigned" : "Completed",
+    done ? "Completed" : "Assigned",
+  );
   const cleanLog = removeUndefined(actLog);
-  
+
   const now = new Date().toISOString();
   const updates = removeUndefined({
     done,
@@ -595,7 +646,7 @@ export async function setTaskDone(taskId: string, done: boolean, actor = "system
       done ? "Task Completed" : "Task Reopened",
       "task",
       done ? "Assigned" : "Completed",
-      done ? "Completed" : "Assigned"
+      done ? "Completed" : "Assigned",
     );
   }
 }
@@ -610,7 +661,7 @@ export async function addComment(taskId: string, author: string, text: string): 
   const entry = activityEntry(author, "Added comment");
   const actLog = createActivity(author, "Added comment", "comment", "", text);
   const cleanLog = removeUndefined(actLog);
-  
+
   const now = new Date().toISOString();
   const updates = removeUndefined({
     comments: arrayUnion(comment),
@@ -618,6 +669,9 @@ export async function addComment(taskId: string, author: string, text: string): 
     lastUpdatedAt: now,
     activity: arrayUnion(entry),
     activityLogs: arrayUnion(cleanLog),
+    lastRemark: text,
+    lastRemarkBy: author,
+    lastRemarkAt: now,
   });
   console.log("💬 addComment RAW:", { comment, actLog });
   console.log("💬 addComment CLEAN:", updates);
@@ -628,7 +682,7 @@ export async function addAttachment(taskId: string, file: TaskAttachment): Promi
   const entry = activityEntry(file.addedBy, `Attached ${file.name}`);
   const actLog = createActivity(file.addedBy, "Added attachment", "attachment", "", file.name);
   const cleanLog = removeUndefined(actLog);
-  
+
   const now = new Date().toISOString();
   const updates = removeUndefined({
     attachments: arrayUnion(file),
@@ -653,13 +707,7 @@ export async function softDeleteTask(
   reason: DeleteReason,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const deleteLog = createActivity(
-    actor,
-    "Task deleted",
-    "deleteReason",
-    "",
-    reason,
-  );
+  const deleteLog = createActivity(actor, "Task deleted", "deleteReason", "", reason);
   const cleanLog = removeUndefined(deleteLog);
 
   const updates = removeUndefined({
@@ -684,8 +732,8 @@ export async function syncTaskFromRecord(
   const { collection: col, query: q, where, getDocs } = await import("firebase/firestore");
   const snap = await getDocs(q(col(db, COL), where("recordId", "==", record.id)));
 
-  const label = bucket === "clients" ? "Client" : bucket === "leads" ? "Lead" : "Customer";
-  const title = `${label}: ${record.name || record.mvNo || `SR ${record.srNo}`} — ${record.work || record.application || "follow up"}`;
+  const title = record.work || record.application || "General Follow Up";
+  const serviceName = record.work || record.application || "Follow Up";
   const mappedStatus: TaskStatus =
     record.status === "Completed"
       ? "Completed"
@@ -701,12 +749,19 @@ export async function syncTaskFromRecord(
     const entry = activityEntry(actor, `Auto-synced from ${bucket}`);
     const updates = removeUndefined({
       title,
+      serviceName,
       status: mappedStatus,
       done: record.status === "Completed",
       ...(record.assignee ? { assignee: record.assignee } : {}),
       activity: arrayUnion(entry),
     });
-    console.log("🔄 syncTaskFromRecord UPDATE RAW:", { title, status: mappedStatus, done: record.status === "Completed", assignee: record.assignee });
+    console.log("🔄 syncTaskFromRecord UPDATE RAW:", {
+      title,
+      serviceName,
+      status: mappedStatus,
+      done: record.status === "Completed",
+      assignee: record.assignee,
+    });
     console.log("🔄 syncTaskFromRecord UPDATE CLEAN:", updates);
     await updateDoc(taskDoc.ref, updates);
   } else if (record.assignee) {
@@ -716,6 +771,7 @@ export async function syncTaskFromRecord(
     const task: Task = {
       id,
       title,
+      serviceName,
       description: record.work || record.application || "",
       assignee: record.assignee,
       status: mappedStatus,
@@ -736,10 +792,11 @@ export async function syncTaskFromRecord(
       lastUpdatedAt: now,
       activityLogs: [],
     };
-    
+
     // Build data object, excluding undefined fields (Firestore doesn't allow undefined)
     const data = {
       title: task.title,
+      serviceName: task.serviceName,
       description: task.description,
       assignee: task.assignee,
       status: task.status,
@@ -760,7 +817,7 @@ export async function syncTaskFromRecord(
       lastUpdatedAt: task.lastUpdatedAt,
       activityLogs: task.activityLogs,
     };
-    
+
     const cleanData = removeUndefined(data);
     console.log("📋 syncTaskFromRecord CREATE RAW:", data);
     console.log("📋 syncTaskFromRecord CREATE CLEAN:", cleanData);
@@ -785,3 +842,106 @@ export const TASK_STATUS_OPTIONS: TaskStatus[] = [
   "Completed",
   "On Hold",
 ];
+
+export interface TaskTemplate {
+  id: string;
+  templateName: string;
+  description: string;
+  subtasks: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+const TEMPLATES_COL = "registry_task_templates";
+
+export function subscribeToTemplates(cb: (templates: TaskTemplate[]) => void): () => void {
+  return onSnapshot(
+    collection(db, TEMPLATES_COL),
+    (snap) => {
+      cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as TaskTemplate));
+    },
+    (err) => {
+      console.error("[subscribeToTemplates] error:", err);
+      cb([]);
+    },
+  );
+}
+
+export async function createTemplate(
+  templateName: string,
+  description: string,
+  subtasks: string[],
+  createdBy: string,
+): Promise<TaskTemplate> {
+  const payload = {
+    templateName,
+    description,
+    subtasks,
+    createdBy,
+    createdAt: new Date().toISOString(),
+  };
+  const docRef = await addDoc(collection(db, TEMPLATES_COL), payload);
+
+  try {
+    await logClientActivity(
+      "system",
+      createdBy,
+      createdBy,
+      `Task Template created: ${templateName}`,
+      "template",
+      null,
+      `Description: ${description}`,
+    );
+  } catch (err) {
+    console.warn("Template Created log activity failed:", err);
+  }
+
+  return { id: docRef.id, ...payload };
+}
+
+export async function updateTemplate(
+  templateId: string,
+  updates: Partial<TaskTemplate>,
+  updatedBy: string,
+): Promise<void> {
+  const payload = {
+    ...updates,
+    updatedBy,
+    updatedAt: new Date().toISOString(),
+  };
+  await updateDoc(doc(db, TEMPLATES_COL, templateId), removeUndefined(payload));
+
+  try {
+    await logClientActivity(
+      "system",
+      updatedBy,
+      updatedBy,
+      `Task Template updated: ${updates.templateName || templateId}`,
+      "template",
+      null,
+      `Updates: ${Object.keys(updates).join(", ")}`,
+    );
+  } catch (err) {
+    console.warn("Template Updated log activity failed:", err);
+  }
+}
+
+export async function deleteTemplate(templateId: string, deletedBy: string): Promise<void> {
+  await deleteDoc(doc(db, TEMPLATES_COL, templateId));
+
+  try {
+    await logClientActivity(
+      "system",
+      deletedBy,
+      deletedBy,
+      `Task Template deleted: ${templateId}`,
+      "template",
+      null,
+      "",
+    );
+  } catch (err) {
+    console.warn("Template Deleted log activity failed:", err);
+  }
+}

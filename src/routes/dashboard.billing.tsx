@@ -1,8 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { DollarSign, TrendingUp, AlertCircle, CheckCircle, Plus, Download, Printer, Search } from "lucide-react";
+import {
+  DollarSign,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  Plus,
+  Download,
+  Printer,
+  Search,
+  FileText,
+} from "lucide-react";
 import { subscribeToAllInvoices, calculateBillingMetrics, type Invoice } from "@/lib/billing";
-import { generateInvoicePDF, printWindow, formatCurrency, formatDate } from "@/lib/pdfGenerator";
+import {
+  generateInvoicePDF,
+  printWindow,
+  formatCurrency,
+  formatDate,
+  generatePDF,
+} from "@/lib/pdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InvoiceGenerator } from "@/components/InvoiceGenerator";
@@ -27,6 +43,7 @@ function BillingDashboard() {
   const [selectedTab, setSelectedTab] = useState<"overview" | "generate" | "history">("overview");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterBhaylubha, setFilterBhaylubha] = useState<string>("all");
 
   // Subscribe to all invoices
   useEffect(() => {
@@ -54,7 +71,12 @@ function BillingDashboard() {
 
     const matchesStatus = filterStatus === "all" || inv.status === filterStatus;
 
-    return matchesSearch && matchesStatus;
+    const matchesBhaylubha =
+      filterBhaylubha === "all" ||
+      (filterBhaylubha === "required" && inv.askBhaylubha === true) ||
+      (filterBhaylubha === "completed" && !inv.askBhaylubha);
+
+    return matchesSearch && matchesStatus && matchesBhaylubha;
   });
 
   const getStatusColor = (status: string) => {
@@ -72,7 +94,17 @@ function BillingDashboard() {
     }
   };
 
-  const MetricCard = ({ icon: Icon, label, value, trend }: { icon: any; label: string; value: string; trend?: number }) => (
+  const MetricCard = ({
+    icon: Icon,
+    label,
+    value,
+    trend,
+  }: {
+    icon: any;
+    label: string;
+    value: string;
+    trend?: number;
+  }) => (
     <div className="bg-white rounded-lg border p-4">
       <div className="flex items-start justify-between">
         <div>
@@ -80,7 +112,8 @@ function BillingDashboard() {
           <p className="text-2xl font-bold mt-1">{value}</p>
           {trend !== undefined && (
             <p className={`text-xs mt-1 ${trend > 0 ? "text-green-600" : "text-red-600"}`}>
-              {trend > 0 ? "+" : ""}{trend}% vs last month
+              {trend > 0 ? "+" : ""}
+              {trend}% vs last month
             </p>
           )}
         </div>
@@ -97,7 +130,58 @@ function BillingDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Billing & Invoicing</h2>
-          <p className="text-sm text-muted-foreground">Professional invoice management and payment tracking</p>
+          <p className="text-sm text-muted-foreground">
+            Professional invoice management and payment tracking
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => {
+              generatePDF("finance", {
+                invoiceNumber: "FIN-REPORT-" + new Date().getFullYear(),
+                invoiceDate: new Date().toLocaleDateString("en-IN"),
+                clientName: "Consolidated Finance Report",
+                totalAmount: metrics.totalInvoiced,
+                totalPaid: metrics.totalCollected,
+                status: "Summary",
+                payments: invoices.map((i) => ({
+                  date: i.invoiceDate || "",
+                  amount: i.amountPaid || 0,
+                  method: i.paymentMethod || "Bank",
+                  receivedIn: "Company A/C",
+                  receivedBy: "Admin",
+                })),
+              });
+            }}
+            variant="outline"
+            size="sm"
+            className="gap-1.5 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
+          >
+            <FileText className="size-4" /> Download Finance Report PDF
+          </Button>
+          <Button
+            onClick={() => {
+              generatePDF("payment-history", {
+                totalInvoiceAmount: metrics.totalInvoiced,
+                totalReceived: metrics.totalCollected,
+                totalOutstanding: metrics.outstandingAmount,
+                payments: invoices.map((i) => ({
+                  date: i.invoiceDate || "",
+                  invoiceNumber: i.invoiceNumber,
+                  amount: i.amountPaid || 0,
+                  method: i.paymentMethod || "Bank",
+                  receivedIn: "Company A/C",
+                  receivedBy: "Admin",
+                  remarks: i.notes || "—",
+                })),
+              });
+            }}
+            variant="outline"
+            size="sm"
+            className="gap-1.5 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
+          >
+            <FileText className="size-4" /> Download Payment History PDF
+          </Button>
         </div>
       </div>
 
@@ -183,7 +267,9 @@ function BillingDashboard() {
 
             {invoices.length === 0 ? (
               <div className="flex items-center justify-center py-8">
-                <p className="text-muted-foreground">No invoices yet. Start by generating a new invoice.</p>
+                <p className="text-muted-foreground">
+                  No invoices yet. Start by generating a new invoice.
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -195,20 +281,19 @@ function BillingDashboard() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{invoice.invoiceNumber}</p>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(invoice.status)}`}>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${getStatusColor(invoice.status)}`}
+                        >
                           {invoice.status}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {invoice.clientName} • {formatDate(invoice.invoiceDate)} • {formatCurrency(invoice.totalAmount)}
+                        {invoice.clientName} • {formatDate(invoice.invoiceDate)} •{" "}
+                        {formatCurrency(invoice.totalAmount)}
                       </p>
                     </div>
                     <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedInvoice(invoice)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedInvoice(invoice)}>
                         View
                       </Button>
                     </div>
@@ -246,13 +331,23 @@ function BillingDashboard() {
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="border rounded-lg px-3 py-2"
+                className="border rounded-lg px-3 py-2 text-sm"
               >
                 <option value="all">All Status</option>
                 <option value="Pending">Pending</option>
                 <option value="Partially Paid">Partially Paid</option>
                 <option value="Paid">Paid</option>
                 <option value="Cancelled">Cancelled</option>
+              </select>
+
+              <select
+                value={filterBhaylubha}
+                onChange={(e) => setFilterBhaylubha(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="all">Bhaylubha: Show All</option>
+                <option value="required">Bhaylubha Required</option>
+                <option value="completed">Bhaylubha Completed</option>
               </select>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -276,24 +371,39 @@ function BillingDashboard() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h4 className="font-semibold">{invoice.invoiceNumber}</h4>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(invoice.status)}`}>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${getStatusColor(invoice.status)}`}
+                        >
                           {invoice.status}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 mt-2 text-sm text-muted-foreground">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2 text-sm text-muted-foreground">
                         <div>
                           <span className="font-medium">Client:</span> {invoice.clientName}
                         </div>
                         <div>
-                          <span className="font-medium">Date:</span> {formatDate(invoice.invoiceDate)}
+                          <span className="font-medium">Date:</span>{" "}
+                          {formatDate(invoice.invoiceDate)}
                         </div>
                         <div>
-                          <span className="font-medium">Period:</span> {formatDate(invoice.billingPeriodStart)} to{" "}
-                          {formatDate(invoice.billingPeriodEnd)}
+                          <span className="font-medium">Amount:</span>{" "}
+                          {formatCurrency(invoice.totalAmount)}
                         </div>
                         <div>
-                          <span className="font-medium">Amount:</span> {formatCurrency(invoice.totalAmount)}
+                          <span className="font-medium">Collection Date:</span>{" "}
+                          {invoice.collectionDate
+                            ? formatDate(invoice.collectionDate)
+                            : "Not Scheduled"}
                         </div>
+                        <div>
+                          <span className="font-medium">Pending Amount:</span>{" "}
+                          {formatCurrency(invoice.totalAmount - (invoice.totalPaid || 0))}
+                        </div>
+                        {invoice.askBhaylubha && (
+                          <div className="text-amber-700 font-bold">
+                            ★ Bhaylubha Approval Required
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -312,11 +422,7 @@ function BillingDashboard() {
                       >
                         <Download className="size-4" />
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={printWindow}
-                      >
+                      <Button variant="outline" size="sm" onClick={printWindow}>
                         <Printer className="size-4" />
                       </Button>
                     </div>
@@ -330,10 +436,7 @@ function BillingDashboard() {
 
       {/* Invoice Viewer Modal */}
       {selectedInvoice && (
-        <InvoiceViewer
-          invoice={selectedInvoice}
-          onClose={() => setSelectedInvoice(null)}
-        />
+        <InvoiceViewer invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />
       )}
     </div>
   );

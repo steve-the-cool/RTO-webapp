@@ -19,22 +19,28 @@ function safeText(value?: string): string {
 export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTemplateProps>(
   ({ invoice }, ref) => {
     // Group services by name for breakdown
-    const groupedServices = invoice.services.reduce((acc, item) => {
-      const name = item.serviceName;
-      if (!acc[name]) {
-        acc[name] = {
-          serviceName: name,
-          items: [],
-          total: 0,
-        };
-      }
-      acc[name].items.push({
-        vehicleNumber: item.vehicleNumber || "General/No Vehicle",
-        amount: item.total,
-      });
-      acc[name].total += item.total;
-      return acc;
-    }, {} as Record<string, { serviceName: string; items: { vehicleNumber: string; amount: number }[]; total: number }>);
+    const groupedServices = invoice.services.reduce(
+      (acc, item) => {
+        const name = item.serviceName;
+        if (!acc[name]) {
+          acc[name] = {
+            serviceName: name,
+            items: [],
+            total: 0,
+          };
+        }
+        acc[name].items.push({
+          vehicleNumber: item.vehicleNumber || "General/No Vehicle",
+          amount: item.total,
+        });
+        acc[name].total += item.total;
+        return acc;
+      },
+      {} as Record<
+        string,
+        { serviceName: string; items: { vehicleNumber: string; amount: number }[]; total: number }
+      >,
+    );
 
     const groupedList = Object.values(groupedServices);
 
@@ -43,8 +49,8 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
       new Set(
         invoice.services
           .map((s) => s.vehicleNumber)
-          .filter((v): v is string => !!v && v.trim() !== "")
-      )
+          .filter((v): v is string => !!v && v.trim() !== ""),
+      ),
     );
     const vehiclesStr = uniqueVehicles.length > 0 ? uniqueVehicles.join(", ") : "—";
 
@@ -132,7 +138,14 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
               <h1 style={{ fontSize: "28px", fontWeight: "bold", color: "#2563eb", margin: 0 }}>
                 INVOICE
               </h1>
-              <p style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b", margin: "4px 0 0 0" }}>
+              <p
+                style={{
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: "#1e293b",
+                  margin: "4px 0 0 0",
+                }}
+              >
                 {COMPANY_NAME}
               </p>
               <p style={{ fontSize: "12px", color: "#64748b", margin: "2px 0 0 0" }}>
@@ -145,7 +158,9 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
             <p style={{ fontSize: "20px", fontWeight: "bold", color: "#1e293b", margin: 0 }}>
               {safeText(invoice.invoiceNumber)}
             </p>
-            <div style={{ marginTop: "8px", fontSize: "12px", color: "#475569", lineHeight: "1.5" }}>
+            <div
+              style={{ marginTop: "8px", fontSize: "12px", color: "#475569", lineHeight: "1.5" }}
+            >
               <p style={{ margin: 0 }}>Invoice Date: {formatDate(invoice.invoiceDate)}</p>
               <p style={{ margin: 0 }}>Due Date: {formatDate(dueDateStr)}</p>
               <p style={{ margin: 0 }}>
@@ -189,7 +204,14 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
               border: "1px solid #e2e8f0",
             }}
           >
-            <h3 style={{ fontSize: "14px", fontWeight: "bold", color: "#1e293b", margin: "0 0 10px 0" }}>
+            <h3
+              style={{
+                fontSize: "14px",
+                fontWeight: "bold",
+                color: "#1e293b",
+                margin: "0 0 10px 0",
+              }}
+            >
               COMPANY DETAILS
             </h3>
             <p style={{ margin: "4px 0" }}>
@@ -212,7 +234,14 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
               border: "1px solid #e2e8f0",
             }}
           >
-            <h3 style={{ fontSize: "14px", fontWeight: "bold", color: "#1e293b", margin: "0 0 10px 0" }}>
+            <h3
+              style={{
+                fontSize: "14px",
+                fontWeight: "bold",
+                color: "#1e293b",
+                margin: "0 0 10px 0",
+              }}
+            >
               BILL TO
             </h3>
             <p style={{ margin: "4px 0", fontSize: "14px", fontWeight: "600", color: "#0f172a" }}>
@@ -242,7 +271,9 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
             border: "1px solid #cbd5e1",
           }}
         >
-          <h4 style={{ fontSize: "13px", fontWeight: "bold", color: "#0f172a", margin: "0 0 6px 0" }}>
+          <h4
+            style={{ fontSize: "13px", fontWeight: "bold", color: "#0f172a", margin: "0 0 6px 0" }}
+          >
             VEHICLE INFORMATION
           </h4>
           <p style={{ margin: 0 }}>
@@ -273,7 +304,9 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
 
         {/* SERVICE BREAKDOWN */}
         <div style={{ flex: 1, marginBottom: "32px" }}>
-          <h3 style={{ fontSize: "15px", fontWeight: "bold", color: "#0f172a", margin: "0 0 12px 0" }}>
+          <h3
+            style={{ fontSize: "15px", fontWeight: "bold", color: "#0f172a", margin: "0 0 12px 0" }}
+          >
             SERVICES BREAKDOWN
           </h3>
 
@@ -313,7 +346,8 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
                       padding: "8px 0",
                       fontSize: "13px",
                       color: "#475569",
-                      borderBottom: itemIdx < group.items.length - 1 ? "1px dashed #e2e8f0" : "none",
+                      borderBottom:
+                        itemIdx < group.items.length - 1 ? "1px dashed #e2e8f0" : "none",
                       display: "flex",
                       justifyContent: "space-between",
                     }}
@@ -396,11 +430,13 @@ export const InvoicePDFTemplate = React.forwardRef<HTMLDivElement, InvoicePDFTem
         >
           <p style={{ margin: "2px 0" }}>Generated by {COMPANY_NAME}</p>
           <p style={{ margin: "2px 0" }}>Timestamp: {new Date().toLocaleString("en-IN")}</p>
-          <p style={{ margin: "2px 0", fontSize: "10px", color: "#cbd5e1" }}>Invoice ID: {invoice.id}</p>
+          <p style={{ margin: "2px 0", fontSize: "10px", color: "#cbd5e1" }}>
+            Invoice ID: {invoice.id}
+          </p>
         </div>
       </div>
     );
-  }
+  },
 );
 
 InvoicePDFTemplate.displayName = "InvoicePDFTemplate";

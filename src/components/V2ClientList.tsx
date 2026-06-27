@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, Trash2, Eye, Pencil, Users } from "lucide-react";
+import { Search, Plus, Trash2, Eye, Pencil, Users, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,10 @@ import {
   saveClient,
   deleteClient,
 } from "@/lib/hierarchy";
+import { secureDelete } from "@/lib/secureDelete";
+import { subscribeStaffPermissions, type RolePermissions } from "@/lib/permissions";
 import { ClientDetailWorkspace } from "./ClientDetailWorkspace";
+import { generatePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { getSession } from "@/lib/auth";
 import { collection } from "firebase/firestore";
@@ -68,13 +71,27 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientForm, setClientForm] = useState<Partial<Client>>({});
+  const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
 
   const session = getSession();
   const isAdmin = session?.role === "admin";
 
   useEffect(() => {
+    const unsubPerms = subscribeStaffPermissions((p) => {
+      setRolePermissions(p);
+    });
+    return () => {
+      unsubPerms();
+    };
+  }, []);
+
+  const canCreate = isAdmin || (rolePermissions?.createClients ?? false);
+  const canEdit = isAdmin || (rolePermissions?.editClients ?? false);
+  const canDelete = isAdmin || (rolePermissions?.deleteClients ?? false);
+
+  useEffect(() => {
     setLoading(true);
-    
+
     const unsub = subscribeToClients(type, (data) => {
       console.log("Clients Query Result", data);
       console.log("Collection Path", collectionPath);
@@ -93,11 +110,15 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
         c.name.toLowerCase().includes(q) ||
         c.mobile.includes(q) ||
         (c.companyName || "").toLowerCase().includes(q) ||
-        (c.address || "").toLowerCase().includes(q)
+        (c.address || "").toLowerCase().includes(q),
     );
   }, [clients, query]);
 
   const handleOpenAddForm = () => {
+    if (!canCreate) {
+      toast.error("You do not have permission to create clients");
+      return;
+    }
     setEditingClient(null);
     setClientForm({
       id: `client_${crypto.randomUUID()}`,
@@ -113,6 +134,14 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
   };
 
   const handleSaveClient = async () => {
+    if (editingClient && !canEdit) {
+      toast.error("You do not have permission to edit clients");
+      return;
+    }
+    if (!editingClient && !canCreate) {
+      toast.error("You do not have permission to create clients");
+      return;
+    }
     if (!clientForm.name?.trim()) {
       toast.error("Name is required");
       return;
@@ -122,7 +151,10 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
       return;
     }
     try {
-      await saveClient(clientForm as Client);
+      const actorOverride = session
+        ? { name: session.name, uid: session.uid, role: session.role }
+        : undefined;
+      await saveClient(clientForm as Client, actorOverride);
       setFormOpen(false);
       toast.success(editingClient ? "Client updated!" : "Client created successfully!");
     } catch (error) {
@@ -132,12 +164,21 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
   };
 
   const handleDeleteClient = async (cId: string) => {
+    if (!canDelete) {
+      toast.error("You do not have permission to delete clients");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this client?")) {
       return;
     }
     try {
-      await deleteClient(cId);
-      toast.success("Client deleted successfully.");
+      await secureDelete(
+        () => deleteClient(cId),
+        "Client",
+        cId,
+        session?.uid ?? "unknown"
+      );
+      // secureDelete handles toast messages
     } catch (error) {
       console.error(error);
       toast.error("Failed to delete client.");
@@ -214,7 +255,7 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
                 <div
                   className={cn(
                     "size-9 rounded-full grid place-items-center text-sm font-bold flex-shrink-0",
-                    avatarColor(c.name)
+                    avatarColor(c.name),
                   )}
                 >
                   {initials(c.name)}
@@ -223,7 +264,9 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
                   <div className="font-semibold text-sm truncate text-sky-600 underline decoration-dotted underline-offset-2">
                     {c.name}
                   </div>
-                  <div className="text-xs text-muted-foreground truncate">{c.address || "No address"}</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {c.address || "No address"}
+                  </div>
                 </div>
               </div>
 
@@ -235,7 +278,9 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
               {/* Company & GST */}
               <div className="min-w-0 text-xs">
                 <div className="font-medium text-foreground">{c.companyName || "—"}</div>
-                {c.gstNumber && <div className="text-muted-foreground mt-0.5">GST: {c.gstNumber}</div>}
+                {c.gstNumber && (
+                  <div className="text-muted-foreground mt-0.5">GST: {c.gstNumber}</div>
+                )}
               </div>
 
               {/* Notes */}
@@ -245,6 +290,52 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
 
               {/* Actions */}
               <div className="text-right flex items-center justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    generatePDF(
+                      "client-details",
+                      {
+                        name: c.name,
+                        mo: c.mobile,
+                        email: "",
+                        address: c.address || "",
+                        group: "",
+                        createdAt: "",
+                        createdBy: "",
+                        vehicles: [],
+                      },
+                      session?.username || "system",
+                    )
+                  }
+                  title="Download PDF"
+                >
+                  <Download className="size-4 text-red-600" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    generatePDF(
+                      "client-details",
+                      {
+                        name: c.name,
+                        mo: c.mobile,
+                        email: "",
+                        address: c.address || "",
+                        group: "",
+                        createdAt: "",
+                        createdBy: "",
+                        vehicles: [],
+                      },
+                      session?.username || "system",
+                    )
+                  }
+                  title="View PDF"
+                >
+                  <FileText className="size-4 text-blue-600" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -261,7 +352,8 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
                     setClientForm(c);
                     setFormOpen(true);
                   }}
-                  title="Edit client"
+                  disabled={!canEdit}
+                  title={!canEdit ? "You do not have permission to edit clients" : "Edit client"}
                 >
                   <Pencil className="size-4" />
                 </Button>
@@ -269,9 +361,11 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
                   variant="ghost"
                   size="icon"
                   onClick={() => handleDeleteClient(c.id)}
-                  disabled={!isAdmin}
+                  disabled={!canDelete}
                   className="text-destructive hover:bg-destructive/10"
-                  title="Delete client"
+                  title={
+                    !canDelete ? "You do not have permission to delete clients" : "Delete client"
+                  }
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -286,7 +380,9 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingClient ? "Edit Client Profile" : `Add New ${type === "client" ? "Client" : "Lead"}`}
+              {editingClient
+                ? "Edit Client Profile"
+                : `Add New ${type === "client" ? "Client" : "Lead"}`}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-3">
@@ -343,9 +439,7 @@ export function V2ClientList({ type, title, description }: V2ClientListProps) {
             <Button variant="outline" onClick={() => setFormOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveClient}>
-              {editingClient ? "Save changes" : "Create"}
-            </Button>
+            <Button onClick={handleSaveClient}>{editingClient ? "Save changes" : "Create"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

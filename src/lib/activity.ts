@@ -19,7 +19,12 @@ function toDate(value: unknown): Date | null {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   }
-  if (typeof value === "object" && value !== null && "toDate" in value && typeof (value as any).toDate === "function") {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as any).toDate === "function"
+  ) {
     return (value as any).toDate();
   }
   const date = new Date(String(value));

@@ -1,16 +1,16 @@
-import fs from 'fs';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from "fs";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, addDoc } from "firebase/firestore";
+import path from "path";
+import { fileURLToPath } from "url";
 
 function parseDotEnv(path) {
-  const raw = fs.readFileSync(path, 'utf8');
+  const raw = fs.readFileSync(path, "utf8");
   const obj = {};
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const idx = trimmed.indexOf('=');
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
     if (idx === -1) continue;
     const key = trimmed.slice(0, idx).trim();
     let val = trimmed.slice(idx + 1).trim();
@@ -21,9 +21,9 @@ function parseDotEnv(path) {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.join(__dirname, '..', '.env');
+const envPath = path.join(__dirname, "..", ".env");
 if (!fs.existsSync(envPath)) {
-  console.error('.env not found at', envPath);
+  console.error(".env not found at", envPath);
   process.exit(1);
 }
 const env = parseDotEnv(envPath);
@@ -36,36 +36,36 @@ const firebaseConfig = {
   appId: env.VITE_FIREBASE_APP_ID,
 };
 
-console.log('Using Firebase project:', firebaseConfig.projectId);
+console.log("Using Firebase project:", firebaseConfig.projectId);
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function run() {
   const now = new Date();
-  const invoiceNumber = `INV-TEST-${now.getFullYear()}${now.getMonth()+1}${now.getDate()}-${now.getTime()}`;
+  const invoiceNumber = `INV-TEST-${now.getFullYear()}${now.getMonth() + 1}${now.getDate()}-${now.getTime()}`;
 
   const payload = {
     invoiceNumber,
-    clientId: 'sample-client-123',
-    clientName: 'Maulik',
-    clientMobile: '9897969545',
-    clientAddress: 'Sample Address',
-    vehicleNumber: 'GJ03789',
-    vehicleType: 'Two-wheeler',
-    billingPeriodStart: '2025-04-05',
-    billingPeriodEnd: '2027-05-04',
+    clientId: "sample-client-123",
+    clientName: "Maulik",
+    clientMobile: "9897969545",
+    clientAddress: "Sample Address",
+    vehicleNumber: "GJ03789",
+    vehicleType: "Two-wheeler",
+    billingPeriodStart: "2025-04-05",
+    billingPeriodEnd: "2027-05-04",
     subtotal: 1000,
     totalTax: 180,
     totalAmount: 1180,
     invoiceDate: now.toISOString(),
-    createdBy: 'automated-script',
+    createdBy: "automated-script",
     createdAt: now.toISOString(),
-    status: 'Pending',
+    status: "Pending",
     services: [
       {
-        serviceId: 'svc-1',
-        serviceName: 'Fitness',
-        vehicleNumber: 'GJ03789',
+        serviceId: "svc-1",
+        serviceName: "Fitness",
+        vehicleNumber: "GJ03789",
         quantity: 1,
         unitPrice: 1000,
         amount: 1000,
@@ -77,11 +77,11 @@ async function run() {
   };
 
   try {
-    const ref = await addDoc(collection(db, 'invoices'), payload);
-    console.log('Invoice written, id=', ref.id);
+    const ref = await addDoc(collection(db, "invoices"), payload);
+    console.log("Invoice written, id=", ref.id);
     process.exit(0);
   } catch (err) {
-    console.error('Write failed:', err);
+    console.error("Write failed:", err);
     process.exit(2);
   }
 }

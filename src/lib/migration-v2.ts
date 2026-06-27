@@ -1,9 +1,4 @@
-import {
-  collection,
-  getDocs,
-  doc,
-  writeBatch,
-} from "firebase/firestore";
+import { collection, getDocs, doc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import {
   CLIENTS_COL,
@@ -52,8 +47,10 @@ function inferType(work?: string): ServiceType {
 }
 
 export async function runV2Migration(): Promise<MigrationReport> {
-  console.log("[MIGRATION V2] Starting migration to hierarchical Client -> Vehicle -> Service models...");
-  
+  console.log(
+    "[MIGRATION V2] Starting migration to hierarchical Client -> Vehicle -> Service models...",
+  );
+
   const report: MigrationReport = {
     success: true,
     totalRecordsScanned: 0,
@@ -70,7 +67,7 @@ export async function runV2Migration(): Promise<MigrationReport> {
 
     // ─── 1. Migrate registry_clients and registry_leads ──────────────────────
     const legacyBuckets: Bucket[] = ["clients", "leads"];
-    
+
     for (const bucket of legacyBuckets) {
       const colName = `registry_${bucket}`;
       const snap = await getDocs(collection(db, colName));
@@ -78,7 +75,7 @@ export async function runV2Migration(): Promise<MigrationReport> {
 
       for (const d of snap.docs) {
         const record = { id: d.id, ...d.data() } as RegistryRecord;
-        
+
         // Skip soft-deleted records
         if (record.isDeleted) continue;
 
@@ -125,10 +122,10 @@ export async function runV2Migration(): Promise<MigrationReport> {
         const serviceDetails = getRecordServiceDetails(record);
         if (serviceDetails.length > 0) {
           for (const s of serviceDetails) {
-            const taskStatus: ServiceTaskStatus = 
+            const taskStatus: ServiceTaskStatus =
               s.status === "Completed" ? "Completed" : "In Progress";
             const progress = getProgressFromStatus(taskStatus);
-            
+
             servicesList.push({
               id: `service_${crypto.randomUUID()}`,
               vehicleId: vehicle.id,
@@ -146,7 +143,7 @@ export async function runV2Migration(): Promise<MigrationReport> {
         } else if (record.work) {
           // If no structured serviceDetails, infer one from the record's work description
           const sType = inferType(record.work);
-          const taskStatus: ServiceTaskStatus = 
+          const taskStatus: ServiceTaskStatus =
             record.status === "Completed" ? "Completed" : "In Progress";
           const progress = getProgressFromStatus(taskStatus);
 
@@ -173,7 +170,7 @@ export async function runV2Migration(): Promise<MigrationReport> {
 
     for (const d of customersSnap.docs) {
       const customer = { id: d.id, ...d.data() } as CustomerProfile;
-      
+
       const clientName = (customer.name || "Unknown Customer").trim();
       const clientMobile = (customer.mobile || "").trim();
       const clientKey = `${clientName.toLowerCase()}_${clientMobile.toLowerCase()}`;
@@ -216,9 +213,9 @@ export async function runV2Migration(): Promise<MigrationReport> {
         // Infer services from customer vehicle fields
         if (lv.work) {
           const sType = inferType(lv.work);
-          const taskStatus: ServiceTaskStatus = 
+          const taskStatus: ServiceTaskStatus =
             lv.status === "Completed" ? "Completed" : "In Progress";
-          
+
           servicesList.push({
             id: `service_${crypto.randomUUID()}`,
             vehicleId: vehicle.id,
@@ -286,7 +283,9 @@ export async function runV2Migration(): Promise<MigrationReport> {
     }
 
     // ─── 3. Write Normalized Data in batches ────────────────────────────────
-    console.log(`[MIGRATION V2] Staging ${clientsMap.size} clients, ${vehiclesMap.size} vehicles, and ${servicesList.length} services.`);
+    console.log(
+      `[MIGRATION V2] Staging ${clientsMap.size} clients, ${vehiclesMap.size} vehicles, and ${servicesList.length} services.`,
+    );
 
     let batch = writeBatch(db);
     let count = 0;

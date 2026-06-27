@@ -53,7 +53,16 @@ export type ServiceType =
   | "HP Addition"
   | "HP Termination";
 
-export type ServiceStatus = "Pending" | "In Progress" | "Completed" | "On Hold" | "Renewal Due" | "Active" | "Paid" | "Partially Paid" | "Unpaid";
+export type ServiceStatus =
+  | "Pending"
+  | "In Progress"
+  | "Completed"
+  | "On Hold"
+  | "Renewal Due"
+  | "Active"
+  | "Paid"
+  | "Partially Paid"
+  | "Unpaid";
 
 export interface ServiceDetail {
   serviceType: ServiceType;
@@ -105,27 +114,31 @@ export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
  */
 export function normalizeServiceType(value: any): ServiceType | null {
   if (!value || typeof value !== "string") return null;
-  
+
   const trimmed = value.trim();
-  
+
   // Check if already canonical (in SERVICE_TYPES)
   if (SERVICE_TYPES.includes(trimmed as ServiceType)) {
     return trimmed as ServiceType;
   }
-  
+
   // Try mapping from route parameter format
   const mapped = SERVICE_ROUTE_MAP[trimmed.toLowerCase()];
   if (mapped) return mapped;
-  
+
   // Try converting from lowercase slug format
   const asSlug = trimmed.toLowerCase().replace(/\s+/g, "-");
   const mapped2 = SERVICE_ROUTE_MAP[asSlug];
   if (mapped2) return mapped2;
-  
+
   // Special-case legacy single-word 'License' — map to License New by default
   if (trimmed.toLowerCase() === "license") return "License New";
 
-  console.warn("[normalizeServiceType] Unknown service type:", value, "- not in SERVICE_TYPES or SERVICE_ROUTE_MAP");
+  console.warn(
+    "[normalizeServiceType] Unknown service type:",
+    value,
+    "- not in SERVICE_TYPES or SERVICE_ROUTE_MAP",
+  );
   return null;
 }
 
@@ -187,11 +200,12 @@ export interface RegistryRecord {
  * Get canonical services for a record, supporting legacy `serviceType`.
  */
 export function getRecordServices(record: RegistryRecord): ServiceType[] {
-  const source = Array.isArray(record.services) && record.services.length > 0
-    ? record.services
-    : record.serviceType
-      ? [record.serviceType]
-      : [];
+  const source =
+    Array.isArray(record.services) && record.services.length > 0
+      ? record.services
+      : record.serviceType
+        ? [record.serviceType]
+        : [];
 
   return source
     .map((s) => {
@@ -211,22 +225,28 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
     return record.services
       .map((s) => {
         if (typeof s === "object" && s !== null) {
-          const normalizedType = normalizeLegacyServiceType(s.serviceType, record.application, record.work);
+          const normalizedType = normalizeLegacyServiceType(
+            s.serviceType,
+            record.application,
+            record.work,
+          );
           if (!normalizedType) return null;
-          
-          const price = typeof s.price === "number"
-            ? s.price
-            : (typeof (s as any).serviceAmount === "number"
-              ? (s as any).serviceAmount
-              : (Number(s.price ?? (s as any).serviceAmount) || 0));
 
-          const amountReceived = typeof s.amountReceived === "number"
-            ? s.amountReceived
-            : (typeof (s as any).receivedAmount === "number"
-              ? (s as any).receivedAmount
-              : ((s.amountReceived ?? (s as any).receivedAmount) !== undefined
-                ? Number(s.amountReceived ?? (s as any).receivedAmount)
-                : undefined));
+          const price =
+            typeof s.price === "number"
+              ? s.price
+              : typeof (s as any).serviceAmount === "number"
+                ? (s as any).serviceAmount
+                : Number(s.price ?? (s as any).serviceAmount) || 0;
+
+          const amountReceived =
+            typeof s.amountReceived === "number"
+              ? s.amountReceived
+              : typeof (s as any).receivedAmount === "number"
+                ? (s as any).receivedAmount
+                : (s.amountReceived ?? (s as any).receivedAmount) !== undefined
+                  ? Number(s.amountReceived ?? (s as any).receivedAmount)
+                  : undefined;
 
           return {
             serviceType: normalizedType,
@@ -258,7 +278,11 @@ export function getRecordServiceDetails(record: RegistryRecord): ServiceDetail[]
   }
 
   if (record.serviceType) {
-    const normalizedType = normalizeLegacyServiceType(record.serviceType, record.application, record.work);
+    const normalizedType = normalizeLegacyServiceType(
+      record.serviceType,
+      record.application,
+      record.work,
+    );
     if (!normalizedType) return [];
     return [
       {
@@ -292,12 +316,12 @@ export const staffLabel = (username?: string) =>
 export const serviceLabel = (type?: ServiceType): string => {
   if (!type) return "";
   const labels: Record<ServiceType, string> = {
-    "Insurance": "🛡️ Insurance",
-    "Fitness": "💪 Fitness",
+    Insurance: "🛡️ Insurance",
+    Fitness: "💪 Fitness",
     "Gujarat Permit": "📍 Gujarat Permit",
     "National Permit": "🇮🇳 National Permit",
-    "Tax": "💰 Tax",
-    "PUC": "🌍 PUC",
+    Tax: "💰 Tax",
+    PUC: "🌍 PUC",
     "License New": "🔖 License (New)",
     "License Renew": "🔁 License (Renew)",
     "RC Transfer": "🔄 RC Transfer",
@@ -310,12 +334,12 @@ export const serviceLabel = (type?: ServiceType): string => {
 export const serviceColor = (type?: ServiceType): string => {
   if (!type) return "bg-gray-500";
   const colors: Record<ServiceType, string> = {
-    "Insurance": "bg-blue-500",
-    "Fitness": "bg-green-500",
+    Insurance: "bg-blue-500",
+    Fitness: "bg-green-500",
     "Gujarat Permit": "bg-purple-600",
     "National Permit": "bg-purple-700",
-    "Tax": "bg-yellow-500",
-    "PUC": "bg-emerald-500",
+    Tax: "bg-yellow-500",
+    PUC: "bg-emerald-500",
     "License New": "bg-cyan-500",
     "License Renew": "bg-sky-400",
     "RC Transfer": "bg-orange-500",
@@ -331,9 +355,7 @@ export const serviceColor = (type?: ServiceType): string => {
  */
 export const serviceToUrlParam = (type?: ServiceType): string => {
   if (!type) return "";
-  return type
-    .toLowerCase()
-    .replace(/\s+/g, "-"); // Replace spaces with dashes
+  return type.toLowerCase().replace(/\s+/g, "-"); // Replace spaces with dashes
 };
 
 // ─── Accounting helpers ────────────────────────────────────────────────────────
@@ -350,10 +372,7 @@ export function calculatePaymentStatus(
 }
 
 /** Calculate pending amount (serviceAmount - amountReceived). */
-export function calculatePendingAmount(
-  serviceAmount?: number,
-  amountReceived?: number,
-): number {
+export function calculatePendingAmount(serviceAmount?: number, amountReceived?: number): number {
   if (!serviceAmount) return 0;
   if (!amountReceived) return serviceAmount;
   return Math.max(0, serviceAmount - amountReceived);
@@ -370,7 +389,7 @@ export function calculateServicePendingAmount(service: ServiceDetail): number {
 export function calculateServicePaymentStatus(service: ServiceDetail): PaymentStatus {
   const amount = service.price ?? 0;
   const received = service.amountReceived ?? 0;
-  
+
   if (!amount || amount === 0) return "Unpaid";
   if (!received || received === 0) return "Unpaid";
   if (received >= amount) return "Paid";
@@ -382,25 +401,33 @@ export function calculateServicePaymentStatus(service: ServiceDetail): PaymentSt
  * Uses detailed service item prices when available, otherwise falls back to legacy serviceAmount.
  */
 export function getRecordServiceAmount(record: RegistryRecord): number {
-  const detailTotal = getRecordServiceDetails(record)
-    .reduce((sum, service) => sum + (service.price || 0), 0);
+  const detailTotal = getRecordServiceDetails(record).reduce(
+    (sum, service) => sum + (service.price || 0),
+    0,
+  );
 
   // Legacy fallback: if no service details have price, use legacy serviceAmount if available
-  if (detailTotal === 0 && typeof record.serviceAmount === 'number') {
+  if (detailTotal === 0 && typeof record.serviceAmount === "number") {
     return record.serviceAmount;
   }
   return detailTotal > 0 ? detailTotal : 0;
 }
 
-export function getRecordServiceAmountByType(record: RegistryRecord, serviceType: ServiceType): number {
-  const details = getRecordServiceDetails(record).filter((detail) => detail.serviceType === serviceType);
+export function getRecordServiceAmountByType(
+  record: RegistryRecord,
+  serviceType: ServiceType,
+): number {
+  const details = getRecordServiceDetails(record).filter(
+    (detail) => detail.serviceType === serviceType,
+  );
   const detailTotal = details.reduce((sum, service) => sum + (service.price || 0), 0);
 
   if (detailTotal > 0) {
     return detailTotal;
   }
 
-  const belongsToType = record.serviceType === serviceType || getRecordServices(record).includes(serviceType);
+  const belongsToType =
+    record.serviceType === serviceType || getRecordServices(record).includes(serviceType);
   return belongsToType ? (record.serviceAmount ?? 0) : 0;
 }
 
@@ -421,9 +448,11 @@ export function getServicePaymentStatus(service: ServiceDetail): PaymentStatus {
 
 /** Get total received across all services in a record. */
 export function getRecordTotalReceived(record: RegistryRecord): number {
-  const detailsTotal = getRecordServiceDetails(record)
-    .reduce((sum, service) => sum + (service.amountReceived ?? 0), 0);
-  
+  const detailsTotal = getRecordServiceDetails(record).reduce(
+    (sum, service) => sum + (service.amountReceived ?? 0),
+    0,
+  );
+
   return detailsTotal > 0 ? detailsTotal : (record.amountReceived ?? 0);
 }
 
@@ -467,7 +496,7 @@ export function removeUndefined<T>(obj: T): T {
     return obj;
   }
   if (Array.isArray(obj)) {
-    return obj.map(item => removeUndefined(item)) as unknown as T;
+    return obj.map((item) => removeUndefined(item)) as unknown as T;
   }
   const result: any = {};
   for (const key in obj) {
@@ -499,7 +528,7 @@ export function subscribeToRecords(
     q,
     (snap) => {
       const records = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
+        .map((d) => ({ id: d.id, ...d.data() }) as RegistryRecord)
         .filter((r) => !r.isDeleted); // Hide soft-deleted records
       cb(records);
     },
@@ -519,7 +548,7 @@ export async function saveRecord(
   record: RegistryRecord,
   actor?: string,
 ): Promise<void> {
-  console.log('[saveRecord] Received record for save:', record);
+  console.log("[saveRecord] Received record for save:", record);
   const colName = colFor(bucket);
   // Ensure we have a valid document id. If the incoming record has no id,
   // generate a new Firestore id so we can safely call getDoc/setDoc.
@@ -529,9 +558,7 @@ export async function saveRecord(
   // Get existing record to track changes
   const existingDoc = await getDoc(doc(db, colName, recId));
 
-  const existing = existingDoc.exists()
-    ? (existingDoc.data() as RegistryRecord)
-    : null;
+  const existing = existingDoc.exists() ? (existingDoc.data() as RegistryRecord) : null;
 
   const activities: ActivityLog[] = [];
 
@@ -601,7 +628,9 @@ export async function saveRecord(
 
   // 1. Check client/vehicle/accounting changes for every tracked field.
   if (existing && actor) {
-    const tracked = Object.keys({ ...existing, ...record }).filter((field) => !shouldSkipField(field));
+    const tracked = Object.keys({ ...existing, ...record }).filter(
+      (field) => !shouldSkipField(field),
+    );
     for (const field of tracked) {
       const oldVal = (existing as any)[field];
       const newVal = (record as any)[field];
@@ -630,9 +659,17 @@ export async function saveRecord(
   const normalizedServices: ServiceDetail[] = [];
   const serviceTypes: ServiceType[] = [];
 
-  const normalizeType = (rawType: any) => normalizeLegacyServiceType(rawType, record.application, record.work);
+  const normalizeType = (rawType: any) =>
+    normalizeLegacyServiceType(rawType, record.application, record.work);
 
-  console.log("[saveRecord] Original services:", record.services, "serviceType:", record.serviceType, "serviceTypes:", record.serviceTypes);
+  console.log(
+    "[saveRecord] Original services:",
+    record.services,
+    "serviceType:",
+    record.serviceType,
+    "serviceTypes:",
+    record.serviceTypes,
+  );
 
   const rawServices = record.services;
   if (Array.isArray(rawServices) && rawServices.length > 0) {
@@ -691,19 +728,30 @@ export async function saveRecord(
     }
   }
 
-  console.log("[saveRecord] Normalized services:", normalizedServices, "serviceTypes:", serviceTypes);
+  console.log(
+    "[saveRecord] Normalized services:",
+    normalizedServices,
+    "serviceTypes:",
+    serviceTypes,
+  );
 
   // Compare service changes
   if (existing && actor) {
-    const oldServices = Array.isArray(existing.services) 
-      ? existing.services 
-      : (existing.serviceType 
-        ? [{ serviceType: existing.serviceType, dueDate: existing.serviceDueDate || "", status: existing.serviceStatus || "Active" } as ServiceDetail] 
-        : []);
-    
+    const oldServices = Array.isArray(existing.services)
+      ? existing.services
+      : existing.serviceType
+        ? [
+            {
+              serviceType: existing.serviceType,
+              dueDate: existing.serviceDueDate || "",
+              status: existing.serviceStatus || "Active",
+            } as ServiceDetail,
+          ]
+        : [];
+
     // Services added / modified
     for (const newS of normalizedServices) {
-      const oldS = oldServices.find(os => os.serviceType === newS.serviceType);
+      const oldS = oldServices.find((os) => os.serviceType === newS.serviceType);
       if (!oldS) {
         activities.push(
           createActivity(
@@ -711,8 +759,8 @@ export async function saveRecord(
             `Added Service: ${newS.serviceType}`,
             "Service Added",
             "",
-            newS.serviceType
-          )
+            newS.serviceType,
+          ),
         );
       } else {
         if (oldS.dueDate !== newS.dueDate) {
@@ -722,8 +770,8 @@ export async function saveRecord(
               `Changed ${newS.serviceType} Due Date`,
               `${newS.serviceType} Due Date`,
               oldS.dueDate || "—",
-              newS.dueDate || "—"
-            )
+              newS.dueDate || "—",
+            ),
           );
         }
         if (oldS.status !== newS.status) {
@@ -733,8 +781,8 @@ export async function saveRecord(
               `Changed ${newS.serviceType} Status`,
               `${newS.serviceType} Status`,
               oldS.status || "—",
-              newS.status || "—"
-            )
+              newS.status || "—",
+            ),
           );
         }
       }
@@ -742,7 +790,7 @@ export async function saveRecord(
 
     // Services removed
     for (const oldS of oldServices) {
-      const newS = normalizedServices.find(ns => ns.serviceType === oldS.serviceType);
+      const newS = normalizedServices.find((ns) => ns.serviceType === oldS.serviceType);
       if (!newS) {
         activities.push(
           createActivity(
@@ -750,8 +798,8 @@ export async function saveRecord(
             `Removed Service: ${oldS.serviceType}`,
             "Service Removed",
             oldS.serviceType,
-            ""
-          )
+            "",
+          ),
         );
       }
     }
@@ -761,20 +809,14 @@ export async function saveRecord(
   if (existing && actor) {
     const oldAttachments = existing.attachments || [];
     const newAttachments = record.attachments || [];
-    
+
     // Find deleted attachments
     for (const oldA of oldAttachments) {
-      const existsInNew = newAttachments.some(na => na.id === oldA.id);
+      const existsInNew = newAttachments.some((na) => na.id === oldA.id);
       if (!existsInNew) {
         // Log delete activity
         activities.push(
-          createActivity(
-            actor,
-            `Deleted document: ${oldA.name}`,
-            "document",
-            oldA.name,
-            ""
-          )
+          createActivity(actor, `Deleted document: ${oldA.name}`, "document", oldA.name, ""),
         );
         // Call backend deleteDoc from customerDocs
         try {
@@ -800,8 +842,12 @@ export async function saveRecord(
     serviceTypes: serviceTypes.length > 0 ? serviceTypes : [],
     // Keep legacy serviceType set to first normalized service for compatibility
     serviceType: serviceTypes.length > 0 ? serviceTypes[0] : "",
-    serviceDueDate: normalizedServices.length > 0 ? normalizedServices[0].dueDate : (record.serviceDueDate || ""),
-    serviceStatus: normalizedServices.length > 0 ? normalizedServices[0].status as ServiceStatus : (record.serviceStatus || "Active"),
+    serviceDueDate:
+      normalizedServices.length > 0 ? normalizedServices[0].dueDate : record.serviceDueDate || "",
+    serviceStatus:
+      normalizedServices.length > 0
+        ? (normalizedServices[0].status as ServiceStatus)
+        : record.serviceStatus || "Active",
   };
   // Remove legacy accounting fields that should not exist at root level
   delete normalized.serviceAmount;
@@ -816,9 +862,7 @@ export async function saveRecord(
     createdBy: existing?.createdBy ?? actor,
     lastUpdatedBy: actor,
     lastUpdatedAt: now,
-    activityLogs: existing?.activityLogs
-      ? [...existing.activityLogs, ...activities]
-      : activities,
+    activityLogs: existing?.activityLogs ? [...existing.activityLogs, ...activities] : activities,
   };
 
   // Write detailed per-field activity logs to separate audit collection
@@ -831,7 +875,7 @@ export async function saveRecord(
         act.action,
         act.field || null,
         act.oldValue || null,
-        act.newValue || null
+        act.newValue || null,
       );
     }
   }
@@ -856,7 +900,9 @@ export async function saveRecord(
   console.log("[CLIENT SAVE]", JSON.stringify(record, null, 2));
 
   // Validation step: Check if input record has undefined properties
-  const hasUndefined = JSON.stringify(record, (k, v) => (v === undefined ? "undefined" : v)).includes("undefined");
+  const hasUndefined = JSON.stringify(record, (k, v) =>
+    v === undefined ? "undefined" : v,
+  ).includes("undefined");
   if (hasUndefined) {
     console.error("[SAVE BLOCKED] Undefined value detected", record);
   }
@@ -866,9 +912,14 @@ export async function saveRecord(
   console.log("[CLIENT SAVE CLEANED]", JSON.stringify(cleanedRecord, null, 2));
 
   try {
-    console.log("[saveRecord] Firestore update call - Writing to doc:", id, "in collection:", colName);
+    console.log(
+      "[saveRecord] Firestore update call - Writing to doc:",
+      id,
+      "in collection:",
+      colName,
+    );
     await setDoc(doc(db, colName, id), cleanedRecord, { merge: true });
-    console.log('[saveRecord] Save success - Successfully wrote record', id, 'to', colName);
+    console.log("[saveRecord] Save success - Successfully wrote record", id, "to", colName);
   } catch (err) {
     console.error(`[saveRecord] Save error - Failed to write record ${id} to ${colName}:`, err);
     throw err;
@@ -893,7 +944,7 @@ export async function checkForDuplicates(
   const snap = await getDocs(q);
   // Filter out deleted records and optionally exclude a specific id (the record being edited)
   return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() } as RegistryRecord))
+    .map((d) => ({ id: d.id, ...d.data() }) as RegistryRecord)
     .filter((r) => !r.isDeleted && r.id !== excludeId);
 }
 
@@ -905,13 +956,7 @@ export async function softDeleteRecord(
   reason: DeleteReason,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const deleteLog = createActivity(
-    actor,
-    "Record deleted",
-    "deleteReason",
-    "",
-    reason,
-  );
+  const deleteLog = createActivity(actor, "Record deleted", "deleteReason", "", reason);
 
   await updateDoc(doc(db, colFor(bucket), id), {
     isDeleted: true,
@@ -970,7 +1015,7 @@ export async function addAttachment(
     `Attached ${attachment.name}`,
     "document",
     "",
-    attachment.name
+    attachment.name,
   );
 }
 
@@ -1017,9 +1062,4 @@ export function emptyRecord(srNo: number): RegistryRecord {
   };
 }
 
-export const STATUS_OPTIONS: RecordStatus[] = [
-  "Pending",
-  "In Progress",
-  "Completed",
-  "On Hold",
-];
+export const STATUS_OPTIONS: RecordStatus[] = ["Pending", "In Progress", "Completed", "On Hold"];

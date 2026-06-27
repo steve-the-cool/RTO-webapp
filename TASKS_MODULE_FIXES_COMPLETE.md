@@ -1,7 +1,7 @@
 # TASKS MODULE - BUG FIXES COMPLETED ✅
 
 **Date:** 2026-06-14  
-**Status:** ALL CRITICAL BUGS FIXED  
+**Status:** ALL CRITICAL BUGS FIXED
 
 ---
 
@@ -9,30 +9,33 @@
 
 Fixed **7 critical bugs** preventing task creation, subtask functionality, and status tracking:
 
-| Bug | Severity | Fix | Status |
-|-----|----------|-----|--------|
-| Firestore rules blocking task creation | 🔴 CRITICAL | Allow `isAuth()` instead of `isAdmin()` | ✅ FIXED |
-| Invalid status "Pending" in setTaskDone | 🔴 CRITICAL | Use valid status "Assigned" | ✅ FIXED |
-| arrayUnion spread bug in updateTask | 🔴 CRITICAL | Properly spread activity logs | ✅ FIXED |
-| No error handling in submit function | 🔴 CRITICAL | Add try-catch with alerts | ✅ FIXED |
-| Silent failures in subtask operations | 🟡 HIGH | Add try-catch & console logging | ✅ FIXED |
-| Activity log not showing field changes | 🟡 HIGH | Display detailed activityLogs | ✅ FIXED |
-| Last updated tracking not visible | 🟡 HIGH | Add lastUpdatedBy/At to Details | ✅ FIXED |
+| Bug                                     | Severity    | Fix                                     | Status   |
+| --------------------------------------- | ----------- | --------------------------------------- | -------- |
+| Firestore rules blocking task creation  | 🔴 CRITICAL | Allow `isAuth()` instead of `isAdmin()` | ✅ FIXED |
+| Invalid status "Pending" in setTaskDone | 🔴 CRITICAL | Use valid status "Assigned"             | ✅ FIXED |
+| arrayUnion spread bug in updateTask     | 🔴 CRITICAL | Properly spread activity logs           | ✅ FIXED |
+| No error handling in submit function    | 🔴 CRITICAL | Add try-catch with alerts               | ✅ FIXED |
+| Silent failures in subtask operations   | 🟡 HIGH     | Add try-catch & console logging         | ✅ FIXED |
+| Activity log not showing field changes  | 🟡 HIGH     | Display detailed activityLogs           | ✅ FIXED |
+| Last updated tracking not visible       | 🟡 HIGH     | Add lastUpdatedBy/At to Details         | ✅ FIXED |
 
 ---
 
 ## DETAILED FIXES
 
 ### FIX 1: FIRESTORE SECURITY RULES ✅
+
 **File:** `firestore.rules` (line 40)  
 **Issue:** Task creation required admin role, blocking all staff from creating tasks
 
 **Before:**
+
 ```
 allow create: if isAdmin();
 ```
 
 **After:**
+
 ```
 allow create: if isAuth();             // Any authenticated user can create tasks
 ```
@@ -42,19 +45,23 @@ allow create: if isAuth();             // Any authenticated user can create task
 ---
 
 ### FIX 2: INVALID STATUS IN setTaskDone ✅
+
 **File:** `src/lib/tasks.ts` (line 463)  
 **Issue:** Used invalid status "Pending" which is not in TaskStatus type
+
 - Valid values: `"Assigned" | "Read" | "In Progress" | "Completed" | "On Hold"`
 - "Pending" caused invalid state and UI breakage
 
 **Before:**
+
 ```typescript
-status: done ? "Completed" : "Pending"  // ❌ Invalid
+status: done ? "Completed" : "Pending"; // ❌ Invalid
 ```
 
 **After:**
+
 ```typescript
-status: done ? "Completed" : "Assigned"  // ✅ Valid default
+status: done ? "Completed" : "Assigned"; // ✅ Valid default
 ```
 
 **Result:** ✅ Tasks now use only valid status values
@@ -62,16 +69,19 @@ status: done ? "Completed" : "Assigned"  // ✅ Valid default
 ---
 
 ### FIX 3: FIRESTORE ARRAY UNION BUG ✅
+
 **File:** `src/lib/tasks.ts` (line 445)  
 **Issue:** Incorrect spread syntax with arrayUnion prevented activity logs from being saved
 
 **Before:**
+
 ```typescript
 activity: arrayUnion(mainEntry),
 activityLogs: arrayUnion(...activities),  // ❌ Incorrect spread
 ```
 
 **After:**
+
 ```typescript
 const updates: any = {
   ...patch,
@@ -82,7 +92,7 @@ const updates: any = {
 
 // Add tracked activities one by one
 for (const activity of activities) {
-  updates.activityLogs = arrayUnion(activity);  // ✅ Correct
+  updates.activityLogs = arrayUnion(activity); // ✅ Correct
 }
 ```
 
@@ -91,16 +101,18 @@ for (const activity of activities) {
 ---
 
 ### FIX 4: ERROR HANDLING IN TASK CREATION ✅
+
 **File:** `src/routes/dashboard.tasks.tsx` (line 602)  
 **Issue:** Silent failures, dialog closed regardless of success/failure
 
 **Before:**
+
 ```typescript
 const submit = async () => {
   setSaving(true);
   try {
     // ... no error handling
-    onClose();  // Always closes, even on failure
+    onClose(); // Always closes, even on failure
   } finally {
     setSaving(false);
   }
@@ -108,6 +120,7 @@ const submit = async () => {
 ```
 
 **After:**
+
 ```typescript
 const submit = async () => {
   if (!title.trim() || !assignee) return;
@@ -132,10 +145,12 @@ const submit = async () => {
 ---
 
 ### FIX 5: SUBTASK ERROR HANDLING & LOGGING ✅
+
 **File:** `src/routes/dashboard.tasks.tsx` (SubtasksSection)  
 **Issue:** No error feedback for subtask operations
 
 **Before:**
+
 ```typescript
 const onAddSubtask = async () => {
   setAdding(true);
@@ -151,12 +166,13 @@ const onToggleSubtask = async (subtaskId: string) => {
   try {
     await toggleSubtask(task.id, subtaskId, actor);
   } catch (error) {
-    console.error("Failed to toggle subtask:", error);  // ❌ Silent failure
+    console.error("Failed to toggle subtask:", error); // ❌ Silent failure
   }
 };
 ```
 
 **After:**
+
 ```typescript
 const onAddSubtask = async () => {
   setAdding(true);
@@ -168,7 +184,7 @@ const onAddSubtask = async () => {
   } catch (error) {
     console.error("❌ Failed to add subtask:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
-    alert(`Failed to add subtask:\n\n${message}`);  // ✅ User feedback
+    alert(`Failed to add subtask:\n\n${message}`); // ✅ User feedback
   } finally {
     setAdding(false);
   }
@@ -182,7 +198,7 @@ const onToggleSubtask = async (subtaskId: string) => {
   } catch (error) {
     console.error("❌ Failed to toggle subtask:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
-    alert(`Failed to toggle subtask:\n\n${message}`);  // ✅ User feedback
+    alert(`Failed to toggle subtask:\n\n${message}`); // ✅ User feedback
   }
 };
 ```
@@ -192,10 +208,12 @@ const onToggleSubtask = async (subtaskId: string) => {
 ---
 
 ### FIX 6: ACTIVITY LOG DISPLAY WITH FIELD CHANGES ✅
+
 **File:** `src/routes/dashboard.tasks.tsx` (Activity section)  
 **Issue:** Activity timeline only showed simple messages, not detailed field changes
 
 **Before:**
+
 ```typescript
 {(task.activity ?? []).map((a) => (
   <li key={a.id} className="text-sm">
@@ -206,6 +224,7 @@ const onToggleSubtask = async (subtaskId: string) => {
 ```
 
 **After:**
+
 ```typescript
 {(task.activityLogs ?? []).length > 0 ? (
   (task.activityLogs ?? []).map((log) => (
@@ -229,10 +248,12 @@ const onToggleSubtask = async (subtaskId: string) => {
 ---
 
 ### FIX 7: DISPLAY LAST UPDATED TRACKING ✅
+
 **File:** `src/routes/dashboard.tasks.tsx` (Details section)  
 **Issue:** lastUpdatedBy and lastUpdatedAt fields not displayed
 
 **Before:**
+
 ```typescript
 <Meta label="Created" value={new Date(task.createdAt).toLocaleString()} />
 <Meta label="Type" value={task.manual ? "Manual" : "Auto from record"} />
@@ -245,6 +266,7 @@ const onToggleSubtask = async (subtaskId: string) => {
 ```
 
 **After:**
+
 ```typescript
 <Meta label="Created" value={new Date(task.createdAt).toLocaleString()} />
 <Meta label="Type" value={task.manual ? "Manual" : "Auto from record"} />
@@ -269,6 +291,7 @@ const onToggleSubtask = async (subtaskId: string) => {
 ### BONUS FIXES: CONSOLE LOGGING & VALIDATION ✅
 
 #### createManualTask - Added validation & logging
+
 ```typescript
 console.log("📋 Creating task with input:", input);
 if (!input.title?.trim()) throw new Error("Task title is required");
@@ -280,6 +303,7 @@ console.log("✅ Task created successfully:", id);
 ```
 
 #### addSubtask - Added logging
+
 ```typescript
 console.log("➕ Adding subtask to task:", taskId, "title:", title);
 // ... implementation
@@ -287,13 +311,15 @@ console.log("✅ Subtask added successfully");
 ```
 
 #### toggleSubtask - Added logging with progress tracking
+
 ```typescript
 console.log("🔄 Toggling subtask:", subtaskId);
-console.log("✅ All subtasks completed - marking task as complete");  // When applicable
+console.log("✅ All subtasks completed - marking task as complete"); // When applicable
 console.log("✅ Subtask toggled successfully, progress:", progress);
 ```
 
 #### updateTask - Added field change logging
+
 ```typescript
 console.log("📝 Updating task:", taskId, "with patch:", patch);
 console.log(`  Changed ${field}: ${oldVal} → ${newVal}`);
@@ -360,10 +386,13 @@ Before deploying to production:
 ## DEBUGGING COMMANDS
 
 **In browser console**, filter logs by type:
+
 ```javascript
 // Show all task operations
 console.log.call(console, "%c📋 Task Operations", "color: blue");
-console.table([...document.querySelectorAll('body *')].filter(e => e.textContent?.includes('Created')));
+console.table(
+  [...document.querySelectorAll("body *")].filter((e) => e.textContent?.includes("Created")),
+);
 
 // Check specific task
 const taskId = "...";
@@ -404,7 +433,6 @@ All **7 critical bugs** have been fixed. The Tasks module now:
 ✅ Auto-manages task status based on subtask completion  
 ✅ Prevents race conditions with immutable updates  
 ✅ Validates required fields before submission  
-✅ Never silently fails - all errors surface to users  
+✅ Never silently fails - all errors surface to users
 
 **Ready for production deployment.**
-

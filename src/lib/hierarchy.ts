@@ -9,9 +9,11 @@ import {
   deleteDoc,
   getDocs,
   getDoc,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { removeUndefined, type ServiceType } from "./records";
+import { getSession } from "./auth";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -96,10 +98,10 @@ export const SERVICES_COL = "registry_services_v2";
 export const TASK_STATUS_PROGRESS: Record<ServiceTaskStatus, number> = {
   "Not Started": 0,
   "Documents Collected": 20,
-  "Verification": 40,
-  "Submitted": 60,
-  "Approved": 80,
-  "Completed": 100,
+  Verification: 40,
+  Submitted: 60,
+  Approved: 80,
+  Completed: 100,
 };
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
@@ -114,61 +116,130 @@ export function getProgressFromStatus(status: ServiceTaskStatus): number {
 export function subscribeToClients(
   type: "client" | "lead",
   cb: (clients: Client[]) => void,
-  errorCb?: (error: unknown) => void
+  errorCb?: (error: unknown) => void,
 ): () => void {
   const q = query(collection(db, CLIENTS_COL), where("type", "==", type));
   return onSnapshot(
     q,
     (snap) => {
-      const clients = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client));
+      const clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Client);
       cb(clients.sort((a, b) => a.name.localeCompare(b.name)));
     },
     (error) => {
       console.error(`[subscribeToClients] type=${type} failed:`, error);
       if (errorCb) errorCb(error);
       cb([]);
-    }
+    },
   );
 }
 
 /** Subscribe to all clients. */
 export function subscribeAllClients(
   cb: (clients: Client[]) => void,
-  errorCb?: (error: unknown) => void
+  errorCb?: (error: unknown) => void,
 ): () => void {
   const q = query(collection(db, CLIENTS_COL));
   return onSnapshot(
     q,
     (snap) => {
-      const clients = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client));
+      const clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Client);
       cb(clients.sort((a, b) => a.name.localeCompare(b.name)));
     },
     (error) => {
       console.error("[subscribeAllClients] failed:", error);
       if (errorCb) errorCb(error);
       cb([]);
-    }
+    },
   );
 }
 
+export async function logActivity(
+  clientId: string,
+  action: string,
+  fieldName: string | null,
+  oldValue: string | null,
+  newValue: string | null,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
+  try {
+    const session = getSession();
+    const performedBy = actorOverride?.name ?? session?.name ?? "System";
+    const performedById = actorOverride?.uid ?? session?.uid ?? "system";
+    const performedByRole = actorOverride?.role ?? session?.role ?? "admin";
+    const performedAt = new Date().toISOString();
+
+    await addDoc(collection(db, "client_activity_logs"), {
+      clientId,
+      action,
+      fieldName: fieldName || null,
+      oldValue: oldValue || null,
+      newValue: newValue || null,
+      performedBy,
+      performedById,
+      performedByRole,
+      performedAt,
+    });
+  } catch (err) {
+    console.error("[logActivity] Failed to write client_activity_logs:", err);
+  }
+}
+
 /** Upsert a client doc. */
-export async function saveClient(client: Client): Promise<void> {
+export async function saveClient(
+  client: Client,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
   const { id, ...data } = client;
   const now = new Date().toISOString();
   const docRef = doc(db, CLIENTS_COL, id);
+
+  const session = getSession();
+  const actorName = actorOverride?.name ?? session?.name ?? "System";
+  const actorId = actorOverride?.uid ?? session?.uid ?? "system";
+
+  // Check if client doc exists
+  const existingSnap = await getDoc(docRef);
+  const existing = existingSnap.exists() ? (existingSnap.data() as Client) : null;
+
+  const isNew = !existing;
+
   const cleanData = removeUndefined({
     ...data,
+    createdAt: existing?.createdAt ?? now,
+    createdBy: existing?.createdBy ?? actorName,
+    createdById: existing?.createdById ?? actorId,
     updatedAt: now,
-    createdAt: data.createdAt || now,
+    updatedBy: actorName,
+    updatedById: actorId,
   });
+
   await setDoc(docRef, cleanData, { merge: true });
+
+  // Log activity
+  if (isNew) {
+    await logActivity(id, "Created Client", null, null, null, actorOverride);
+  } else if (existing) {
+    // Compare fields
+    const fieldsToTrack: (keyof Client)[] = [
+      "name",
+      "mobile",
+      "address",
+      "companyName",
+      "gstNumber",
+      "notes",
+    ];
+    for (const f of fieldsToTrack) {
+      const oldVal = existing[f] || "";
+      const newVal = client[f] || "";
+      if (oldVal !== newVal) {
+        await logActivity(id, "Updated Details", f, String(oldVal), String(newVal), actorOverride);
+      }
+    }
+  }
 }
 
 /** Delete a client doc. */
 export async function deleteClient(id: string): Promise<void> {
-  // To avoid orphaned vehicles, we should delete vehicles under this client,
-  // but following rules we will also implement cascade logic if appropriate,
-  // or just delete the client.
   await deleteDoc(doc(db, CLIENTS_COL, id));
 }
 
@@ -177,19 +248,19 @@ export async function deleteClient(id: string): Promise<void> {
 /** Subscribe to vehicles for a specific client. */
 export function subscribeToVehiclesForClient(
   clientId: string,
-  cb: (vehicles: Vehicle[]) => void
+  cb: (vehicles: Vehicle[]) => void,
 ): () => void {
   const q = query(collection(db, VEHICLES_COL), where("clientId", "==", clientId));
   return onSnapshot(
     q,
     (snap) => {
-      const vehicles = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Vehicle));
+      const vehicles = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle);
       cb(vehicles.sort((a, b) => a.vehicleNumber.localeCompare(b.vehicleNumber)));
     },
     (error) => {
       console.error(`[subscribeToVehiclesForClient] client=${clientId} failed:`, error);
       cb([]);
-    }
+    },
   );
 }
 
@@ -199,27 +270,69 @@ export function subscribeAllVehicles(cb: (vehicles: Vehicle[]) => void): () => v
   return onSnapshot(
     q,
     (snap) => {
-      const vehicles = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Vehicle));
+      const vehicles = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle);
       cb(vehicles);
     },
     (error) => {
       console.error("[subscribeAllVehicles] failed:", error);
       cb([]);
-    }
+    },
   );
 }
 
 /** Upsert a vehicle doc. */
-export async function saveVehicle(vehicle: Vehicle): Promise<void> {
+export async function saveVehicle(
+  vehicle: Vehicle,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
   const { id, ...data } = vehicle;
   const now = new Date().toISOString();
   const docRef = doc(db, VEHICLES_COL, id);
+
+  const existingSnap = await getDoc(docRef);
+  const existing = existingSnap.exists() ? (existingSnap.data() as Vehicle) : null;
+  const isNew = !existing;
+
   const cleanData = removeUndefined({
     ...data,
     updatedAt: now,
     createdAt: data.createdAt || now,
   });
   await setDoc(docRef, cleanData, { merge: true });
+
+  if (isNew) {
+    await logActivity(
+      vehicle.clientId,
+      "Vehicle Added",
+      "vehicleNumber",
+      null,
+      vehicle.vehicleNumber,
+      actorOverride,
+    );
+  } else if (existing) {
+    const fieldsToTrack: (keyof Vehicle)[] = [
+      "vehicleNumber",
+      "vehicleType",
+      "chassisNumber",
+      "engineNumber",
+      "registrationDate",
+      "status",
+    ];
+    for (const f of fieldsToTrack) {
+      const oldVal = existing[f] || "";
+      const newVal = vehicle[f] || "";
+      if (oldVal !== newVal) {
+        await logActivity(
+          vehicle.clientId,
+          "Vehicle Updated",
+          f,
+          String(oldVal),
+          String(newVal),
+          actorOverride,
+        );
+      }
+    }
+  }
 }
 
 /** Delete a vehicle doc. */
@@ -232,7 +345,7 @@ export async function deleteVehicle(id: string): Promise<void> {
 /** Subscribe to services for a specific vehicle. */
 export function subscribeToServicesForVehicle(
   vehicleId: string,
-  cb: (services: Service[]) => void
+  cb: (services: Service[]) => void,
 ): () => void {
   const q = query(collection(db, SERVICES_COL), where("vehicleId", "==", vehicleId));
   return onSnapshot(
@@ -253,7 +366,7 @@ export function subscribeToServicesForVehicle(
     (error) => {
       console.error(`[subscribeToServicesForVehicle] vehicle=${vehicleId} failed:`, error);
       cb([]);
-    }
+    },
   );
 }
 
@@ -278,14 +391,14 @@ export function subscribeAllServices(cb: (services: Service[]) => void): () => v
     (error) => {
       console.error("[subscribeAllServices] failed:", error);
       cb([]);
-    }
+    },
   );
 }
 
 /** Subscribe to services filtered by type. */
 export function subscribeToServicesByType(
   serviceType: ServiceType,
-  cb: (services: Service[]) => void
+  cb: (services: Service[]) => void,
 ): () => void {
   const q = query(collection(db, SERVICES_COL), where("serviceType", "==", serviceType));
   return onSnapshot(
@@ -306,12 +419,15 @@ export function subscribeToServicesByType(
     (error) => {
       console.error(`[subscribeToServicesByType] type=${serviceType} failed:`, error);
       cb([]);
-    }
+    },
   );
 }
 
 /** Upsert a service doc. */
-export async function saveService(service: Service): Promise<void> {
+export async function saveService(
+  service: Service,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
   const { id, ...data } = service;
   const now = new Date().toISOString();
   const docRef = doc(db, SERVICES_COL, id);
@@ -319,6 +435,10 @@ export async function saveService(service: Service): Promise<void> {
   const amountReceived = data.amountReceived ?? 0;
   const pendingAmount = Math.max(0, serviceAmount - amountReceived);
   const progress = getProgressFromStatus(data.taskStatus);
+
+  const existingSnap = await getDoc(docRef);
+  const existing = existingSnap.exists() ? (existingSnap.data() as Service) : null;
+  const isNew = !existing;
 
   const cleanData = removeUndefined({
     ...data,
@@ -328,10 +448,91 @@ export async function saveService(service: Service): Promise<void> {
     createdAt: data.createdAt || now,
   });
   await setDoc(docRef, cleanData, { merge: true });
+
+  // Look up vehicle to find its clientId for activity logging
+  let clientId = "";
+  try {
+    const vDoc = await getDoc(doc(db, VEHICLES_COL, data.vehicleId));
+    if (vDoc.exists()) {
+      clientId = vDoc.data().clientId || "";
+    }
+  } catch (err) {
+    console.error("Failed to fetch vehicle for service activity log:", err);
+  }
+
+  if (clientId) {
+    if (isNew) {
+      await logActivity(
+        clientId,
+        "Service Added",
+        "serviceType",
+        null,
+        data.serviceType,
+        actorOverride,
+      );
+    } else if (existing) {
+      if (existing.dueDate !== data.dueDate) {
+        await logActivity(
+          clientId,
+          "Due Date Changed",
+          `${data.serviceType} Due Date`,
+          existing.dueDate,
+          data.dueDate,
+          actorOverride,
+        );
+      }
+      if (existing.serviceAmount !== serviceAmount || existing.amountReceived !== amountReceived) {
+        await logActivity(
+          clientId,
+          "Accounting Updated",
+          `${data.serviceType} Accounting`,
+          `Amount: ${existing.serviceAmount}, Received: ${existing.amountReceived}`,
+          `Amount: ${serviceAmount}, Received: ${amountReceived}`,
+          actorOverride,
+        );
+      }
+      if (existing.taskStatus !== data.taskStatus) {
+        await logActivity(
+          clientId,
+          "Service Updated",
+          `${data.serviceType} Status`,
+          existing.taskStatus,
+          data.taskStatus,
+          actorOverride,
+        );
+      }
+    }
+  }
 }
 
 /** Delete a service doc. */
-export async function deleteService(id: string): Promise<void> {
+export async function deleteService(
+  id: string,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
+  const sSnap = await getDoc(doc(db, SERVICES_COL, id));
+  if (sSnap.exists()) {
+    const service = sSnap.data() as Service;
+    let clientId = "";
+    try {
+      const vDoc = await getDoc(doc(db, VEHICLES_COL, service.vehicleId));
+      if (vDoc.exists()) {
+        clientId = vDoc.data().clientId || "";
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    if (clientId) {
+      await logActivity(
+        clientId,
+        "Service Removed",
+        "serviceType",
+        service.serviceType,
+        null,
+        actorOverride,
+      );
+    }
+  }
   await deleteDoc(doc(db, SERVICES_COL, id));
 }
 
@@ -343,7 +544,7 @@ export async function deleteService(id: string): Promise<void> {
  */
 export function subscribeToClientDetails(
   clientId: string,
-  cb: (details: ClientDetails | null) => void
+  cb: (details: ClientDetails | null) => void,
 ): () => void {
   let client: Client | null = null;
   let vehicles: Vehicle[] = [];
@@ -399,7 +600,7 @@ export function subscribeToClientDetails(
   // Subscribe to Vehicles
   const qVehicles = query(collection(db, VEHICLES_COL), where("clientId", "==", clientId));
   const unsubVehicles = onSnapshot(qVehicles, (snap) => {
-    vehicles = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Vehicle));
+    vehicles = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Vehicle);
 
     // Cleanup service subscriptions for vehicles that are no longer present
     const vehicleIds = vehicles.map((v) => v.id);
@@ -443,7 +644,11 @@ export function subscribeToClientDetails(
 }
 
 /** Add a document metadata object to a vehicle's documents array. */
-export async function addVehicleDocument(vehicleId: string, docData: VehicleDocument): Promise<void> {
+export async function addVehicleDocument(
+  vehicleId: string,
+  docData: VehicleDocument,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
   const docRef = doc(db, VEHICLES_COL, vehicleId);
   const snap = await getDoc(docRef);
   if (!snap.exists()) throw new Error("Vehicle not found");
@@ -451,15 +656,39 @@ export async function addVehicleDocument(vehicleId: string, docData: VehicleDocu
   const documents = vehicle.documents || [];
   documents.push(docData);
   await setDoc(docRef, { documents }, { merge: true });
+
+  await logActivity(
+    vehicle.clientId,
+    "Document Uploaded",
+    "documentName",
+    null,
+    docData.fileName,
+    actorOverride,
+  );
 }
 
 /** Delete a document metadata object from a vehicle's documents array by document id. */
-export async function deleteVehicleDocument(vehicleId: string, documentId: string): Promise<void> {
+export async function deleteVehicleDocument(
+  vehicleId: string,
+  documentId: string,
+  actorOverride?: { name: string; uid: string; role: string },
+): Promise<void> {
   const docRef = doc(db, VEHICLES_COL, vehicleId);
   const snap = await getDoc(docRef);
   if (!snap.exists()) throw new Error("Vehicle not found");
   const vehicle = snap.data() as Vehicle;
+  const toDelete = (vehicle.documents || []).find((d) => d.id === documentId);
   const documents = (vehicle.documents || []).filter((d) => d.id !== documentId);
   await setDoc(docRef, { documents }, { merge: true });
-}
 
+  if (toDelete) {
+    await logActivity(
+      vehicle.clientId,
+      "Document Removed",
+      "documentName",
+      toDelete.fileName,
+      null,
+      actorOverride,
+    );
+  }
+}

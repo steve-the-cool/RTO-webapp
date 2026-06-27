@@ -32,13 +32,13 @@ export function setForceCapsSetting(enabled: boolean): void {
  * Fields that should be capitalized when force caps is enabled.
  */
 export const CAPITALIZE_FIELDS = [
-  "name",           // Client Name
-  "mvNo",           // Vehicle Number
-  "address",        // Address
-  "groupName",      // Group Name
-  "company",        // Company Name
-  "application",    // RTO Application
-  "work",           // Work Type
-  "co",             // C/O (Care Of)
-  "mo",             // Mobile Operator
+  "name", // Client Name
+  "mvNo", // Vehicle Number
+  "address", // Address
+  "groupName", // Group Name
+  "company", // Company Name
+  "application", // RTO Application
+  "work", // Work Type
+  "co", // C/O (Care Of)
+  "mo", // Mobile Operator
 ];

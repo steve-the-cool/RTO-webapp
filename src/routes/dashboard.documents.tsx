@@ -3,7 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { FileText, Trash2, Plus, Search, ExternalLink, Upload, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -55,12 +61,11 @@ function DocumentsPage() {
 
   const filteredDocs = useMemo(() => {
     return docs.filter((doc) => {
-      const matchesQuery = [doc.name, doc.type, customerMap.get(doc.customerId) ?? "General"].some((value) =>
-        value.toLowerCase().includes(query.toLowerCase()),
+      const matchesQuery = [doc.name, doc.type, customerMap.get(doc.customerId) ?? "General"].some(
+        (value) => value.toLowerCase().includes(query.toLowerCase()),
       );
       const matchesType = typeFilter === "all" || doc.type === typeFilter;
-      const matchesCustomer =
-        customerFilter === "all" || doc.customerId === customerFilter;
+      const matchesCustomer = customerFilter === "all" || doc.customerId === customerFilter;
       return matchesQuery && matchesType && matchesCustomer;
     });
   }, [docs, query, typeFilter, customerFilter, customerMap]);
@@ -86,18 +91,23 @@ function DocumentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Documents</h2>
-          <p className="text-sm text-muted-foreground">Manage client documents, permits, invoices, and records.</p>
+          <p className="text-sm text-muted-foreground">
+            Manage client documents, permits, invoices, and records.
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <Button onClick={() => setShowAddModal(true)}>
-            <Plus className="size-4 mr-1" />Add Document
+            <Plus className="size-4 mr-1" />
+            Add Document
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border bg-card p-4">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Search</Label>
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Search
+          </Label>
           <div className="relative mt-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-4" />
             <Input
@@ -110,7 +120,9 @@ function DocumentsPage() {
         </div>
 
         <div className="rounded-xl border bg-card p-4">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter by type</Label>
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Filter by type
+          </Label>
           <select
             className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             value={typeFilter}
@@ -125,7 +137,9 @@ function DocumentsPage() {
         </div>
 
         <div className="rounded-xl border bg-card p-4">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter by customer</Label>
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Filter by customer
+          </Label>
           <select
             className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             value={customerFilter}
@@ -151,13 +165,23 @@ function DocumentsPage() {
             <div className="border-b bg-muted/60 px-5 py-4 flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold">{type}</div>
-                <div className="text-xs text-muted-foreground">{docsOfType.length} document{docsOfType.length === 1 ? "" : "s"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {docsOfType.length} document{docsOfType.length === 1 ? "" : "s"}
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground">Updated {docsOfType[0]?.addedAt ? new Date(docsOfType[0].addedAt).toLocaleDateString("en-IN") : "—"}</div>
+              <div className="text-xs text-muted-foreground">
+                Updated{" "}
+                {docsOfType[0]?.addedAt
+                  ? new Date(docsOfType[0].addedAt).toLocaleDateString("en-IN")
+                  : "—"}
+              </div>
             </div>
             <div className="divide-y">
               {docsOfType.map((doc) => (
-                <div key={doc.id} className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-5 py-4">
+                <div
+                  key={doc.id}
+                  className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-5 py-4"
+                >
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                       <FileText className="size-4 text-primary" />
@@ -165,7 +189,14 @@ function DocumentsPage() {
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <span>{customerMap.get(doc.customerId) ?? "General / Unlinked"}</span>
-                      <span>Added {new Date(doc.addedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                      <span>
+                        Added{" "}
+                        {new Date(doc.addedAt).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </span>
                       {doc.fileSize != null && <span>{Math.round(doc.fileSize / 1024)} KB</span>}
                     </div>
                   </div>
@@ -177,10 +208,13 @@ function DocumentsPage() {
                         rel="noreferrer"
                         className="inline-flex items-center justify-center rounded-md border border-input px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50"
                       >
-                        <ExternalLink className="size-4 mr-1" />View
+                        <ExternalLink className="size-4 mr-1" />
+                        View
                       </a>
                     ) : (
-                      <span className="rounded-md border border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground">Metadata only</span>
+                      <span className="rounded-md border border-muted-foreground/30 px-3 py-2 text-xs text-muted-foreground">
+                        Metadata only
+                      </span>
                     )}
                     <Button
                       variant="ghost"
@@ -317,7 +351,9 @@ function AddDocumentModal({ open, onOpenChange, customers }: AddDocumentModalPro
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Upload file (optional)</Label>
+            <Label className="text-xs uppercase text-muted-foreground">
+              Upload file (optional)
+            </Label>
             <label className="flex items-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-3 text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 transition-colors">
               <Upload className="size-4" />
               <span>{file?.name ?? "Select file to upload"}</span>
@@ -335,7 +371,9 @@ function AddDocumentModal({ open, onOpenChange, customers }: AddDocumentModalPro
                 disabled={uploading}
               />
             </label>
-            <p className="text-xs text-muted-foreground">Supported: PDF, image, Word, and text files. Max {MAX_FILE_MB} MB.</p>
+            <p className="text-xs text-muted-foreground">
+              Supported: PDF, image, Word, and text files. Max {MAX_FILE_MB} MB.
+            </p>
           </div>
 
           {uploading && (
@@ -345,7 +383,10 @@ function AddDocumentModal({ open, onOpenChange, customers }: AddDocumentModalPro
                 <span>Uploading… {uploadPct}%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full bg-primary transition-all" style={{ width: `${uploadPct}%` }} />
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${uploadPct}%` }}
+                />
               </div>
             </div>
           )}

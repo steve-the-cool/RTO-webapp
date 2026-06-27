@@ -18,12 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   subscribeToCustomers,
@@ -32,12 +27,7 @@ import {
   addAttachment,
   type CustomerAttachment,
 } from "@/lib/customers";
-import {
-  subscribeToDocsFor,
-  addDoc,
-  deleteDoc,
-  type CustomerDoc,
-} from "@/lib/customerDocs";
+import { subscribeToDocsFor, addDoc, deleteDoc, type CustomerDoc } from "@/lib/customerDocs";
 import type { RecordStatus } from "@/lib/records";
 import { storage } from "@/lib/firebase";
 import { uploadBytesResumable, getDownloadURL, ref } from "firebase/storage";
@@ -46,12 +36,15 @@ export const Route = createFileRoute("/dashboard/customers")({
   component: CustomersPage,
 });
 
-
-
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
-  return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 function avatarColor(name: string) {
@@ -71,10 +64,14 @@ function avatarColor(name: string) {
 
 function statusBadge(status: RecordStatus) {
   switch (status) {
-    case "Completed": return "bg-emerald-100 text-emerald-700 border-emerald-200";
-    case "In Progress": return "bg-blue-100 text-blue-700 border-blue-200";
-    case "On Hold": return "bg-amber-100 text-amber-700 border-amber-200";
-    default: return "bg-slate-100 text-slate-600 border-slate-200";
+    case "Completed":
+      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    case "In Progress":
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    case "On Hold":
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    default:
+      return "bg-slate-100 text-slate-600 border-slate-200";
   }
 }
 
@@ -95,7 +92,12 @@ function VehicleModal({ customer, onClose }: { customer: CustomerProfile; onClos
             <div key={v.id} className="rounded-xl border bg-muted/30 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-mono font-semibold text-base text-primary">{v.mvNo}</span>
-                <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium", statusBadge(v.status))}>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                    statusBadge(v.status),
+                  )}
+                >
                   {v.status}
                 </span>
               </div>
@@ -116,7 +118,9 @@ function VehicleModal({ customer, onClose }: { customer: CustomerProfile; onClos
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-0.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
       <div className="font-medium text-foreground">{value || "—"}</div>
     </div>
   );
@@ -126,7 +130,13 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 
 const MAX_ATTACHMENT_MB = 10;
 
-function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; onClose: () => void }) {
+function AttachmentsModal({
+  customer,
+  onClose,
+}: {
+  customer: CustomerProfile;
+  onClose: () => void;
+}) {
   const [attachments, setAttachments] = useState<CustomerAttachment[]>(customer.attachments ?? []);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -254,7 +264,11 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
         if (!resolved) {
           resolved = true;
           console.error("[uploadFileWithTimeout] TIMEOUT_FIRED - Upload exceeded 120 seconds");
-          reject(new Error("Upload timeout — file took too long. Please try again or use a smaller file."));
+          reject(
+            new Error(
+              "Upload timeout — file took too long. Please try again or use a smaller file.",
+            ),
+          );
         }
       }, 120000); // 2 minutes
 
@@ -346,7 +360,9 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
 
         {/* Upload section */}
         <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add Attachment</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Add Attachment
+          </p>
 
           {/* File picker */}
           <div className="space-y-1">
@@ -364,7 +380,8 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              Supported: PDF, Images (JPG, PNG), Documents (DOC, DOCX, XLS, XLSX, TXT) • Max: {MAX_ATTACHMENT_MB} MB
+              Supported: PDF, Images (JPG, PNG), Documents (DOC, DOCX, XLS, XLSX, TXT) • Max:{" "}
+              {MAX_ATTACHMENT_MB} MB
             </p>
           </div>
 
@@ -376,7 +393,10 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
                 <span className="font-semibold">{uploadPct}%</span>
               </div>
               <div className="h-2 rounded-full bg-blue-200 overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${uploadPct}%` }} />
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${uploadPct}%` }}
+                />
               </div>
             </div>
           )}
@@ -389,11 +409,7 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
           )}
 
           {/* Upload button */}
-          <Button
-            onClick={handleUpload}
-            disabled={!file || uploading}
-            className="w-full"
-          >
+          <Button onClick={handleUpload} disabled={!file || uploading} className="w-full">
             {uploading ? (
               <>
                 <Loader2 className="size-4 animate-spin mr-2" />
@@ -410,12 +426,12 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
 
         {/* Attachments list */}
         {attachments.length === 0 ? (
-          <div className="text-center py-6 text-muted-foreground text-sm">
-            No attachments yet
-          </div>
+          <div className="text-center py-6 text-muted-foreground text-sm">No attachments yet</div>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Attachments</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Attachments
+            </p>
             {attachments.map((att) => (
               <div
                 key={att.id}
@@ -433,7 +449,8 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
                       {att.name}
                     </a>
                     <p className="text-xs text-muted-foreground">
-                      {(att.size / 1024 / 1024).toFixed(2)} MB • {new Date(att.uploadedAt).toLocaleDateString()}
+                      {(att.size / 1024 / 1024).toFixed(2)} MB •{" "}
+                      {new Date(att.uploadedAt).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
@@ -456,7 +473,14 @@ function AttachmentsModal({ customer, onClose }: { customer: CustomerProfile; on
 
 // ─── Documents Modal ──────────────────────────────────────────────────────────
 
-const DOC_TYPES = ["RC Book", "Insurance", "Fitness Certificate", "Tax Receipt", "PUC Certificate", "Other"];
+const DOC_TYPES = [
+  "RC Book",
+  "Insurance",
+  "Fitness Certificate",
+  "Tax Receipt",
+  "PUC Certificate",
+  "Other",
+];
 const MAX_FILE_MB = 5; // Reduced from 10 to 5 for better upload reliability
 
 function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: () => void }) {
@@ -495,13 +519,20 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
       setError("Please enter a document name");
       return;
     }
-    
-    console.log("[DocsModal] handleAdd called - name:", form.name, "type:", form.type, "hasFile:", !!file);
-    
+
+    console.log(
+      "[DocsModal] handleAdd called - name:",
+      form.name,
+      "type:",
+      form.type,
+      "hasFile:",
+      !!file,
+    );
+
     setUploading(true);
     setUploadPct(0);
     setError("");
-    
+
     try {
       console.log("[DocsModal] Calling addDoc...");
       const result = await addDoc(
@@ -550,7 +581,9 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
 
         {/* Add document form */}
         <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add Document</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Add Document
+          </p>
 
           <div className="grid sm:grid-cols-2 gap-2">
             <div className="space-y-1">
@@ -569,7 +602,11 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
               >
-                {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {DOC_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -582,7 +619,12 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
               <span className="text-muted-foreground truncate">
                 {file ? file.name : "Click to choose PDF, image…"}
               </span>
-              <input type="file" className="hidden" accept=".pdf,image/*,.doc,.docx,.jpg,.jpeg,.png" onChange={handleFileChange} />
+              <input
+                type="file"
+                className="hidden"
+                accept=".pdf,image/*,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={handleFileChange}
+              />
             </label>
             <p className="text-xs text-muted-foreground">
               Supported: PDF, Images (JPG, PNG), Word (DOC, DOCX) • Max size: {MAX_FILE_MB} MB
@@ -598,7 +640,10 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
                 <span className="font-semibold">{uploadPct}%</span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${uploadPct}%` }} />
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${uploadPct}%` }}
+                />
               </div>
             </div>
           )}
@@ -609,17 +654,18 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
                 <div className="flex-1">
                   <p className="text-xs font-bold text-destructive">Error: {error}</p>
                   <p className="text-xs text-destructive/80 mt-1">
-                    💡 Check your internet connection, try a smaller file, or contact support if the issue persists.
+                    💡 Check your internet connection, try a smaller file, or contact support if the
+                    issue persists.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          <Button 
-            size="sm" 
-            onClick={handleAdd} 
-            className="w-full" 
+          <Button
+            size="sm"
+            onClick={handleAdd}
+            className="w-full"
             disabled={uploading || !form.name.trim()}
           >
             {uploading ? (
@@ -639,7 +685,9 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
         {/* Document list */}
         <div className="rounded-xl border bg-card divide-y">
           {docs.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground text-sm">No documents added yet.</div>
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              No documents added yet.
+            </div>
           )}
           {docs.map((d) => (
             <div key={d.id} className="flex items-center gap-3 px-4 py-3">
@@ -649,7 +697,12 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm truncate">{d.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {d.type} • {new Date(d.addedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                  {d.type} •{" "}
+                  {new Date(d.addedAt).toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
                   {d.fileSize ? ` • ${(d.fileSize / 1024).toFixed(0)} KB` : ""}
                 </div>
               </div>
@@ -671,9 +724,11 @@ function DocsModal({ customer, onClose }: { customer: CustomerProfile; onClose: 
                   onClick={() => handleDelete(d)}
                   disabled={deleting === d.id}
                 >
-                  {deleting === d.id
-                    ? <Loader2 className="size-4 animate-spin" />
-                    : <Trash2 className="size-4 text-destructive" />}
+                  {deleting === d.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4 text-destructive" />
+                  )}
                 </Button>
               </div>
             </div>
@@ -741,7 +796,9 @@ function CustomersPage() {
         </div>
 
         {filtered.length === 0 && (
-          <div className="px-4 py-12 text-center text-muted-foreground text-sm">No customers found.</div>
+          <div className="px-4 py-12 text-center text-muted-foreground text-sm">
+            No customers found.
+          </div>
         )}
         {filtered.map((c) => {
           const hasMultipleVehicles = c.vehicles.length > 1;
@@ -754,7 +811,12 @@ function CustomersPage() {
             >
               {/* Name */}
               <div className="flex items-center gap-3 min-w-0">
-                <div className={cn("size-9 rounded-full grid place-items-center text-sm font-bold flex-shrink-0", avatarColor(c.name))}>
+                <div
+                  className={cn(
+                    "size-9 rounded-full grid place-items-center text-sm font-bold flex-shrink-0",
+                    avatarColor(c.name),
+                  )}
+                >
                   {initials(c.name)}
                 </div>
                 <div className="min-w-0">
@@ -821,8 +883,12 @@ function CustomersPage() {
       </div>
 
       {/* Modals */}
-      {vehicleModal && <VehicleModal customer={vehicleModal} onClose={() => setVehicleModal(null)} />}
-      {attachmentsModal && <AttachmentsModal customer={attachmentsModal} onClose={() => setAttachmentsModal(null)} />}
+      {vehicleModal && (
+        <VehicleModal customer={vehicleModal} onClose={() => setVehicleModal(null)} />
+      )}
+      {attachmentsModal && (
+        <AttachmentsModal customer={attachmentsModal} onClose={() => setAttachmentsModal(null)} />
+      )}
       {docsModal && <DocsModal customer={docsModal} onClose={() => setDocsModal(null)} />}
     </div>
   );

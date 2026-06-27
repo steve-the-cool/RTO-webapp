@@ -1,13 +1,36 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { subscribeToRecords, SERVICE_TYPES, serviceLabel, serviceToUrlParam, type RegistryRecord } from "@/lib/records";
+import { useEffect, useState, useMemo } from "react";
+import {
+  subscribeToRecords,
+  SERVICE_TYPES,
+  serviceLabel,
+  serviceToUrlParam,
+  type RegistryRecord,
+} from "@/lib/records";
 import { computeFollowUps } from "@/lib/followups";
-import { getTotalRevenue, getActiveServicesCount, getRevenueByService, getUpcomingRenewals } from "@/lib/services";
+import {
+  getTotalRevenue,
+  getActiveServicesCount,
+  getRevenueByService,
+  getUpcomingRenewals,
+} from "@/lib/services";
 import { subscribeToAllPayments, type ClientPayment } from "@/lib/payments";
 import { subscribeToTasks, type Task } from "@/lib/tasks";
 import { subscribeToTargets, calculateTargetMetrics, type TargetMetrics } from "@/lib/targets";
-import { calculateBillingMetrics } from "@/lib/billing";
-import { ArrowRight, Users, UserPlus, CheckCircle2, Clock, TrendingUp, DollarSign, AlertCircle, Zap, Target, Receipt } from "lucide-react";
+import { calculateBillingMetrics, subscribeToAllInvoices, type Invoice } from "@/lib/billing";
+import {
+  ArrowRight,
+  Users,
+  UserPlus,
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  DollarSign,
+  AlertCircle,
+  Zap,
+  Target,
+  Receipt,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const Route = createFileRoute("/dashboard/")({
@@ -20,7 +43,9 @@ function Overview() {
   const [customers, setCustomers] = useState<RegistryRecord[]>([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [activeServices, setActiveServices] = useState(0);
-  const [revenueByService, setRevenueByService] = useState<{ service: string; revenue: number }[]>([]);
+  const [revenueByService, setRevenueByService] = useState<{ service: string; revenue: number }[]>(
+    [],
+  );
   const [upcomingRenewals, setUpcomingRenewals] = useState<RegistryRecord[]>([]);
   const [allPayments, setAllPayments] = useState<ClientPayment[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -36,6 +61,74 @@ function Overview() {
     overdueInvoices: 0,
     collectionRate: 0,
   });
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [collectionCategory, setCollectionCategory] = useState<
+    "today" | "7days" | "15days" | "30days" | "overdue"
+  >("7days");
+
+  const categorizedCollections = useMemo(() => {
+    const today: any[] = [];
+    const next7: any[] = [];
+    const next15: any[] = [];
+    const next30: any[] = [];
+    const overdue: any[] = [];
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    invoices.forEach((inv) => {
+      if (inv.status === "Paid" || inv.status === "Cancelled") return;
+      if (!inv.collectionDate) return;
+
+      const colDate = new Date(inv.collectionDate);
+      const pending = inv.totalAmount - (inv.totalPaid || 0);
+      if (pending <= 0) return;
+
+      const diffTime = colDate.getTime() - todayStart.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      const item = {
+        id: inv.id,
+        clientName: inv.clientName,
+        invoiceNumber: inv.invoiceNumber,
+        collectionDate: inv.collectionDate,
+        pendingAmount: pending,
+        daysRemaining: diffDays,
+      };
+
+      if (colDate >= todayStart && colDate <= todayEnd) {
+        today.push(item);
+      } else if (diffDays < 0) {
+        overdue.push(item);
+      } else if (diffDays > 0 && diffDays <= 7) {
+        next7.push(item);
+      } else if (diffDays > 0 && diffDays <= 15) {
+        next15.push(item);
+      } else if (diffDays > 0 && diffDays <= 30) {
+        next30.push(item);
+      }
+    });
+
+    return { today, next7, next15, next30, overdue };
+  }, [invoices]);
+
+  const activeCategoryList = useMemo(() => {
+    switch (collectionCategory) {
+      case "today":
+        return categorizedCollections.today;
+      case "7days":
+        return categorizedCollections.next7;
+      case "15days":
+        return categorizedCollections.next15;
+      case "30days":
+        return categorizedCollections.next30;
+      case "overdue":
+        return categorizedCollections.overdue;
+      default:
+        return [];
+    }
+  }, [categorizedCollections, collectionCategory]);
 
   useEffect(() => {
     const u1 = subscribeToRecords("clients", setClients);
@@ -43,10 +136,18 @@ function Overview() {
     const u3 = subscribeToRecords("customers", setCustomers);
     const u4 = subscribeToTasks((allTasks) => setTasks(allTasks));
     const u5 = subscribeToTargets((allTargets) => {
-      const enriched = allTargets.map(t => calculateTargetMetrics(t));
+      const enriched = allTargets.map((t) => calculateTargetMetrics(t));
       setTargets(enriched);
     });
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    const u6 = subscribeToAllInvoices((data) => setInvoices(data));
+    return () => {
+      u1();
+      u2();
+      u3();
+      u4();
+      u5();
+      u6();
+    };
   }, []);
 
   useEffect(() => {
@@ -84,12 +185,12 @@ function Overview() {
     loadServiceData();
   }, []);
 
-    // Compute follow-ups in real-time from all registry buckets
-    const [followups, setFollowups] = useState<any>(null);
-    useEffect(() => {
-      const all = [...clients, ...leads, ...customers];
-      setFollowups(computeFollowUps(all));
-    }, [clients, leads, customers]);
+  // Compute follow-ups in real-time from all registry buckets
+  const [followups, setFollowups] = useState<any>(null);
+  useEffect(() => {
+    const all = [...clients, ...leads, ...customers];
+    setFollowups(computeFollowUps(all));
+  }, [clients, leads, customers]);
 
   const completed = clients.filter((c) => c.status === "Completed").length;
   const inProgress = [...clients, ...leads].filter((c) => c.status === "In Progress").length;
@@ -173,70 +274,94 @@ function Overview() {
             <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <Card
                 className="group cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:shadow-lg transition-colors"
-                onClick={() => setFilter({ type: 'today' })}
+                onClick={() => setFilter({ type: "today" })}
               >
                 <CardHeader>
-                  <CardTitle className="text-sm group-hover:text-orange-600">Today's Follow-Ups</CardTitle>
+                  <CardTitle className="text-sm group-hover:text-orange-600">
+                    Today's Follow-Ups
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold group-hover:text-orange-600">{followups.totals.today}</div>
+                  <div className="text-2xl font-bold group-hover:text-orange-600">
+                    {followups.totals.today}
+                  </div>
                 </CardContent>
               </Card>
 
               <Card
                 className="group cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:shadow-lg transition-colors"
-                onClick={() => setFilter({ type: 'upcoming7' })}
+                onClick={() => setFilter({ type: "upcoming7" })}
               >
                 <CardHeader>
-                  <CardTitle className="text-sm group-hover:text-orange-600">Upcoming 7 Days</CardTitle>
+                  <CardTitle className="text-sm group-hover:text-orange-600">
+                    Upcoming 7 Days
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold group-hover:text-orange-600">{followups.totals.upcoming7}</div>
+                  <div className="text-2xl font-bold group-hover:text-orange-600">
+                    {followups.totals.upcoming7}
+                  </div>
                 </CardContent>
               </Card>
 
               <Card
                 className="group cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:shadow-lg transition-colors"
-                onClick={() => setFilter({ type: 'upcoming15' })}
+                onClick={() => setFilter({ type: "upcoming15" })}
               >
                 <CardHeader>
-                  <CardTitle className="text-sm group-hover:text-orange-600">Upcoming 15 Days</CardTitle>
+                  <CardTitle className="text-sm group-hover:text-orange-600">
+                    Upcoming 15 Days
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold group-hover:text-orange-600">{followups.totals.upcoming15}</div>
+                  <div className="text-2xl font-bold group-hover:text-orange-600">
+                    {followups.totals.upcoming15}
+                  </div>
                 </CardContent>
               </Card>
 
               <Card
                 className="group cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:shadow-lg transition-colors"
-                onClick={() => setFilter({ type: 'upcoming30' })}
+                onClick={() => setFilter({ type: "upcoming30" })}
               >
                 <CardHeader>
-                  <CardTitle className="text-sm group-hover:text-orange-600">Upcoming 30 Days</CardTitle>
+                  <CardTitle className="text-sm group-hover:text-orange-600">
+                    Upcoming 30 Days
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold group-hover:text-orange-600">{followups.totals.upcoming30}</div>
+                  <div className="text-2xl font-bold group-hover:text-orange-600">
+                    {followups.totals.upcoming30}
+                  </div>
                 </CardContent>
               </Card>
 
               <Card
                 className="group cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:shadow-lg transition-colors"
-                onClick={() => setFilter({ type: 'overdue' })}
+                onClick={() => setFilter({ type: "overdue" })}
               >
                 <CardHeader>
-                  <CardTitle className="text-sm group-hover:text-orange-600">Overdue Services</CardTitle>
+                  <CardTitle className="text-sm group-hover:text-orange-600">
+                    Overdue Services
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-red-600 group-hover:text-orange-600">{followups.totals.overdue}</div>
+                  <div className="text-2xl font-bold text-red-600 group-hover:text-orange-600">
+                    {followups.totals.overdue}
+                  </div>
                 </CardContent>
               </Card>
 
               <Card className="group cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:shadow-lg transition-colors">
                 <CardHeader>
-                  <CardTitle className="text-sm group-hover:text-orange-600">Total Active Services</CardTitle>
+                  <CardTitle className="text-sm group-hover:text-orange-600">
+                    Total Active Services
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold group-hover:text-orange-600">{followups.totals.totalActiveServices}</div>
+                  <div className="text-2xl font-bold group-hover:text-orange-600">
+                    {followups.totals.totalActiveServices}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -298,14 +423,19 @@ function Overview() {
             <CardContent>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {upcomingRenewals.map((renewal) => (
-                  <div key={renewal.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                  <div
+                    key={renewal.id}
+                    className="flex items-center justify-between p-2 border rounded text-sm"
+                  >
                     <div>
                       <p className="font-medium">{renewal.name}</p>
-                      <p className="text-xs text-muted-foreground">{serviceLabel(renewal.serviceType)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {serviceLabel(renewal.serviceType)}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-medium">
-                        {renewal.serviceDueDate 
+                        {renewal.serviceDueDate
                           ? new Date(renewal.serviceDueDate).toLocaleDateString("en-IN")
                           : "N/A"}
                       </p>
@@ -316,10 +446,103 @@ function Overview() {
             </CardContent>
           </Card>
         )}
+
+        {/* Upcoming Collections Card */}
+        <Card className="col-span-1 md:col-span-2 lg:col-span-3">
+          <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Receipt className="size-4 text-primary" /> Upcoming Collections
+              </CardTitle>
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              {(["overdue", "today", "7days", "15days", "30days"] as const).map((cat) => {
+                const labelMap = {
+                  overdue: "Overdue",
+                  today: "Today",
+                  "7days": "Next 7d",
+                  "15days": "Next 15d",
+                  "30days": "Next 30d",
+                };
+                const count =
+                  categorizedCollections[
+                    cat === "7days"
+                      ? "next7"
+                      : cat === "15days"
+                        ? "next15"
+                        : cat === "30days"
+                          ? "next30"
+                          : cat
+                  ].length;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setCollectionCategory(cat)}
+                    className={`px-2 py-1 rounded text-[11px] font-semibold transition ${
+                      collectionCategory === cat
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {labelMap[cat]} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {activeCategoryList.length === 0 ? (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No collections scheduled in this period.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-[9px] uppercase font-bold text-muted-foreground">
+                      <th className="p-2">Client Name</th>
+                      <th className="p-2">Invoice Number</th>
+                      <th className="p-2">Collection Date</th>
+                      <th className="p-2 text-right">Pending Amount</th>
+                      <th className="p-2 text-right">Days Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeCategoryList.map((item) => (
+                      <tr key={item.id} className="border-b hover:bg-muted/10">
+                        <td className="p-2 font-semibold text-foreground">{item.clientName}</td>
+                        <td className="p-2 font-mono text-muted-foreground">
+                          {item.invoiceNumber}
+                        </td>
+                        <td className="p-2 font-mono">
+                          {new Date(item.collectionDate).toLocaleDateString("en-IN")}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold text-primary">
+                          ₹{item.pendingAmount.toLocaleString("en-IN")}
+                        </td>
+                        <td className="p-2 text-right font-mono font-semibold">
+                          {item.daysRemaining < 0 ? (
+                            <span className="text-destructive font-bold">
+                              Overdue by {Math.abs(item.daysRemaining)}d
+                            </span>
+                          ) : item.daysRemaining === 0 ? (
+                            <span className="text-amber-600 font-bold">Today</span>
+                          ) : (
+                            <span className="text-gray-600">{item.daysRemaining} days</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Pending Follow-ups Section */}
-      {tasks.filter(t => !t.done && t.status !== "Completed").length > 0 && (
+      {tasks.filter((t) => !t.done && t.status !== "Completed").length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Zap className="size-5 text-orange-500" />
@@ -329,10 +552,13 @@ function Overview() {
             <CardContent className="pt-6">
               <div className="space-y-3">
                 {tasks
-                  .filter(t => !t.done && t.status !== "Completed")
+                  .filter((t) => !t.done && t.status !== "Completed")
                   .sort((a, b) => {
-                    const priorityOrder = { "Urgent": 0, "High": 1, "Medium": 2, "Low": 3 };
-                    return priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder];
+                    const priorityOrder = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
+                    return (
+                      priorityOrder[a.priority as keyof typeof priorityOrder] -
+                      priorityOrder[b.priority as keyof typeof priorityOrder]
+                    );
                   })
                   .slice(0, 5)
                   .map((task) => (
@@ -344,12 +570,17 @@ function Overview() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-sm">{task.title}</p>
-                          <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                            task.priority === "Urgent" ? "bg-red-100 text-red-700" :
-                            task.priority === "High" ? "bg-orange-100 text-orange-700" :
-                            task.priority === "Medium" ? "bg-yellow-100 text-yellow-700" :
-                            "bg-blue-100 text-blue-700"
-                          }`}>
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              task.priority === "Urgent"
+                                ? "bg-red-100 text-red-700"
+                                : task.priority === "High"
+                                  ? "bg-orange-100 text-orange-700"
+                                  : task.priority === "Medium"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
                             {task.priority}
                           </span>
                         </div>
@@ -361,9 +592,13 @@ function Overview() {
                     </Link>
                   ))}
               </div>
-              {tasks.filter(t => !t.done && t.status !== "Completed").length > 5 && (
-                <Link to="/dashboard/tasks" className="text-xs text-primary hover:underline mt-3 inline-block">
-                  View all {tasks.filter(t => !t.done && t.status !== "Completed").length} follow-ups →
+              {tasks.filter((t) => !t.done && t.status !== "Completed").length > 5 && (
+                <Link
+                  to="/dashboard/tasks"
+                  className="text-xs text-primary hover:underline mt-3 inline-block"
+                >
+                  View all {tasks.filter((t) => !t.done && t.status !== "Completed").length}{" "}
+                  follow-ups →
                 </Link>
               )}
             </CardContent>
@@ -385,7 +620,9 @@ function Overview() {
                   <div className="space-y-3">
                     <div>
                       <p className="font-semibold text-sm">{target.category}</p>
-                      <p className="text-2xl font-bold text-blue-600">{target.completed}/{target.target}</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {target.completed}/{target.target}
+                      </p>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
@@ -394,7 +631,9 @@ function Overview() {
                       />
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{target.achievementPercentage.toFixed(0)}%</span>
+                      <span className="text-muted-foreground">
+                        {target.achievementPercentage.toFixed(0)}%
+                      </span>
                       <span className="text-muted-foreground">{target.remaining} remaining</span>
                     </div>
                   </div>
@@ -407,10 +646,22 @@ function Overview() {
 
       <div className="rounded-xl border bg-card p-6">
         <h3 className="font-semibold">Quick actions</h3>
-        <p className="text-sm text-muted-foreground mt-1">Jump straight into the most common tasks.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Jump straight into the most common tasks.
+        </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Link to="/dashboard/clients" className="px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90">Open Clients</Link>
-          <Link to="/dashboard/leads" className="px-3 py-2 text-sm rounded-md border hover:bg-muted">Open Leads</Link>
+          <Link
+            to="/dashboard/clients"
+            className="px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90"
+          >
+            Open Clients
+          </Link>
+          <Link
+            to="/dashboard/leads"
+            className="px-3 py-2 text-sm rounded-md border hover:bg-muted"
+          >
+            Open Leads
+          </Link>
         </div>
       </div>
     </div>
@@ -420,36 +671,55 @@ function Overview() {
 function FollowUpLists({ followups, filter, setFilter }: any) {
   const type = filter?.type || "today";
   const list =
-    type === "today" ? followups.today :
-    type === "upcoming7" ? followups.upcoming7 :
-    type === "upcoming15" ? followups.upcoming15 :
-    type === "upcoming30" ? followups.upcoming30 :
-    type === "overdue" ? followups.overdue : followups.flat;
+    type === "today"
+      ? followups.today
+      : type === "upcoming7"
+        ? followups.upcoming7
+        : type === "upcoming15"
+          ? followups.upcoming15
+          : type === "upcoming30"
+            ? followups.upcoming30
+            : type === "overdue"
+              ? followups.overdue
+              : followups.flat;
 
   return (
     <div>
       <div className="mt-3 grid gap-3">
         {list.length === 0 ? (
           <Card>
-            <CardContent className="py-6 text-center text-sm text-muted-foreground">No records found for this filter.</CardContent>
+            <CardContent className="py-6 text-center text-sm text-muted-foreground">
+              No records found for this filter.
+            </CardContent>
           </Card>
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">{type === 'today' ? "Today's Follow-Ups" : type}</CardTitle>
+              <CardTitle className="text-sm">
+                {type === "today" ? "Today's Follow-Ups" : type}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {list.map((e: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-2 border rounded text-sm">
+                  <div
+                    key={i}
+                    className="flex items-center justify-between p-2 border rounded text-sm"
+                  >
                     <div>
                       <p className="font-medium">{e.clientName}</p>
-                      <p className="text-xs text-muted-foreground">{e.serviceType} • {e.mvNo || '—'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {e.serviceType} • {e.mvNo || "—"}
+                      </p>
                     </div>
                     <div className="text-right text-xs">
-                      <div>{e.dueDate ? new Date(e.dueDate).toLocaleDateString('en-IN') : 'N/A'}</div>
-                      <div className="text-muted-foreground">{e.daysRemaining !== undefined ? `${e.daysRemaining} days` : ''}</div>
-                      <div className="text-xs">{e.assignee || 'Unassigned'}</div>
+                      <div>
+                        {e.dueDate ? new Date(e.dueDate).toLocaleDateString("en-IN") : "N/A"}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {e.daysRemaining !== undefined ? `${e.daysRemaining} days` : ""}
+                      </div>
+                      <div className="text-xs">{e.assignee || "Unassigned"}</div>
                     </div>
                   </div>
                 ))}

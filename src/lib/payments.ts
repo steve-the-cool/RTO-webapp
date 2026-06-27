@@ -20,7 +20,9 @@ export interface ClientPayment {
 
 const col = () => collection(db, "clientPayments");
 
-export async function addPayment(payment: Omit<ClientPayment, "id" | "createdAt"> & { id?: string }) {
+export async function addPayment(
+  payment: Omit<ClientPayment, "id" | "createdAt"> & { id?: string },
+) {
   try {
     const payload = {
       clientId: payment.clientId,
@@ -36,7 +38,15 @@ export async function addPayment(payment: Omit<ClientPayment, "id" | "createdAt"
     const docRef = await addDoc(col(), payload as any);
     // Log activity for client
     try {
-      await logClientActivity(payment.clientId, payment.receivedBy || "", payment.receivedBy || "", `Payment received: ₹${payment.amount}`, "payment", null, `₹${payment.amount} via ${payment.paymentMode}`);
+      await logClientActivity(
+        payment.clientId,
+        payment.receivedBy || "",
+        payment.receivedBy || "",
+        `Payment received: ₹${payment.amount}`,
+        "payment",
+        null,
+        `₹${payment.amount} via ${payment.paymentMode}`,
+      );
     } catch (err) {
       console.warn("[addPayment] logClientActivity failed:", err);
     }
@@ -47,29 +57,40 @@ export async function addPayment(payment: Omit<ClientPayment, "id" | "createdAt"
   }
 }
 
-export function subscribeToClientPayments(clientId: string, cb: (payments: ClientPayment[]) => void) {
+export function subscribeToClientPayments(
+  clientId: string,
+  cb: (payments: ClientPayment[]) => void,
+) {
   const q = query(col(), where("clientId", "==", clientId), orderBy("createdAt", "desc"));
-  return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as ClientPayment));
-    cb(items);
-  }, (err) => {
-    console.error("[subscribeToClientPayments]", err);
-    cb([]);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as ClientPayment);
+      cb(items);
+    },
+    (err) => {
+      console.error("[subscribeToClientPayments]", err);
+      cb([]);
+    },
+  );
 }
 
 export function subscribeToAllPayments(cb: (payments: ClientPayment[]) => void) {
   const q = query(col(), orderBy("createdAt", "desc"));
-  return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as ClientPayment));
-    cb(items);
-  }, (err) => {
-    console.error("[subscribeToAllPayments]", err);
-    cb([]);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as ClientPayment);
+      cb(items);
+    },
+    (err) => {
+      console.error("[subscribeToAllPayments]", err);
+      cb([]);
+    },
+  );
 }
 
 export async function getAllPayments(): Promise<ClientPayment[]> {
   const snap = await getDocs(query(col(), orderBy("createdAt", "desc")));
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as ClientPayment));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as ClientPayment);
 }

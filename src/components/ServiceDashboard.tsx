@@ -4,16 +4,39 @@ import {
   getServiceStats,
   getServiceDistributionSummary,
 } from "@/lib/services";
-import { serviceLabel, type ServiceType, type RegistryRecord, getRecordServices, getRecordServiceAmount, getRecordPendingAmount, getRecordPaymentStatus, getRecordServiceDetails, hasLegacyAccounting } from "@/lib/records";
+import {
+  serviceLabel,
+  type ServiceType,
+  type RegistryRecord,
+  getRecordServices,
+  getRecordServiceAmount,
+  getRecordPendingAmount,
+  getRecordPaymentStatus,
+  getRecordServiceDetails,
+  hasLegacyAccounting,
+} from "@/lib/records";
 import { RecordTable } from "@/components/RecordTable";
 import { ClientDetailWorkspace } from "./ClientDetailWorkspace";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Package, TrendingUp, DollarSign, Users, AlertCircle, ChevronRight, ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import {
+  Users,
+  TrendingUp,
+  Package,
+  AlertCircle,
+  DollarSign,
+  ArrowRight,
+  Download,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { generateServicePDF } from "@/lib/pdfServiceHelper";
 
 interface ServiceDashboardProps {
   serviceType: ServiceType;
+  title?: string;
+  description?: string;
 }
 
 function aggregateServiceRecords(recs: RegistryRecord[], serviceType: ServiceType) {
@@ -27,9 +50,9 @@ function aggregateServiceRecords(recs: RegistryRecord[], serviceType: ServiceTyp
 
   const aggregatedRecords: any[] = [];
   let index = 1;
-  
+
   let uniqueVehicles = new Set<string>();
-  
+
   // Status counts for services
   let serviceActiveCount = 0;
   let serviceCompletedCount = 0;
@@ -39,12 +62,12 @@ function aggregateServiceRecords(recs: RegistryRecord[], serviceType: ServiceTyp
   for (const clientId in clientGroups) {
     const group = clientGroups[clientId];
     const first = group[0];
-    
-    const vehicleNumbers = Array.from(new Set(group.map(r => r.mvNo).filter(Boolean)));
-    vehicleNumbers.forEach(v => uniqueVehicles.add(v));
-    
-    const servicesList = group.flatMap(r => r.services || []);
-    
+
+    const vehicleNumbers = Array.from(new Set(group.map((r) => r.mvNo).filter(Boolean)));
+    vehicleNumbers.forEach((v) => uniqueVehicles.add(v));
+
+    const servicesList = group.flatMap((r) => r.services || []);
+
     for (const s of servicesList) {
       // Count service statuses
       const status = s.status || "Pending";
@@ -65,23 +88,37 @@ function aggregateServiceRecords(recs: RegistryRecord[], serviceType: ServiceTyp
         servicePendingCount++;
       }
     }
-    
+
     // Determine aggregated status
     let aggStatus = "Pending";
-    const statuses = servicesList.map(s => s.status || "Pending");
-    if (statuses.every(s => s === "Completed")) {
+    const statuses = servicesList.map((s) => s.status || "Pending");
+    if (statuses.every((s) => s === "Completed")) {
       aggStatus = "Completed";
-    } else if (statuses.some(s => ["In Progress", "Active", "Submitted", "Approved", "Verification", "Documents Collected"].includes(s))) {
+    } else if (
+      statuses.some((s) =>
+        [
+          "In Progress",
+          "Active",
+          "Submitted",
+          "Approved",
+          "Verification",
+          "Documents Collected",
+        ].includes(s),
+      )
+    ) {
       aggStatus = "In Progress";
-    } else if (statuses.some(s => s === "On Hold")) {
+    } else if (statuses.some((s) => s === "On Hold")) {
       aggStatus = "On Hold";
     }
-    
+
     // Determine earliest due date
-    const dueDates = servicesList.map(s => s.dueDate).filter(Boolean);
-    const earliestDueDate = dueDates.length > 0 ? dueDates.reduce((earliest, current) => {
-      return new Date(current) < new Date(earliest) ? current : earliest;
-    }) : "";
+    const dueDates = servicesList.map((s) => s.dueDate).filter(Boolean);
+    const earliestDueDate =
+      dueDates.length > 0
+        ? dueDates.reduce((earliest, current) => {
+            return new Date(current) < new Date(earliest) ? current : earliest;
+          })
+        : "";
 
     aggregatedRecords.push({
       ...first,
@@ -101,7 +138,7 @@ function aggregateServiceRecords(recs: RegistryRecord[], serviceType: ServiceTyp
   let receivedTotal = 0;
   for (const r of recs) {
     const details = getRecordServiceDetails(r);
-    const matching = details.find(s => s.serviceType === serviceType);
+    const matching = details.find((s) => s.serviceType === serviceType);
     if (matching) {
       serviceTotal += matching.price ?? 0;
       receivedTotal += matching.amountReceived ?? 0;
@@ -127,7 +164,15 @@ function aggregateServiceRecords(recs: RegistryRecord[], serviceType: ServiceTyp
 
 export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
   const [records, setRecords] = useState<RegistryRecord[]>([]);
-  const [stats, setStats] = useState({ total: 0, active: 0, completed: 0, pending: 0, onHold: 0, vehicleCount: 0, serviceCount: 0 });
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    completed: 0,
+    pending: 0,
+    onHold: 0,
+    vehicleCount: 0,
+    serviceCount: 0,
+  });
   const [totalServiceAmount, setTotalServiceAmount] = useState(0);
   const [totalReceived, setTotalReceived] = useState(0);
   const [totalPending, setTotalPending] = useState(0);
@@ -156,18 +201,13 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
       try {
         setLoading(true);
         console.log(`[ServiceDashboard] LOADING: serviceType="${serviceType}"`);
-        
-        const [recs] = await Promise.all([
-          getServiceClientsAll(serviceType),
-        ]);
 
-        console.log(
-          `[ServiceDashboard] LOADED: ${recs.length} records for "${serviceType}"`,
-          {
-            serviceType,
-            totalRecords: recs.length,
-          },
-        );
+        const [recs] = await Promise.all([getServiceClientsAll(serviceType)]);
+
+        console.log(`[ServiceDashboard] LOADED: ${recs.length} records for "${serviceType}"`, {
+          serviceType,
+          totalRecords: recs.length,
+        });
 
         const agg = aggregateServiceRecords(recs, serviceType);
 
@@ -186,34 +226,52 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
     loadData();
   }, [serviceType]);
 
+  const handleExportServicePDF = async () => {
+    try {
+      const data = {
+        records,
+        stats,
+        totals: {
+          totalServiceAmount,
+          totalReceived,
+          totalPending,
+        },
+      };
+      await generateServicePDF(serviceType, data, "user");
+      console.log("Service PDF export triggered");
+    } catch (error) {
+      console.error("Error exporting service PDF:", error);
+    }
+  };
+
   const statCards = [
     {
       label: "Total Clients",
       value: stats.total,
       icon: Users,
       color: "bg-blue-500/10 text-blue-600",
-      description: `${stats.vehicleCount} Vehicles • ${stats.serviceCount} Services`
+      description: `${stats.vehicleCount} Vehicles • ${stats.serviceCount} Services`,
     },
     {
       label: "Active Cases",
       value: stats.active,
       icon: TrendingUp,
       color: "bg-green-500/10 text-green-600",
-      description: "Services in progress"
+      description: "Services in progress",
     },
     {
       label: "Completed",
       value: stats.completed,
       icon: Package,
       color: "bg-purple-500/10 text-purple-600",
-      description: "Services completed"
+      description: "Services completed",
     },
     {
       label: "Pending",
       value: stats.pending,
       icon: DollarSign,
       color: "bg-yellow-500/10 text-yellow-600",
-      description: "Services pending"
+      description: "Services pending",
     },
   ];
 
@@ -230,10 +288,18 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
         </div>
         <Link to="/dashboard/clients" className="inline-flex">
           <Button variant="outline">
-            <ArrowRight className="size-4 mr-2" />
-            All Clients
+            {" "}
+            <ArrowRight className="size-4 mr-2" /> All Clients{" "}
           </Button>
         </Link>
+        <Button
+          onClick={handleExportServicePDF}
+          variant="outline"
+          size="sm"
+          className="h-9 gap-1.5"
+        >
+          <Download className="size-4" /> Export PDF
+        </Button>
       </div>
 
       {/* Legacy Accounting warning banner */}
@@ -241,7 +307,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
         <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex gap-3">
           <AlertCircle className="size-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-yellow-900">Legacy accounting detected. Please migrate client to service-wise accounting.</p>
+            <p className="font-medium text-yellow-900">
+              Legacy accounting detected. Please migrate client to service-wise accounting.
+            </p>
           </div>
         </div>
       )}
@@ -287,9 +355,13 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <TrendingUp className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">₹{totalReceived.toLocaleString("en-IN")}</div>
+            <div className="text-2xl font-bold text-green-600">
+              ₹{totalReceived.toLocaleString("en-IN")}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {totalServiceAmount > 0 ? `${((totalReceived / totalServiceAmount) * 100).toFixed(1)}% collected` : "No revenue yet"}
+              {totalServiceAmount > 0
+                ? `${((totalReceived / totalServiceAmount) * 100).toFixed(1)}% collected`
+                : "No revenue yet"}
             </p>
           </CardContent>
         </Card>
@@ -300,9 +372,13 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <Package className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">₹{totalPending.toLocaleString("en-IN")}</div>
+            <div className="text-2xl font-bold text-red-600">
+              ₹{totalPending.toLocaleString("en-IN")}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {totalServiceAmount > 0 ? `${((totalPending / totalServiceAmount) * 100).toFixed(1)}% pending` : "No pending amounts"}
+              {totalServiceAmount > 0
+                ? `${((totalPending / totalServiceAmount) * 100).toFixed(1)}% pending`
+                : "No pending amounts"}
             </p>
           </CardContent>
         </Card>
@@ -316,44 +392,71 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
             <p className="text-muted-foreground">Loading clients...</p>
           </div>
         ) : records.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
-                <Package className="size-12 text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No clients found for {serviceType.toLowerCase()}</p>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={async () => {
-                      setDiagRunning(true);
-                      setDiagOutput(null);
-                      try {
-                        const recs = await getServiceClientsAll(serviceType);
-                        const summary = await getServiceDistributionSummary();
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
+              <Package className="size-12 text-muted-foreground/50 mb-2" />
+              <p className="text-muted-foreground">
+                No clients found for {serviceType.toLowerCase()}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  onClick={async () => {
+                    setDiagRunning(true);
+                    setDiagOutput(null);
+                    try {
+                      const recs = await getServiceClientsAll(serviceType);
+                      const summary = await getServiceDistributionSummary();
 
-                        const agg = aggregateServiceRecords(recs, serviceType);
+                      const agg = aggregateServiceRecords(recs, serviceType);
 
-                        setRecords(agg.aggregatedRecords);
-                        setStats(agg.stats);
-                        setTotalServiceAmount(agg.serviceTotal);
-                        setTotalReceived(agg.receivedTotal);
-                        setTotalPending(agg.pendingTotal);
+                      setRecords(agg.aggregatedRecords);
+                      setStats(agg.stats);
+                      setTotalServiceAmount(agg.serviceTotal);
+                      setTotalReceived(agg.receivedTotal);
+                      setTotalPending(agg.pendingTotal);
 
-                        setDiagOutput(JSON.stringify({ requested: serviceType, found: recs.length, sample: recs.slice(0,5).map(r=>({id:r.id,name:r.name,services:getRecordServices(r)})), summary, stats: agg.stats, revenue: agg.serviceTotal, received: agg.receivedTotal, pending: agg.pendingTotal }, null, 2));
-                      } catch (err) {
-                        setDiagOutput(String(err));
-                      } finally {
-                        setDiagRunning(false);
-                      }
-                    }}
-                  >
-                    {diagRunning ? "Running..." : "Run diagnostics"}
-                  </Button>
-                  <Button variant="ghost" onClick={() => setDiagOutput(null)}>Clear</Button>
-                </div>
-                {diagOutput ? (
-                  <pre className="text-xs mt-4 max-h-56 overflow-auto w-full bg-slate-50 p-3 rounded text-left">{diagOutput}</pre>
-                ) : null}
-              </CardContent>
-            </Card>
+                      setDiagOutput(
+                        JSON.stringify(
+                          {
+                            requested: serviceType,
+                            found: recs.length,
+                            sample: recs
+                              .slice(0, 5)
+                              .map((r) => ({
+                                id: r.id,
+                                name: r.name,
+                                services: getRecordServices(r),
+                              })),
+                            summary,
+                            stats: agg.stats,
+                            revenue: agg.serviceTotal,
+                            received: agg.receivedTotal,
+                            pending: agg.pendingTotal,
+                          },
+                          null,
+                          2,
+                        ),
+                      );
+                    } catch (err) {
+                      setDiagOutput(String(err));
+                    } finally {
+                      setDiagRunning(false);
+                    }
+                  }}
+                >
+                  {diagRunning ? "Running..." : "Run diagnostics"}
+                </Button>
+                <Button variant="ghost" onClick={() => setDiagOutput(null)}>
+                  Clear
+                </Button>
+              </div>
+              {diagOutput ? (
+                <pre className="text-xs mt-4 max-h-56 overflow-auto w-full bg-slate-50 p-3 rounded text-left">
+                  {diagOutput}
+                </pre>
+              ) : null}
+            </CardContent>
+          </Card>
         ) : (
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="overflow-x-auto">
@@ -363,34 +466,57 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                     <th className="w-10 px-3 py-3"></th>
                     <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">SR NO</th>
                     <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">NAME</th>
-                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">VEHICLES</th>
-                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">SERVICES</th>
+                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">
+                      VEHICLES
+                    </th>
+                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">
+                      SERVICES
+                    </th>
                     <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">STATUS</th>
-                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">DUE DATE</th>
-                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">SERVICE AMOUNT</th>
-                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">RECEIVED</th>
+                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">
+                      DUE DATE
+                    </th>
+                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">
+                      SERVICE AMOUNT
+                    </th>
+                    <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">
+                      RECEIVED
+                    </th>
                     <th className="text-left font-semibold px-3 py-3 whitespace-nowrap">PENDING</th>
                   </tr>
                 </thead>
                 <tbody>
                   {records.map((r) => {
                     const details = getRecordServiceDetails(r);
-                    const matchingServices = details.filter(s => s.serviceType === serviceType);
-                    const servicePrice = matchingServices.reduce((sum, s) => sum + (s.price ?? 0), 0);
-                    const serviceReceived = matchingServices.reduce((sum, s) => sum + (s.amountReceived ?? 0), 0);
+                    const matchingServices = details.filter((s) => s.serviceType === serviceType);
+                    const servicePrice = matchingServices.reduce(
+                      (sum, s) => sum + (s.price ?? 0),
+                      0,
+                    );
+                    const serviceReceived = matchingServices.reduce(
+                      (sum, s) => sum + (s.amountReceived ?? 0),
+                      0,
+                    );
                     const servicePending = Math.max(0, servicePrice - serviceReceived);
-                    
+
                     const serviceStatus = (r as any).status || "Pending";
                     const serviceDueDate = (r as any).serviceDueDate;
-                    
+
                     const vehicleCount = (r as any).vehicleCount ?? 1;
                     const serviceCount = (r as any).serviceCount ?? 1;
                     const vehiclesList = (r as any).aggregatedVehicles || [];
 
                     return (
                       <>
-                        <tr key={r.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => openWorkflow(r)}>
-                          <td className="px-3 py-3 text-center" onClick={(e) => toggleExpand(r.id, e)}>
+                        <tr
+                          key={r.id}
+                          className="border-t hover:bg-muted/30 cursor-pointer"
+                          onClick={() => openWorkflow(r)}
+                        >
+                          <td
+                            className="px-3 py-3 text-center"
+                            onClick={(e) => toggleExpand(r.id, e)}
+                          >
                             {expandedClients[r.id] ? (
                               <ChevronDown className="size-4 text-muted-foreground mx-auto hover:text-foreground cursor-pointer" />
                             ) : (
@@ -398,13 +524,18 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                             )}
                           </td>
                           <td className="px-3 py-3 font-medium">{r.srNo}</td>
-                          <td className="px-3 py-3 font-medium text-sky-600 underline decoration-dotted underline-offset-2">{r.name}</td>
+                          <td className="px-3 py-3 font-medium text-sky-600 underline decoration-dotted underline-offset-2">
+                            {r.name}
+                          </td>
                           <td className="px-3 py-3">
                             <div className="font-semibold text-xs text-foreground">
                               {vehicleCount} {vehicleCount === 1 ? "Vehicle" : "Vehicles"}
                             </div>
                             {vehiclesList.length > 0 && (
-                              <div className="text-[10px] font-mono text-muted-foreground mt-0.5 max-w-[150px] truncate" title={vehiclesList.join(", ")}>
+                              <div
+                                className="text-[10px] font-mono text-muted-foreground mt-0.5 max-w-[150px] truncate"
+                                title={vehiclesList.join(", ")}
+                              >
                                 {vehiclesList.join(", ")}
                               </div>
                             )}
@@ -428,7 +559,9 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                             </span>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-xs">
-                            {serviceDueDate ? new Date(serviceDueDate).toLocaleDateString("en-IN") : "—"}
+                            {serviceDueDate
+                              ? new Date(serviceDueDate).toLocaleDateString("en-IN")
+                              : "—"}
                           </td>
                           <td className="px-3 py-3 font-mono text-xs">
                             ₹{servicePrice.toLocaleString("en-IN")}
@@ -458,28 +591,49 @@ export function ServiceDashboard({ serviceType }: ServiceDashboardProps) {
                                   </thead>
                                   <tbody>
                                     {matchingServices.map((s: any, idx: number) => {
-                                      const pendingAmt = Math.max(0, (s.price ?? 0) - (s.amountReceived ?? 0));
+                                      const pendingAmt = Math.max(
+                                        0,
+                                        (s.price ?? 0) - (s.amountReceived ?? 0),
+                                      );
                                       return (
-                                        <tr key={s.serviceId || idx} className="border-t hover:bg-muted/10 font-mono">
-                                          <td className="px-3 py-2 font-bold text-sky-600">{s.vehicleNumber || "—"}</td>
-                                          <td className="px-3 py-2 text-muted-foreground font-sans">{s.vehicleType || "—"}</td>
+                                        <tr
+                                          key={s.serviceId || idx}
+                                          className="border-t hover:bg-muted/10 font-mono"
+                                        >
+                                          <td className="px-3 py-2 font-bold text-sky-600">
+                                            {s.vehicleNumber || "—"}
+                                          </td>
+                                          <td className="px-3 py-2 text-muted-foreground font-sans">
+                                            {s.vehicleType || "—"}
+                                          </td>
                                           <td className="px-3 py-2">
-                                            <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border font-sans ${
-                                              s.status === "Completed"
-                                                ? "bg-green-500/10 text-green-700 border-green-500/20"
-                                                : s.status === "In Progress" || s.status === "Active"
-                                                  ? "bg-blue-500/10 text-blue-700 border-blue-500/20"
-                                                  : "bg-muted text-muted-foreground"
-                                            }`}>
+                                            <span
+                                              className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border font-sans ${
+                                                s.status === "Completed"
+                                                  ? "bg-green-500/10 text-green-700 border-green-500/20"
+                                                  : s.status === "In Progress" ||
+                                                      s.status === "Active"
+                                                    ? "bg-blue-500/10 text-blue-700 border-blue-500/20"
+                                                    : "bg-muted text-muted-foreground"
+                                              }`}
+                                            >
                                               {s.status}
                                             </span>
                                           </td>
                                           <td className="px-3 py-2">
-                                            {s.dueDate ? new Date(s.dueDate).toLocaleDateString("en-IN") : "—"}
+                                            {s.dueDate
+                                              ? new Date(s.dueDate).toLocaleDateString("en-IN")
+                                              : "—"}
                                           </td>
-                                          <td className="px-3 py-2">₹{(s.price ?? 0).toLocaleString("en-IN")}</td>
-                                          <td className="px-3 py-2 text-green-600">₹{(s.amountReceived ?? 0).toLocaleString("en-IN")}</td>
-                                          <td className="px-3 py-2 text-red-600">₹{pendingAmt.toLocaleString("en-IN")}</td>
+                                          <td className="px-3 py-2">
+                                            ₹{(s.price ?? 0).toLocaleString("en-IN")}
+                                          </td>
+                                          <td className="px-3 py-2 text-green-600">
+                                            ₹{(s.amountReceived ?? 0).toLocaleString("en-IN")}
+                                          </td>
+                                          <td className="px-3 py-2 text-red-600">
+                                            ₹{pendingAmt.toLocaleString("en-IN")}
+                                          </td>
                                         </tr>
                                       );
                                     })}

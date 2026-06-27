@@ -11,21 +11,25 @@
 A complete root-cause analysis and fix for all service-related bugs:
 
 ### **Bug A: Service pages not showing clients** ✅ FIXED
+
 - **Root Cause**: No normalization of `serviceType` before Firestore writes
 - **Impact**: Queries with "Insurance" returned nothing if Firestore had "insurance"
 - **Fix**: Implemented `normalizeServiceType()` in records.ts, called in `saveRecord()`
 
 ### **Bug B: Uppercase inconsistency** ✅ FIXED
+
 - **Root Cause**: SELECT dropdown enforced title case, but nothing validated Firestore data
 - **Impact**: Direct database writes could bypass validation
 - **Fix**: Centralized normalization + migration utility for existing bad data
 
 ### **Bug C: Duplicate SERVICE_TYPES** ✅ FIXED
+
 - **Root Cause**: Defined in BOTH records.ts AND serviceFilters.ts
 - **Impact**: Maintenance burden, confusing imports, easier to break
 - **Fix**: Single source of truth in records.ts, removed duplicate from serviceFilters.ts
 
 ### **Bug D: serviceType not tracked** ✅ FIXED
+
 - **Root Cause**: Not in activity tracking array
 - **Impact**: Changes to service type weren't logged
 - **Fix**: Added to tracked fields array
@@ -39,10 +43,20 @@ A complete root-cause analysis and fix for all service-related bugs:
 **File**: `src/lib/records.ts`
 
 Created canonical definitions:
+
 ```typescript
 export const SERVICE_TYPES: ServiceType[] = [
-  "Insurance", "Fitness", "Permit", "Gujarat Permit", "National Permit",
-  "Tax", "PUC", "License", "RC Transfer", "HP Addition", "HP Termination",
+  "Insurance",
+  "Fitness",
+  "Permit",
+  "Gujarat Permit",
+  "National Permit",
+  "Tax",
+  "PUC",
+  "License",
+  "RC Transfer",
+  "HP Addition",
+  "HP Termination",
 ];
 
 export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
@@ -62,32 +76,34 @@ export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
 **File**: `src/lib/records.ts`
 
 Created `normalizeServiceType()` helper:
+
 ```typescript
 export function normalizeServiceType(value: any): ServiceType | null {
   if (!value || typeof value !== "string") return null;
-  
+
   const trimmed = value.trim();
-  
+
   // Check if already canonical
   if (SERVICE_TYPES.includes(trimmed as ServiceType)) {
     return trimmed as ServiceType;
   }
-  
+
   // Try mapping from route parameter format
   const mapped = SERVICE_ROUTE_MAP[trimmed.toLowerCase()];
   if (mapped) return mapped;
-  
+
   // Try converting from lowercase slug format
   const asSlug = trimmed.toLowerCase().replace(/\s+/g, "-");
   const mapped2 = SERVICE_ROUTE_MAP[asSlug];
   if (mapped2) return mapped2;
-  
+
   console.warn("[normalizeServiceType] Unknown service type:", value);
   return null;
 }
 ```
 
 **Handles**:
+
 - `"insurance"` → `"Insurance"` ✅
 - `"INSURANCE"` → `"Insurance"` ✅
 - `"Insurance"` → `"Insurance"` ✅
@@ -101,6 +117,7 @@ export function normalizeServiceType(value: any): ServiceType | null {
 **File**: `src/lib/migration-normalize-services.ts` (NEW)
 
 Created migration utility:
+
 ```typescript
 export async function runServiceTypeMigration(): Promise<{
   success: boolean;
@@ -110,6 +127,7 @@ export async function runServiceTypeMigration(): Promise<{
 ```
 
 **Features**:
+
 - Scans ALL records in ALL buckets (clients, leads, customers)
 - Detects records with wrong casing
 - Normalizes to canonical values
@@ -118,6 +136,7 @@ export async function runServiceTypeMigration(): Promise<{
 - No data loss guarantee
 
 **Usage**:
+
 ```typescript
 import { runServiceTypeMigration, formatMigrationReport } from "@/lib/migration-normalize-services";
 
@@ -132,33 +151,35 @@ console.log(formatMigrationReport(result.stats));
 **File**: `src/lib/services.ts`
 
 Updated `getServiceClients()`:
+
 ```typescript
 export async function getServiceClients(
   bucket: Bucket,
   serviceType: ServiceType,
 ): Promise<RegistryRecord[]> {
   const colName = `registry_${bucket}`;
-  
+
   console.log(`[getServiceClients] Querying ${colName} for serviceType:`, serviceType);
-  
+
   const constraints: QueryConstraint[] = [
-    where("serviceType", "==", serviceType),  // Exact match now works!
+    where("serviceType", "==", serviceType), // Exact match now works!
     where("isDeleted", "!=", true),
   ];
-  
+
   const q = query(collection(db, colName), ...constraints);
   const snap = await getDocs(q);
-  const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as RegistryRecord));
-  
+  const results = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegistryRecord);
+
   console.log(
     `[getServiceClients] Found ${results.length} records in ${colName} for serviceType "${serviceType}"`,
   );
-  
+
   return results;
 }
 ```
 
-**Result**: 
+**Result**:
+
 - Insurance page shows all Insurance clients ✅
 - Fitness page shows all Fitness clients ✅
 - All 11 service types work correctly ✅
@@ -170,6 +191,7 @@ export async function getServiceClients(
 **File**: `src/routes/dashboard.service.$serviceType.tsx`
 
 Uses `SERVICE_ROUTE_MAP` for URL parameter mapping:
+
 ```typescript
 const { serviceType } = Route.useParams(); // "insurance" from URL
 
@@ -184,6 +206,7 @@ return <ServiceDashboard serviceType={mappedService} />;
 ```
 
 **Route Flow**:
+
 1. URL: `/dashboard/service/insurance`
 2. Route param: `"insurance"`
 3. Mapped value: `"Insurance"` (via SERVICE_ROUTE_MAP)
@@ -196,12 +219,13 @@ return <ServiceDashboard serviceType={mappedService} />;
 **File**: `src/lib/records.ts` - `saveRecord()` function
 
 Added normalization BEFORE saving:
+
 ```typescript
 // CRITICAL: Normalize serviceType before saving
 const normalized = {
   ...record,
-  serviceType: record.serviceType 
-    ? normalizeServiceType(record.serviceType) 
+  serviceType: record.serviceType
+    ? normalizeServiceType(record.serviceType)
     : undefined,
 };
 
@@ -260,6 +284,7 @@ export async function getServiceStats(serviceType: ServiceType) {
 **File**: `src/lib/services.ts`
 
 Revenue calculations use normalized queries:
+
 ```typescript
 export async function getServiceRevenue(serviceType: ServiceType): Promise<number> {
   const records = await getServiceClientsAll(serviceType); // Gets REAL data
@@ -287,17 +312,20 @@ export async function getRevenueByService() {
 **Added console logs in**:
 
 1. **`saveRecord()`** in `src/lib/records.ts`:
+
    ```
    [saveRecord] Normalizing serviceType: insurance → Insurance
    ```
 
 2. **`getServiceClients()`** in `src/lib/services.ts`:
+
    ```
    [getServiceClients] Querying registry_clients for serviceType: Insurance
    [getServiceClients] Found 5 records in registry_clients for serviceType "Insurance"
    ```
 
 3. **`ServiceDashboard`** in `src/components/ServiceDashboard.tsx`:
+
    ```
    [ServiceDashboard] Loading data for serviceType: "Insurance"
    [ServiceDashboard] Successfully loaded 5 records for "Insurance"
@@ -316,6 +344,7 @@ export async function getRevenueByService() {
 ### **STEP 11 - SAFETY** ✅
 
 **NO CHANGES TO**:
+
 - Authentication ✅
 - Staff Management ✅
 - Tasks ✅
@@ -326,6 +355,7 @@ export async function getRevenueByService() {
 - Registry Records structure ✅
 
 **ONLY MODIFIED**:
+
 - Service type validation ✅
 - Service type normalization ✅
 - Activity tracking (added serviceType) ✅
@@ -336,10 +366,12 @@ export async function getRevenueByService() {
 ## CONSOLIDATION OF DEFINITIONS
 
 ### **BEFORE** (Duplicate definitions):
+
 - `src/lib/records.ts` - Had SERVICE_TYPES definition
 - `src/lib/serviceFilters.ts` - Had duplicate SERVICE_TYPES definition
 
 ### **AFTER** (Single source of truth):
+
 - `src/lib/records.ts` - ✅ ONLY place with SERVICE_TYPES
 - `src/lib/serviceFilters.ts` - ✅ Imports from records.ts
 
@@ -350,6 +382,7 @@ export async function getRevenueByService() {
 ## FILES MODIFIED
 
 ### **Core Changes**
+
 1. ✅ `src/lib/records.ts`
    - Added `normalizeServiceType()` function
    - Updated `saveRecord()` to normalize before saving
@@ -368,6 +401,7 @@ export async function getRevenueByService() {
    - Added detailed console logging
 
 ### **New Files**
+
 1. ✅ `src/lib/migration-normalize-services.ts` (NEW)
    - Migration utility for existing data
    - Handles batch normalization
@@ -378,24 +412,28 @@ export async function getRevenueByService() {
 ## VERIFICATION CHECKLIST
 
 ### **Bug A: Service pages not showing clients**
+
 - [x] Service dashboard queries use `SERVICE_ROUTE_MAP` mapping
 - [x] `saveRecord()` normalizes serviceType before saving
 - [x] Firestore queries get exact match on canonical values
 - [x] Debug logs show mapping process
 
 ### **Bug B: Uppercase normalization**
+
 - [x] `normalizeServiceType()` handles all case variations
 - [x] All saves use normalized values
 - [x] Migration utility converts existing bad data
 - [x] Only canonical values stored in Firestore
 
 ### **Bug C: Duplicate SERVICE_TYPES**
+
 - [x] Single definition in `src/lib/records.ts`
 - [x] `serviceFilters.ts` imports from records.ts
 - [x] All imports use consolidated version
 - [x] No duplicate definitions remain
 
 ### **Bug D: serviceType tracking**
+
 - [x] Added to tracked fields array
 - [x] Changes logged to activity logs
 - [x] Timestamp recorded with changes
@@ -405,8 +443,9 @@ export async function getRevenueByService() {
 ## TESTING INSTRUCTIONS
 
 ### **Test 1: Create a new client with Insurance service**
+
 1. Go to `/dashboard/clients`
-2. Click "Add New" 
+2. Click "Add New"
 3. Fill in basic fields
 4. Select "Insurance" from Service Type dropdown
 5. Click Save
@@ -414,6 +453,7 @@ export async function getRevenueByService() {
 7. ✅ **Debug**: Check console for `[saveRecord] Normalizing serviceType: Insurance → Insurance`
 
 ### **Test 2: View Insurance dashboard**
+
 1. Go to `/dashboard`
 2. Click "Insurance" quick access button
 3. ✅ **Expected**: Page loads and shows the client created in Test 1
@@ -422,6 +462,7 @@ export async function getRevenueByService() {
    - `[getServiceClients] Found 1 records in registry_clients for serviceType "Insurance"`
 
 ### **Test 3: Create leads and customers with services**
+
 1. Create 2-3 clients with "Insurance" service in `/dashboard/clients`
 2. Create 1-2 leads with "Insurance" service in `/dashboard/leads`
 3. Create 1-2 customers with "Insurance" service in `/dashboard/customers`
@@ -430,6 +471,7 @@ export async function getRevenueByService() {
 6. ✅ **Debug**: Console should show count for each bucket
 
 ### **Test 4: Check activity logging**
+
 1. Create a client with "Fitness" service
 2. Edit it and change service to "Insurance"
 3. Click Save
@@ -438,6 +480,7 @@ export async function getRevenueByService() {
 6. ✅ **Format**: "Updated serviceType | Fitness → Insurance"
 
 ### **Test 5: Test all 11 service types**
+
 ```
 Navigate to each:
 - /dashboard/service/insurance ✅
@@ -471,6 +514,7 @@ console.log("Success:", result.success);
 ```
 
 **Output**:
+
 ```
 === SERVICE TYPE NORMALIZATION MIGRATION REPORT ===
 
@@ -501,12 +545,12 @@ console.log("Success:", result.success);
 
 ## ROOT CAUSE ANALYSIS SUMMARY
 
-| Bug | Root Cause | Why It Happened | Impact |
-|-----|-----------|-----------------|--------|
-| A | No normalization before Firestore write | Assumed SELECT dropdown validation was sufficient | Queries returned 0 results if casing mismatched |
-| B | No centralized normalization | Multiple code paths could save serviceType | Inconsistent data in Firestore |
-| C | Duplicate SERVICE_TYPES definitions | Copy-paste maintenance issues | Confusion about source of truth |
-| D | serviceType not in tracking array | Oversight during implementation | Changes not logged |
+| Bug | Root Cause                              | Why It Happened                                   | Impact                                          |
+| --- | --------------------------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| A   | No normalization before Firestore write | Assumed SELECT dropdown validation was sufficient | Queries returned 0 results if casing mismatched |
+| B   | No centralized normalization            | Multiple code paths could save serviceType        | Inconsistent data in Firestore                  |
+| C   | Duplicate SERVICE_TYPES definitions     | Copy-paste maintenance issues                     | Confusion about source of truth                 |
+| D   | serviceType not in tracking array       | Oversight during implementation                   | Changes not logged                              |
 
 **Prevention**: All new service-related code must use `normalizeServiceType()` and `SERVICE_TYPES` from `records.ts` ✅
 
@@ -515,10 +559,12 @@ console.log("Success:", result.success);
 ## PERFORMANCE IMPACT
 
 **Before**:
+
 - Some queries returned 0 results (silent failure)
 - Dashboard appeared empty (confusing UX)
 
 **After**:
+
 - All queries return correct data
 - Dashboard loads faster with better indexing
 - Console logging helps debug production issues
@@ -540,6 +586,7 @@ console.log("Success:", result.success);
 ## NEXT STEPS (OPTIONAL)
 
 1. **Run migration** (if you have old data):
+
    ```typescript
    await runServiceTypeMigration();
    ```

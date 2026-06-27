@@ -1,30 +1,26 @@
 // Migration utility: Populate serviceType on existing records
 // Run this once to update all existing records with serviceType
 
-import {
-  collection,
-  getDocs,
-  updateDoc,
-  doc,
-  writeBatch,
-} from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { normalizeServiceType, type Bucket, type RegistryRecord, SERVICE_TYPES } from "./records";
 
 /**
  * Migrate existing records to add serviceType field.
  * Maps from work/application description to serviceType.
- * 
+ *
  * Example usage (run once in browser console):
  * import { migrateExistingRecords } from '@/lib/migration';
  * await migrateExistingRecords();
  */
-export async function migrateExistingRecords(): Promise<{
-  bucket: Bucket;
-  processed: number;
-  updated: number;
-  failed: number;
-}[]> {
+export async function migrateExistingRecords(): Promise<
+  {
+    bucket: Bucket;
+    processed: number;
+    updated: number;
+    failed: number;
+  }[]
+> {
   const buckets: Bucket[] = ["clients", "leads", "customers"];
   const results: {
     bucket: Bucket;
@@ -34,9 +30,7 @@ export async function migrateExistingRecords(): Promise<{
   }[] = [];
 
   for (const bucket of buckets) {
-    console.log(
-      `\n[MIGRATION] Processing bucket: ${bucket}`,
-    );
+    console.log(`\n[MIGRATION] Processing bucket: ${bucket}`);
 
     const colName = `registry_${bucket}`;
     const snap = await getDocs(collection(db, colName));
@@ -78,10 +72,7 @@ export async function migrateExistingRecords(): Promise<{
         );
         updated++;
       } catch (error) {
-        console.error(
-          `[MIGRATION] ${bucket}/${record.id} (${record.name}): ERROR`,
-          error,
-        );
+        console.error(`[MIGRATION] ${bucket}/${record.id} (${record.name}): ERROR`, error);
         failed++;
       }
     }
@@ -98,10 +89,7 @@ export async function migrateExistingRecords(): Promise<{
     });
   }
 
-  console.log(
-    `\n[MIGRATION] COMPLETE`,
-    results,
-  );
+  console.log(`\n[MIGRATION] COMPLETE`, results);
 
   return results;
 }
@@ -110,77 +98,21 @@ export async function migrateExistingRecords(): Promise<{
  * Infer serviceType from work and application descriptions.
  * Uses keyword matching to guess the service type.
  */
-function inferServiceTypeFromWork(
-  work?: string,
-  application?: string,
-): string | null {
+function inferServiceTypeFromWork(work?: string, application?: string): string | null {
   const combined = `${work || ""} ${application || ""}`.toLowerCase();
 
   // Map of keywords to service types
   const patterns: Array<[string[], string]> = [
-    (
-      [
-        "insurance",
-        "policy",
-      ],
-      "Insurance"
-    ),
-    (
-      [
-        "fitness",
-        "emission",
-        "fitness test",
-      ],
-      "Fitness"
-    ),
-    (
-      [
-        "gujarat permit",
-      ],
-      "Gujarat Permit"
-    ),
-    (
-      [
-        "national permit",
-      ],
-      "National Permit"
-    ),
-    (
-      [
-        "tax",
-      ],
-      "Tax"
-    ),
-    (
-      [
-        "puc",
-        "pollution",
-      ],
-      "PUC"
-    ),
+    (["insurance", "policy"], "Insurance"),
+    (["fitness", "emission", "fitness test"], "Fitness"),
+    (["gujarat permit"], "Gujarat Permit"),
+    (["national permit"], "National Permit"),
+    (["tax"], "Tax"),
+    (["puc", "pollution"], "PUC"),
     // License handled below to distinguish New vs Renew
-    (
-      [
-        "rc transfer",
-        "ownership transfer",
-        "transfer",
-      ],
-      "RC Transfer"
-    ),
-    (
-      [
-        "hp addition",
-        "hp add",
-      ],
-      "HP Addition"
-    ),
-    (
-      [
-        "hp termination",
-        "hp term",
-      ],
-      "HP Termination"
-    ),
+    (["rc transfer", "ownership transfer", "transfer"], "RC Transfer"),
+    (["hp addition", "hp add"], "HP Addition"),
+    (["hp termination", "hp term"], "HP Termination"),
   ];
 
   for (const [keywords, serviceType] of patterns) {
@@ -201,7 +133,7 @@ function inferServiceTypeFromWork(
 /**
  * Manually assign serviceType to records.
  * Use this to update records that couldn't be auto-migrated.
- * 
+ *
  * Example:
  * await updateRecordServiceType('clients', 'record-id-123', 'Insurance');
  */
@@ -223,9 +155,7 @@ export async function updateRecordServiceType(
     serviceType: normalized,
   });
 
-  console.log(
-    `[MIGRATION] Updated ${bucket}/${recordId}: serviceType="${normalized}"`,
-  );
+  console.log(`[MIGRATION] Updated ${bucket}/${recordId}: serviceType="${normalized}"`);
 }
 
 /**

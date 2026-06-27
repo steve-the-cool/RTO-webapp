@@ -1,12 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Copy, Download } from "lucide-react";
-import { subscribeToRecords, getRecordServiceAmount, getRecordServiceDetails, type RegistryRecord, type Bucket, type ServiceType } from "@/lib/records";
+import {
+  subscribeToRecords,
+  getRecordServiceAmount,
+  getRecordServiceDetails,
+  type RegistryRecord,
+  type Bucket,
+  type ServiceType,
+} from "@/lib/records";
 import { saveRecord } from "@/lib/records";
 import { getSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -43,10 +56,13 @@ function AccountingMigration() {
         recordsByBucket[bucket] = records;
         const combined = Object.values(recordsByBucket)
           .flat()
-          .map((r) => ({
-            ...r,
-            hasOldAccountingData: !!(r.serviceAmount && r.serviceAmount > 0),
-          } as RecordWithOldData));
+          .map(
+            (r) =>
+              ({
+                ...r,
+                hasOldAccountingData: !!(r.serviceAmount && r.serviceAmount > 0),
+              }) as RecordWithOldData,
+          );
         setAllRecords(combined);
       });
       unsubscribers.push(unsub);
@@ -104,21 +120,21 @@ function AccountingMigration() {
         prev.map((r) =>
           r.id === record.id
             ? { ...updatedRecord, hasOldAccountingData: false, migratedStatus: "success" }
-            : r
-        )
+            : r,
+        ),
       );
     } catch (error) {
       console.error("Migration error:", error);
       setAllRecords((prev) =>
         prev.map((r) =>
           r.id === record.id
-            ? { 
-                ...r, 
-                migratedStatus: "error", 
-                errorMessage: error instanceof Error ? error.message : "Unknown error"
+            ? {
+                ...r,
+                migratedStatus: "error",
+                errorMessage: error instanceof Error ? error.message : "Unknown error",
               }
-            : r
-        )
+            : r,
+        ),
       );
     } finally {
       setProcessing(false);
@@ -131,13 +147,17 @@ function AccountingMigration() {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Accounting Migration</h2>
-          <p className="text-sm text-muted-foreground">Migrate old client-level accounting to service-wise accounting</p>
+          <p className="text-sm text-muted-foreground">
+            Migrate old client-level accounting to service-wise accounting
+          </p>
         </div>
         <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex gap-3">
           <AlertCircle className="size-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-medium text-yellow-900">Admin Only</p>
-            <p className="text-sm text-yellow-800">Only administrators can access this migration tool.</p>
+            <p className="text-sm text-yellow-800">
+              Only administrators can access this migration tool.
+            </p>
           </div>
         </div>
       </div>
@@ -204,7 +224,8 @@ function AccountingMigration() {
           <CheckCircle2 className="size-12 mx-auto text-green-600 mb-4" />
           <h3 className="font-semibold text-green-900 mb-2">All Records Migrated!</h3>
           <p className="text-sm text-green-800">
-            No records with old accounting data found. The system is fully migrated to service-wise accounting.
+            No records with old accounting data found. The system is fully migrated to service-wise
+            accounting.
           </p>
         </div>
       ) : (
@@ -214,7 +235,7 @@ function AccountingMigration() {
               key={record.id}
               className={cn(
                 record.migratedStatus === "success" && "border-green-500/50 bg-green-50",
-                record.migratedStatus === "error" && "border-red-500/50 bg-red-50"
+                record.migratedStatus === "error" && "border-red-500/50 bg-red-50",
               )}
             >
               <CardContent className="pt-6">
@@ -231,9 +252,14 @@ function AccountingMigration() {
                     </div>
                     <div className="text-sm text-muted-foreground space-y-1">
                       <p>Service Amount: ₹{(record.serviceAmount || 0).toLocaleString("en-IN")}</p>
-                      <p>Amount Received: ₹{(record.amountReceived || 0).toLocaleString("en-IN")}</p>
                       <p>
-                        Services: {getRecordServiceDetails(record).map((s) => s.serviceType).join(", ")}
+                        Amount Received: ₹{(record.amountReceived || 0).toLocaleString("en-IN")}
+                      </p>
+                      <p>
+                        Services:{" "}
+                        {getRecordServiceDetails(record)
+                          .map((s) => s.serviceType)
+                          .join(", ")}
                       </p>
                     </div>
                     {record.errorMessage && (
@@ -294,7 +320,8 @@ function AccountingMigration() {
                           type="number"
                           defaultValue={
                             selectedRecord.serviceAmount
-                              ? selectedRecord.serviceAmount / getRecordServiceDetails(selectedRecord).length
+                              ? selectedRecord.serviceAmount /
+                                getRecordServiceDetails(selectedRecord).length
                               : 0
                           }
                           disabled
@@ -307,7 +334,8 @@ function AccountingMigration() {
                           type="number"
                           defaultValue={
                             selectedRecord.amountReceived
-                              ? selectedRecord.amountReceived / getRecordServiceDetails(selectedRecord).length
+                              ? selectedRecord.amountReceived /
+                                getRecordServiceDetails(selectedRecord).length
                               : 0
                           }
                           disabled
@@ -321,8 +349,8 @@ function AccountingMigration() {
 
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                 <p className="text-xs text-blue-900">
-                  The old accounting data will be divided equally across all services. 
-                  You can manually edit individual services after migration.
+                  The old accounting data will be divided equally across all services. You can
+                  manually edit individual services after migration.
                 </p>
               </div>
             </div>

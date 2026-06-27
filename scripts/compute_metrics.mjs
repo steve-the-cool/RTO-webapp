@@ -1,16 +1,16 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, getDocs, query, where } from "firebase/firestore";
 
 function parseDotEnv(pathp) {
-  const raw = fs.readFileSync(pathp, 'utf8');
+  const raw = fs.readFileSync(pathp, "utf8");
   const obj = {};
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const idx = trimmed.indexOf('=');
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
     if (idx === -1) continue;
     const key = trimmed.slice(0, idx).trim();
     let val = trimmed.slice(idx + 1).trim();
@@ -21,7 +21,7 @@ function parseDotEnv(pathp) {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.join(__dirname, '..', '.env');
+const envPath = path.join(__dirname, "..", ".env");
 const env = parseDotEnv(envPath);
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY,
@@ -45,27 +45,27 @@ function toDate(d) {
 function daysBetween(a, b) {
   const ma = new Date(a);
   const mb = new Date(b);
-  ma.setHours(0,0,0,0);
-  mb.setHours(0,0,0,0);
+  ma.setHours(0, 0, 0, 0);
+  mb.setHours(0, 0, 0, 0);
   const ms = mb - ma;
   return Math.round(ms / (1000 * 60 * 60 * 24));
 }
 
 async function run() {
   // Total revenue from clientPayments
-  const paymentsSnap = await getDocs(collection(db, 'clientPayments'));
-  const payments = paymentsSnap.docs.map(d => ({ id: d.id, ...(d.data()||{}) }));
-  const totalRevenue = payments.reduce((s, p) => s + (Number(p.amount)||0), 0);
+  const paymentsSnap = await getDocs(collection(db, "clientPayments"));
+  const payments = paymentsSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+  const totalRevenue = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
   // Active services: count records with status == 'In Progress' across buckets
-  const buckets = ['registry_clients','registry_leads','registry_customers'];
+  const buckets = ["registry_clients", "registry_leads", "registry_customers"];
   let activeCount = 0;
   let allRecords = [];
   for (const col of buckets) {
     const snap = await getDocs(collection(db, col));
-    const recs = snap.docs.map(d => ({ id: d.id, ...(d.data()||{}) }));
+    const recs = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
     allRecords = allRecords.concat(recs);
-    activeCount += recs.filter(r => r.status === 'In Progress').length;
+    activeCount += recs.filter((r) => r.status === "In Progress").length;
   }
 
   // Upcoming renewals (30 days) using followups logic
@@ -75,26 +75,43 @@ async function run() {
     const services = [];
     if (Array.isArray(r.services) && r.services.length) {
       for (const s of r.services) {
-        if (typeof s === 'object') services.push(s);
-        else services.push({ serviceType: s, dueDate: r.serviceDueDate, status: r.serviceStatus || r.status });
+        if (typeof s === "object") services.push(s);
+        else
+          services.push({
+            serviceType: s,
+            dueDate: r.serviceDueDate,
+            status: r.serviceStatus || r.status,
+          });
       }
     } else if (r.serviceType) {
-      services.push({ serviceType: r.serviceType, dueDate: r.serviceDueDate, status: r.serviceStatus || r.status });
+      services.push({
+        serviceType: r.serviceType,
+        dueDate: r.serviceDueDate,
+        status: r.serviceStatus || r.status,
+      });
     }
     for (const s of services) {
       const due = toDate(s.dueDate);
-      const entry = { clientId: r.id, clientName: r.name, serviceType: s.serviceType, dueDate: s.dueDate, status: s.status };
+      const entry = {
+        clientId: r.id,
+        clientName: r.name,
+        serviceType: s.serviceType,
+        dueDate: s.dueDate,
+        status: s.status,
+      };
       if (due) entry.daysRemaining = daysBetween(now, due);
       flat.push(entry);
     }
   }
 
-  const upcoming30 = flat.filter(e => typeof e.daysRemaining === 'number' && e.daysRemaining >=0 && e.daysRemaining <= 30);
+  const upcoming30 = flat.filter(
+    (e) => typeof e.daysRemaining === "number" && e.daysRemaining >= 0 && e.daysRemaining <= 30,
+  );
 
-  console.log('Total Revenue: ₹' + totalRevenue.toLocaleString('en-IN'));
-  console.log('Active Services (records with status In Progress):', activeCount);
-  console.log('Upcoming Renewals (30 days):', upcoming30.length);
-  console.log('Sample upcoming entries:', upcoming30.slice(0,10));
+  console.log("Total Revenue: ₹" + totalRevenue.toLocaleString("en-IN"));
+  console.log("Active Services (records with status In Progress):", activeCount);
+  console.log("Upcoming Renewals (30 days):", upcoming30.length);
+  console.log("Sample upcoming entries:", upcoming30.slice(0, 10));
 }
 
 run();

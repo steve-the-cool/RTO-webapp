@@ -16,14 +16,7 @@
  * 5. Returns detailed migration report
  */
 
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  writeBatch,
-  type WriteBatch,
-} from "firebase/firestore";
+import { collection, getDocs, query, where, writeBatch, type WriteBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { normalizeServiceType, SERVICE_TYPES, type Bucket, type RegistryRecord } from "./records";
 
@@ -102,10 +95,7 @@ async function migrateBucket(bucket: Bucket): Promise<MigrationStats> {
 
   try {
     // Get all records with serviceType field
-    const q = query(
-      collection(db, colName),
-      where("serviceType", "!=", null),
-    );
+    const q = query(collection(db, colName), where("serviceType", "!=", null));
 
     const snap = await getDocs(q);
     stats.totalScanned = snap.size;

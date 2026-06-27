@@ -1,16 +1,16 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
 
 function parseDotEnv(pathp) {
-  const raw = fs.readFileSync(pathp, 'utf8');
+  const raw = fs.readFileSync(pathp, "utf8");
   const obj = {};
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const idx = trimmed.indexOf('=');
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
     if (idx === -1) continue;
     const key = trimmed.slice(0, idx).trim();
     let val = trimmed.slice(idx + 1).trim();
@@ -20,7 +20,7 @@ function parseDotEnv(pathp) {
   return obj;
 }
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.join(__dirname, '..', '.env');
+const envPath = path.join(__dirname, "..", ".env");
 const env = parseDotEnv(envPath);
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY,
@@ -34,9 +34,12 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function run() {
-  const ref = doc(db, 'registry_clients', 'c1');
+  const ref = doc(db, "registry_clients", "c1");
   const snap = await getDoc(ref);
-  if (!snap.exists()) { console.log('not found'); return; }
+  if (!snap.exists()) {
+    console.log("not found");
+    return;
+  }
   console.log(JSON.stringify({ id: snap.id, ...snap.data() }, null, 2));
 }
 run();

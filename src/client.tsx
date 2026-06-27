@@ -1,6 +1,6 @@
 /**
  * Client Entry Point for SPA
- * 
+ *
  * This is the main entry point for the browser-side application.
  * - Mounts React + TanStack Router to the DOM
  * - Handles all routing client-side
@@ -26,5 +26,5 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <RouterProvider router={router} />
-  </React.StrictMode>
+  </React.StrictMode>,
 );

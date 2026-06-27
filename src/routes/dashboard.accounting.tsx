@@ -1,8 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Download, Printer } from "lucide-react";
-import { subscribeToRecords, getRecordServiceAmount, getRecordServiceDetails, getRecordPendingAmount, getRecordPaymentStatus, getRecordTotalReceived, type RegistryRecord, type Bucket } from "@/lib/records";
-import { generateAccountingPDF, printWindow } from "@/lib/pdfGenerator";
+import {
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  Printer,
+  FileText,
+} from "lucide-react";
+import {
+  subscribeToRecords,
+  getRecordServiceAmount,
+  getRecordServiceDetails,
+  getRecordPendingAmount,
+  getRecordPaymentStatus,
+  getRecordTotalReceived,
+  type RegistryRecord,
+  type Bucket,
+} from "@/lib/records";
+import { generateAccountingPDF, printWindow, generatePDF } from "@/lib/pdfGenerator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -43,12 +60,20 @@ function AccountingDashboard() {
     const totalServiceAmount = records.reduce((sum, r) => sum + getRecordServiceAmount(r), 0);
     // Use service-level amountReceived instead of record-level
     const totalAmountReceived = records.reduce((sum, r) => {
-      return sum + getRecordServiceDetails(r).reduce((serviceSum, detail) => serviceSum + (detail.amountReceived ?? 0), 0);
+      return (
+        sum +
+        getRecordServiceDetails(r).reduce(
+          (serviceSum, detail) => serviceSum + (detail.amountReceived ?? 0),
+          0,
+        )
+      );
     }, 0);
     const totalPendingAmount = totalServiceAmount - totalAmountReceived;
 
     const unpaidCount = records.filter((r) => getRecordPaymentStatus(r) === "Unpaid").length;
-    const partiallyPaidCount = records.filter((r) => getRecordPaymentStatus(r) === "Partially Paid").length;
+    const partiallyPaidCount = records.filter(
+      (r) => getRecordPaymentStatus(r) === "Partially Paid",
+    ).length;
     const paidCount = records.filter((r) => getRecordPaymentStatus(r) === "Paid").length;
 
     const pendingRecords = records
@@ -82,25 +107,79 @@ function AccountingDashboard() {
           <h2 className="text-2xl font-bold tracking-tight">Accounting & Revenue</h2>
           <p className="text-sm text-muted-foreground">Financial overview and payment tracking</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => generateAccountingPDF(allRecords, {
-              totalServiceAmount: metrics.totalServiceAmount,
-              totalAmountReceived: metrics.totalAmountReceived,
-              totalPendingAmount: metrics.totalPendingAmount,
-              collectionRate: metrics.collectionRate,
-            })}
+            className="gap-1 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
+            onClick={() =>
+              generatePDF("accounting-reports", {
+                totalRevenue: metrics.totalServiceAmount,
+                totalReceived: metrics.totalAmountReceived,
+                totalOutstanding: metrics.totalPendingAmount,
+                collectionRate: metrics.collectionRate,
+                rows: [
+                  {
+                    month: "Consolidated Revenue Statement",
+                    revenue: metrics.totalServiceAmount,
+                    collected: metrics.totalAmountReceived,
+                    pending: metrics.totalPendingAmount,
+                  },
+                ],
+              })
+            }
           >
-            <Download className="size-4 mr-1" />Export PDF
+            <FileText className="size-4" /> Export Revenue PDF
           </Button>
           <Button
             variant="outline"
             size="sm"
-            onClick={printWindow}
+            className="gap-1 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
+            onClick={() =>
+              generatePDF("accounting-reports", {
+                totalRevenue: 0,
+                totalReceived: metrics.totalAmountReceived,
+                totalOutstanding: 0,
+                collectionRate: 100,
+                rows: [
+                  {
+                    month: "Consolidated Collection Statement",
+                    revenue: metrics.totalAmountReceived,
+                    collected: metrics.totalAmountReceived,
+                    pending: 0,
+                  },
+                ],
+              })
+            }
           >
-            <Printer className="size-4 mr-1" />Print
+            <FileText className="size-4" /> Export Collection PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
+            onClick={() =>
+              generatePDF("accounting-reports", {
+                totalRevenue: metrics.totalPendingAmount,
+                totalReceived: 0,
+                totalOutstanding: metrics.totalPendingAmount,
+                collectionRate: 0,
+                rows: [
+                  {
+                    month: "Consolidated Outstanding Statement",
+                    revenue: metrics.totalPendingAmount,
+                    collected: 0,
+                    pending: metrics.totalPendingAmount,
+                  },
+                ],
+              })
+            }
+          >
+            <FileText className="size-4" /> Export Outstanding PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={printWindow}>
+            <Printer className="size-4 mr-1" />
+            Print
           </Button>
         </div>
       </div>
@@ -144,7 +223,8 @@ function AccountingDashboard() {
             <p className="text-sm font-medium text-muted-foreground">Paid</p>
             <p className="text-3xl font-bold text-green-600">{metrics.paidCount}</p>
             <p className="text-xs text-muted-foreground">
-              {metrics.totalRecords > 0 && `${((metrics.paidCount / metrics.totalRecords) * 100).toFixed(1)}% of records`}
+              {metrics.totalRecords > 0 &&
+                `${((metrics.paidCount / metrics.totalRecords) * 100).toFixed(1)}% of records`}
             </p>
           </div>
         </div>
@@ -153,7 +233,8 @@ function AccountingDashboard() {
             <p className="text-sm font-medium text-muted-foreground">Partially Paid</p>
             <p className="text-3xl font-bold text-amber-600">{metrics.partiallyPaidCount}</p>
             <p className="text-xs text-muted-foreground">
-              {metrics.totalRecords > 0 && `${((metrics.partiallyPaidCount / metrics.totalRecords) * 100).toFixed(1)}% of records`}
+              {metrics.totalRecords > 0 &&
+                `${((metrics.partiallyPaidCount / metrics.totalRecords) * 100).toFixed(1)}% of records`}
             </p>
           </div>
         </div>
@@ -162,7 +243,8 @@ function AccountingDashboard() {
             <p className="text-sm font-medium text-muted-foreground">Unpaid</p>
             <p className="text-3xl font-bold text-red-600">{metrics.unpaidCount}</p>
             <p className="text-xs text-muted-foreground">
-              {metrics.totalRecords > 0 && `${((metrics.unpaidCount / metrics.totalRecords) * 100).toFixed(1)}% of records`}
+              {metrics.totalRecords > 0 &&
+                `${((metrics.unpaidCount / metrics.totalRecords) * 100).toFixed(1)}% of records`}
             </p>
           </div>
         </div>
@@ -179,7 +261,9 @@ function AccountingDashboard() {
               <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="text-left font-semibold px-6 py-3 whitespace-nowrap">Client</th>
-                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Service Amount</th>
+                  <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">
+                    Service Amount
+                  </th>
                   <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Received</th>
                   <th className="text-right font-semibold px-6 py-3 whitespace-nowrap">Pending</th>
                   <th className="text-left font-semibold px-6 py-3 whitespace-nowrap">Status</th>
@@ -196,9 +280,15 @@ function AccountingDashboard() {
                           <p className="text-xs text-muted-foreground">{record.mvNo}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-right font-mono">₹{getRecordServiceAmount(record).toLocaleString("en-IN")}</td>
-                      <td className="px-6 py-3 text-right font-mono">₹{getRecordTotalReceived(record).toLocaleString("en-IN")}</td>
-                      <td className="px-6 py-3 text-right font-mono font-semibold text-amber-600">₹{pending.toLocaleString("en-IN")}</td>
+                      <td className="px-6 py-3 text-right font-mono">
+                        ₹{getRecordServiceAmount(record).toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-6 py-3 text-right font-mono">
+                        ₹{getRecordTotalReceived(record).toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-6 py-3 text-right font-mono font-semibold text-amber-600">
+                        ₹{pending.toLocaleString("en-IN")}
+                      </td>
                       <td className="px-6 py-3">
                         <span
                           className={cn(
@@ -234,7 +324,9 @@ function AccountingDashboard() {
         <div className="rounded-lg border bg-card p-12 text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
           <p className="text-lg font-semibold">No records with accounting data</p>
-          <p className="text-sm text-muted-foreground">Add service amounts to records to see accounting metrics.</p>
+          <p className="text-sm text-muted-foreground">
+            Add service amounts to records to see accounting metrics.
+          </p>
         </div>
       )}
     </div>

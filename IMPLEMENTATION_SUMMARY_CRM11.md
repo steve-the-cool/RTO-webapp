@@ -1,4 +1,5 @@
 # CRM Requirement #11 Implementation Summary
+
 ## Service Analytics Dashboard
 
 **Status**: ✅ COMPLETE
@@ -15,11 +16,13 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 ## Components & Architecture
 
 ### 1. **Reusable Analytics Hooks** ✅
+
 **File**: `src/hooks/useServiceAnalytics.ts`
 
 **Hooks Provided**:
 
 #### `useServiceAnalytics(records)`
+
 - Returns core service metrics (ServiceMetrics)
 - Calculates:
   - Total Services Sold
@@ -32,6 +35,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Memoized for performance
 
 #### `useRevenueByService(records)`
+
 - Returns array of RevenueByService objects
 - Calculates per-service breakdown:
   - Revenue total
@@ -41,6 +45,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Used for bar chart visualization
 
 #### `useMonthlyComparison(records)`
+
 - Returns array of MonthlyData objects
 - Calculates monthly trends (last 12 months)
 - Metrics per month:
@@ -51,6 +56,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Used for line chart visualization
 
 #### `useYearlyComparison(records)`
+
 - Returns array of YearlyData objects
 - Calculates yearly totals
 - Metrics per year:
@@ -61,6 +67,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Used for bar chart visualization
 
 #### `useServiceDistribution(records)`
+
 - Returns array of ServiceDistribution objects
 - Calculates service category breakdown:
   - Service name
@@ -70,11 +77,13 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Used for pie chart visualization
 
 ### 2. **Analytics Dashboard Component** ✅
+
 **File**: `src/routes/dashboard.analytics.tsx`
 
 **Features**:
 
 #### KPI Cards Section (4 cards)
+
 1. **Total Services Sold**
    - Shows total count across all channels
    - Icon: Zap (blue)
@@ -98,6 +107,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 #### Chart Visualizations
 
 **Revenue by Service (Bar Chart)**
+
 - X-axis: Service names (angled 45°)
 - Y-axis: Revenue amount
 - Color: Blue (#3b82f6)
@@ -105,6 +115,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Height: 320px
 
 **Service Distribution (Pie Chart)**
+
 - Shows percentage breakdown by service
 - 8-color palette (blue, red, green, amber, purple, pink, teal, orange)
 - Labels: "Service: X.X%"
@@ -112,6 +123,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Size: 300x300px
 
 **Monthly Comparison (Line Chart)**
+
 - X-axis: Month names (12-month view)
 - Y-axis: Dual axes (left and right)
 - Lines:
@@ -121,6 +133,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Height: 320px
 
 **Yearly Comparison (Bar Chart)**
+
 - X-axis: Year
 - Y-axis: Amount
 - Bars:
@@ -130,6 +143,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Height: 320px
 
 #### Service Performance Table
+
 - Displays all services with metrics
 - Columns:
   - Service name
@@ -142,9 +156,11 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Scrollable on mobile
 
 ### 3. **Navigation Integration** ✅
+
 **File**: `src/routes/dashboard.tsx`
 
 **Changes**:
+
 - Added `LineChart` icon import from lucide-react
 - Added Analytics link to Financial section
 - Route: `/dashboard/analytics`
@@ -156,11 +172,13 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 ## Data Flow & Integration
 
 ### Data Sources
+
 1. **Clients** - subscribeToRecords("clients")
 2. **Leads** - subscribeToRecords("leads")
 3. **Customers** - subscribeToRecords("customers")
 
 ### Real-time Updates
+
 - All data sources subscribed in useEffect
 - Combined into single allRecords array
 - All hooks depend on allRecords
@@ -168,6 +186,7 @@ Implemented a comprehensive Service Analytics Dashboard providing detailed insig
 - Unsubscribers cleanup on component unmount
 
 ### Data Processing Pipeline
+
 ```
 Raw Records (3 buckets)
     ↓
@@ -191,16 +210,19 @@ Render Charts & Tables
 ## Responsive Design
 
 ### Grid Layout
+
 - **1 Column** (Mobile): < 768px
 - **2 Columns** (Tablet): 768px - 1024px
 - **2 Columns** (Desktop): > 1024px
 
 ### Chart Heights
+
 - All charts: 320px (consistent sizing)
 - Pie chart: 300x300px centered
 - Responsive container margins
 
 ### Mobile Optimizations
+
 - KPI cards: Full width on mobile
 - Charts: Scrollable X-axis labels
 - Table: Horizontal scroll on small screens
@@ -211,6 +233,7 @@ Render Charts & Tables
 ## UI Components Used
 
 ### Shadcn UI Components
+
 - ChartContainer
 - ChartLegend
 - ChartLegendContent
@@ -219,6 +242,7 @@ Render Charts & Tables
 - Responsive layout helpers
 
 ### Recharts Components
+
 - BarChart
 - LineChart
 - PieChart
@@ -228,6 +252,7 @@ Render Charts & Tables
 - Tooltip, Legend
 
 ### Lucide Icons
+
 - Zap (services)
 - DollarSign (revenue)
 - TrendingUp (most sold)
@@ -235,6 +260,7 @@ Render Charts & Tables
 - LineChart (analytics nav)
 
 ### Custom Components
+
 - KPICard (reusable KPI display)
 
 ---
@@ -242,25 +268,29 @@ Render Charts & Tables
 ## Styling & Colors
 
 ### KPI Card Colors
-| Metric | Background | Text |
-|--------|-----------|------|
-| Services Sold | bg-blue-500/10 | text-blue-600 |
-| Total Revenue | bg-green-500/10 | text-green-600 |
-| Most Sold | bg-purple-500/10 | text-purple-600 |
-| Collection Rate | bg-amber-500/10 | text-amber-600 |
+
+| Metric          | Background       | Text            |
+| --------------- | ---------------- | --------------- |
+| Services Sold   | bg-blue-500/10   | text-blue-600   |
+| Total Revenue   | bg-green-500/10  | text-green-600  |
+| Most Sold       | bg-purple-500/10 | text-purple-600 |
+| Collection Rate | bg-amber-500/10  | text-amber-600  |
 
 ### Chart Colors
+
 - Revenue: #3b82f6 (Blue-500)
 - Collected: #10b981 (Green-500)
 - Pie Chart: 8-color palette
   - Blue, Red, Green, Amber, Purple, Pink, Teal, Orange
 
 ### Currency Formatting
+
 - Locale: en-IN (Indian format)
 - Symbol: ₹ (Indian Rupee)
 - Example: ₹1,23,456
 
 ### Date Formatting
+
 - Monthly: "Jan 2026", "Feb 2026", etc.
 - Yearly: "2024", "2025", "2026"
 - Locale: en-IN
@@ -270,6 +300,7 @@ Render Charts & Tables
 ## Files Created/Modified
 
 ### New Files
+
 1. **src/hooks/useServiceAnalytics.ts** (280+ lines)
    - 5 reusable hooks
    - Complete type definitions
@@ -283,6 +314,7 @@ Render Charts & Tables
    - Responsive layout
 
 ### Modified Files
+
 1. **src/routes/dashboard.tsx**
    - Added LineChart icon import
    - Added Analytics to Financial navigation group
@@ -315,6 +347,7 @@ Render Charts & Tables
 ## Verification Results
 
 ### TypeScript Compilation
+
 ```
 ✅ Zero errors
 Command: npx tsc --noEmit
@@ -322,6 +355,7 @@ Result: No output (success)
 ```
 
 ### Production Build
+
 ```
 ✅ Successful build
 - 2923 client modules transformed
@@ -333,6 +367,7 @@ Result: No output (success)
 ```
 
 ### Bundle Impact
+
 - dashboard.analytics chunk: 434.72 kB (client), 923.90 kB (server)
 - Compressed: 117.41 kB (gzip, client)
 
@@ -341,16 +376,19 @@ Result: No output (success)
 ## Performance Characteristics
 
 ### Memoization
+
 - All hooks use useMemo for calculation caching
 - Prevents unnecessary recalculations
 - Triggers only on records array change
 
 ### Data Subscription
+
 - Single-pass filtering of records
 - Map-based aggregation (O(n) complexity)
 - Efficient date/month parsing
 
 ### Chart Rendering
+
 - Recharts handles responsive rendering
 - Built-in virtualization for large datasets
 - Smooth animations on data updates
@@ -360,18 +398,21 @@ Result: No output (success)
 ## Testing & Validation
 
 ### Data Validation Checks
+
 - Records with zero/null serviceAmount filtered out
 - Handles "Unknown" service names gracefully
 - Calculates percentages safely (divides by total)
 - Date parsing handles various ISO formats
 
 ### Edge Cases Handled
+
 - Zero records: Shows empty state messages
 - No services with amounts: All KPIs show 0
 - Single service: Most/Least sold = same service
 - Missing dates: Excluded from monthly/yearly views
 
 ### User Experience
+
 - Loading states: Real-time updates with Firestore
 - Empty states: "No data available" messages
 - Tooltips: Formatted currency display

@@ -16,19 +16,19 @@ The client-to-service-module filtering system is **fully implemented and ready f
 
 ### Completed Features
 
-| Feature | Status | File | Notes |
-|---------|--------|------|-------|
-| Service Type Definition | ✅ | `src/lib/records.ts` | 11 service types defined |
-| Type Normalization | ✅ | `src/lib/records.ts` | `normalizeServiceType()` function |
-| Service URL Mapping | ✅ | `src/lib/records.ts` | `SERVICE_ROUTE_MAP` object |
-| Service-Safe Parameters | ✅ | `src/lib/records.ts` | `serviceToUrlParam()` function |
-| Firestore Queries | ✅ | `src/lib/services.ts` | `getServiceClientsAll()` function |
-| Service Statistics | ✅ | `src/lib/services.ts` | Revenue, stats, renewals |
-| Service Dashboard | ✅ | `src/components/ServiceDashboard.tsx` | Display filtered clients |
-| Dynamic Routes | ✅ | `src/routes/dashboard.service.$serviceType.tsx` | URL → Service mapping |
-| Form Integration | ✅ | `src/components/RecordTable.tsx` | Service type dropdown |
-| Data Persistence | ✅ | `src/lib/records.ts` | `saveRecord()` normalizes |
-| Validation Logging | ✅ | `src/lib/services.ts` | Comprehensive debug logs |
+| Feature                 | Status | File                                            | Notes                             |
+| ----------------------- | ------ | ----------------------------------------------- | --------------------------------- |
+| Service Type Definition | ✅     | `src/lib/records.ts`                            | 11 service types defined          |
+| Type Normalization      | ✅     | `src/lib/records.ts`                            | `normalizeServiceType()` function |
+| Service URL Mapping     | ✅     | `src/lib/records.ts`                            | `SERVICE_ROUTE_MAP` object        |
+| Service-Safe Parameters | ✅     | `src/lib/records.ts`                            | `serviceToUrlParam()` function    |
+| Firestore Queries       | ✅     | `src/lib/services.ts`                           | `getServiceClientsAll()` function |
+| Service Statistics      | ✅     | `src/lib/services.ts`                           | Revenue, stats, renewals          |
+| Service Dashboard       | ✅     | `src/components/ServiceDashboard.tsx`           | Display filtered clients          |
+| Dynamic Routes          | ✅     | `src/routes/dashboard.service.$serviceType.tsx` | URL → Service mapping             |
+| Form Integration        | ✅     | `src/components/RecordTable.tsx`                | Service type dropdown             |
+| Data Persistence        | ✅     | `src/lib/records.ts`                            | `saveRecord()` normalizes         |
+| Validation Logging      | ✅     | `src/lib/services.ts`                           | Comprehensive debug logs          |
 
 ---
 
@@ -63,7 +63,7 @@ Results displayed in Insurance module
 #### 1. Type System (`src/lib/records.ts`)
 
 ```typescript
-type ServiceType = 
+type ServiceType =
   | "Insurance"
   | "Fitness"
   | "Permit"
@@ -106,7 +106,7 @@ normalizeServiceType("insurance-permit") → null (invalid)
 const q = query(
   collection(db, "registry_clients"),
   where("serviceType", "==", "Insurance"),
-  where("isDeleted", "!=", true)
+  where("isDeleted", "!=", true),
 );
 
 // Returns ALL Insurance clients across all buckets:
@@ -123,10 +123,14 @@ const q = query(
     value={editing.serviceType || ""}
     onValueChange={(v) => setEditing({ ...editing, serviceType: v as any })}
   >
-    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+    <SelectTrigger>
+      <SelectValue placeholder="Select..." />
+    </SelectTrigger>
     <SelectContent>
       {SERVICE_TYPES.map((s) => (
-        <SelectItem key={s} value={s}>{serviceLabel(s)}</SelectItem>
+        <SelectItem key={s} value={s}>
+          {serviceLabel(s)}
+        </SelectItem>
       ))}
     </SelectContent>
   </Select>
@@ -140,6 +144,7 @@ const q = query(
 ### Test 1: Create Client with Service Type
 
 **Steps:**
+
 1. Navigate to `/dashboard/clients`
 2. Click "Add" button
 3. Fill in required fields:
@@ -150,11 +155,13 @@ const q = query(
 4. Click "Save"
 
 **Expected Results:**
+
 - Record created successfully
 - Console shows: `[saveRecord] CREATE: Normalizing serviceType: "Insurance" → "Insurance"`
 - Record appears in Insurance clients list
 
 **Validation:**
+
 ```javascript
 // Browser console
 // Check that the record was normalized correctly
@@ -167,6 +174,7 @@ console.log("Step 1: Create client with serviceType='Insurance'");
 ### Test 2: Verify Service Module Filtering
 
 **Steps:**
+
 1. Create multiple test clients with different service types:
    - Client A → Service Type: "Insurance"
    - Client B → Service Type: "Fitness"
@@ -174,11 +182,13 @@ console.log("Step 1: Create client with serviceType='Insurance'");
 2. Navigate to `/dashboard/service/insurance`
 
 **Expected Results:**
+
 - Insurance page loads
 - **Only** Client A appears in the table
 - Client B and Client C are **NOT** visible
 
 **Validation:**
+
 ```javascript
 // Browser console logs
 // Expected output:
@@ -193,6 +203,7 @@ console.log("Step 1: Create client with serviceType='Insurance'");
 ### Test 3: Cross-Service Verification
 
 **Steps:**
+
 1. Create test client: "Multi-Test" with serviceType="Insurance"
 2. Navigate to `/dashboard/service/insurance`
    - Verify: Client "Multi-Test" appears ✓
@@ -204,6 +215,7 @@ console.log("Step 1: Create client with serviceType='Insurance'");
    - Verify: Client "Multi-Test" does NOT appear ✓
 
 **Expected Results:**
+
 - Client appears in Insurance module ONLY
 - Client does NOT appear in any other module
 
@@ -212,6 +224,7 @@ console.log("Step 1: Create client with serviceType='Insurance'");
 ### Test 4: Revenue & Statistics Verification
 
 **Steps:**
+
 1. Create 3 Insurance clients with serviceAmount:
    - Client A: ₹10,000
    - Client B: ₹20,000
@@ -219,11 +232,13 @@ console.log("Step 1: Create client with serviceType='Insurance'");
 2. Navigate to `/dashboard/service/insurance`
 
 **Expected Results:**
+
 - Total Revenue card shows: ₹45,000
 - Total Clients: 3
 - All clients displayed in table
 
 **Formula Validation:**
+
 ```
 Total Revenue = Sum of all serviceAmount where serviceType="Insurance"
 = 10,000 + 20,000 + 15,000 = 45,000 ✓
@@ -234,17 +249,20 @@ Total Revenue = Sum of all serviceAmount where serviceType="Insurance"
 ### Test 5: Update Client Service Type
 
 **Steps:**
+
 1. Create client "Update-Test" with serviceType="Insurance"
 2. Verify appears in Insurance module
 3. Edit record: Change serviceType from "Insurance" → "Fitness"
 4. Save changes
 
 **Expected Results:**
+
 - Console shows: `[saveRecord] UPDATE: Normalizing serviceType: "Insurance" → "Fitness"`
 - Client disappears from Insurance module
 - Client appears in Fitness module
 
 **Validation:**
+
 ```javascript
 // Browser console
 // Expected: Both UPDATE and DELETE/ADD operations logged
@@ -263,6 +281,7 @@ Press: F12 → Console tab
 ```
 
 You'll see logs like:
+
 ```
 [saveRecord] CREATE: Normalizing serviceType
 [getServiceClients] START: Querying registry_clients
@@ -274,6 +293,7 @@ You'll see logs like:
 ### Common Log Messages
 
 #### ✅ Success Logs
+
 ```
 [getServiceClients] SUCCESS: Found 3 records in registry_clients
 [getServiceClientsAll] SUCCESS: Retrieved 5 records across 3 buckets
@@ -281,6 +301,7 @@ You'll see logs like:
 ```
 
 #### ⚠️ Warning Logs
+
 ```
 [getServiceClients] WARNING: Some results don't match serviceType filter!
 [ServiceDashboard] WARNING: Filter mismatch detected!
@@ -288,6 +309,7 @@ You'll see logs like:
 ```
 
 #### ❌ Error Logs
+
 ```
 [saveRecord] ERROR: Invalid serviceType provided
 [getServiceClientsAll] ERROR: Failed to fetch records
@@ -304,7 +326,7 @@ Use these helper functions in the browser console to validate data:
 // Check if a record belongs to correct service
 const result = await window.__serviceValidation?.validateRecordInService(
   "record-id-123",
-  "Insurance"
+  "Insurance",
 );
 console.log(result);
 
@@ -344,6 +366,7 @@ console.log(summary);
 #### Issue: Client appears in wrong service module
 
 **Diagnosis:**
+
 ```javascript
 // In browser console, check the client's actual serviceType
 // 1. Open DevTools (F12)
@@ -353,6 +376,7 @@ console.log(summary);
 ```
 
 **Solution:**
+
 - If serviceType is empty: Set it in the record editor
 - If serviceType is wrong: Edit record and select correct service
 - If serviceType has unusual capitalization: It will be normalized on save
@@ -360,6 +384,7 @@ console.log(summary);
 #### Issue: Service module shows "0 clients" when it should show data
 
 **Diagnosis:**
+
 ```javascript
 // Check the console for error messages
 // Look for: [getServiceClientsAll] ERROR
@@ -367,6 +392,7 @@ console.log(summary);
 ```
 
 **Solution:**
+
 1. Ensure client records have serviceType field set
 2. Check Firestore security rules allow reading registry_clients/leads/customers
 3. Verify clients are not marked as isDeleted=true
@@ -374,6 +400,7 @@ console.log(summary);
 #### Issue: Service type dropdown is empty
 
 **Solution:**
+
 1. Ensure SERVICE_TYPES is properly imported
 2. Check that serviceLabel() function is working
 3. Verify no TypeScript errors in console
@@ -383,34 +410,40 @@ console.log(summary);
 ## ✔️ Validation Checklist
 
 ### Pre-Testing Checklist
+
 - [ ] Build succeeds: `npm run build` ✅
-- [ ] Dev server runs: `npm run dev` 
+- [ ] Dev server runs: `npm run dev`
 - [ ] Browser console has no errors
 - [ ] Firestore is accessible
 
 ### Functional Testing Checklist
 
 #### Test 1: Basic Creation
+
 - [ ] Create client with serviceType="Insurance"
 - [ ] Record saved successfully
 - [ ] Console shows normalization log
 
 #### Test 2: Service Module Display
+
 - [ ] Navigate to Insurance module
 - [ ] Created client appears in list
 - [ ] Client displays correct data (Name, MV NO, Status, etc.)
 
 #### Test 3: Filtering Accuracy
+
 - [ ] Create 5+ clients with different serviceTypes
 - [ ] Each service module shows ONLY its clients
 - [ ] No cross-contamination between modules
 
 #### Test 4: Revenue Calculations
+
 - [ ] Create clients with serviceAmount values
 - [ ] Service dashboard shows correct total revenue
 - [ ] Statistics (active, completed, pending) match actual records
 
 #### Test 5: Edge Cases
+
 - [ ] Edit client: Change serviceType
   - [ ] Client disappears from old module
   - [ ] Client appears in new module
@@ -421,6 +454,7 @@ console.log(summary);
   - [ ] All statuses (Pending, In Progress, Completed, On Hold) handled
 
 ### Console Log Verification Checklist
+
 - [ ] No [ERROR] logs when loading service modules
 - [ ] No [WARNING] logs about filter mismatches (unless expected)
 - [ ] [SUCCESS] logs show correct record counts
@@ -432,19 +466,19 @@ console.log(summary);
 
 All 11 service types that clients can be assigned to:
 
-| # | Service Type | URL Parameter | Icon | Emoji Label |
-|---|--------------|---------------|------|------------|
-| 1 | Insurance | `insurance` | 🛡️ | Insurance |
-| 2 | Fitness | `fitness` | 💪 | Fitness |
-| 3 | Permit | `permit` | 📜 | Permit |
-| 4 | Gujarat Permit | `gujarat-permit` | 📍 | Gujarat Permit |
-| 5 | National Permit | `national-permit` | 🇮🇳 | National Permit |
-| 6 | Tax | `tax` | 💰 | Tax |
-| 7 | PUC | `puc` | 🌍 | PUC |
-| 8 | License | `license` | 🔖 | License |
-| 9 | RC Transfer | `rc-transfer` | 🔄 | RC Transfer |
-| 10 | HP Addition | `hp-addition` | ➕ | HP Addition |
-| 11 | HP Termination | `hp-termination` | ❌ | HP Termination |
+| #   | Service Type    | URL Parameter     | Icon | Emoji Label     |
+| --- | --------------- | ----------------- | ---- | --------------- |
+| 1   | Insurance       | `insurance`       | 🛡️   | Insurance       |
+| 2   | Fitness         | `fitness`         | 💪   | Fitness         |
+| 3   | Permit          | `permit`          | 📜   | Permit          |
+| 4   | Gujarat Permit  | `gujarat-permit`  | 📍   | Gujarat Permit  |
+| 5   | National Permit | `national-permit` | 🇮🇳   | National Permit |
+| 6   | Tax             | `tax`             | 💰   | Tax             |
+| 7   | PUC             | `puc`             | 🌍   | PUC             |
+| 8   | License         | `license`         | 🔖   | License         |
+| 9   | RC Transfer     | `rc-transfer`     | 🔄   | RC Transfer     |
+| 10  | HP Addition     | `hp-addition`     | ➕   | HP Addition     |
+| 11  | HP Termination  | `hp-termination`  | ❌   | HP Termination  |
 
 ---
 
@@ -460,6 +494,7 @@ Order By: srNo
 ```
 
 **SQL Equivalent:**
+
 ```sql
 SELECT * FROM registry_clients
 WHERE serviceType = 'Insurance'
@@ -470,6 +505,7 @@ ORDER BY srNo;
 ### Firestore Query: Get All Fitness Clients
 
 **Queries across 3 buckets:**
+
 - `registry_clients` WHERE serviceType="Fitness"
 - `registry_leads` WHERE serviceType="Fitness"
 - `registry_customers` WHERE serviceType="Fitness"
@@ -531,17 +567,20 @@ ORDER BY srNo;
 ## ✅ Final Verification
 
 **Build Status:** ✅ SUCCESSFUL
+
 - No TypeScript errors
 - Build time: ~15 seconds
 - All dependencies resolved
 
 **Implementation Status:** ✅ COMPLETE
+
 - All 11 service types implemented
 - Firestore queries verified
 - UI components integrated
 - Validation & logging added
 
 **Ready for Testing:** ✅ YES
+
 - All features implemented
 - Comprehensive debug logging enabled
 - Validation helpers available

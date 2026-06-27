@@ -52,6 +52,8 @@ export type Invoice = {
   status: InvoiceStatus;
   services: InvoiceServiceItem[];
   pdfUrl?: string | null;
+  collectionDate?: string | null;
+  askBhaylubha?: boolean;
 };
 
 export type InvoicePayment = {
@@ -107,7 +109,12 @@ function parseBillingDate(value: unknown): Date | null {
   if (value instanceof Timestamp) {
     return value.toDate();
   }
-  if (typeof value === "object" && value !== null && "toDate" in value && typeof (value as any).toDate === "function") {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as any).toDate === "function"
+  ) {
     const date = (value as any).toDate();
     return Number.isNaN(date.getTime()) ? null : date;
   }
@@ -192,10 +199,14 @@ export async function getLatestBillingPeriod(clientId: string): Promise<BillingP
   if (!latest) return null;
 
   return {
-    invoiceId: snap.docs.find((docSnap) => {
-      const invoice = docSnap.data() as Invoice;
-      return invoice.invoiceNumber === latest.invoiceNumber && invoice.billingPeriodEnd === latest.billingPeriodEnd;
-    })?.id || "",
+    invoiceId:
+      snap.docs.find((docSnap) => {
+        const invoice = docSnap.data() as Invoice;
+        return (
+          invoice.invoiceNumber === latest.invoiceNumber &&
+          invoice.billingPeriodEnd === latest.billingPeriodEnd
+        );
+      })?.id || "",
     invoiceNumber: latest.invoiceNumber,
     periodStart: latest.billingPeriodStart,
     periodEnd: latest.billingPeriodEnd,
@@ -222,7 +233,7 @@ export async function getNextBillingStartDate(clientId: string): Promise<string>
  */
 export async function calculateInvoiceAmount(
   clientId: string,
-  selectedServices: string[]
+  selectedServices: string[],
 ): Promise<{
   totalAmount: number;
   breakdown: Array<{
@@ -233,18 +244,24 @@ export async function calculateInvoiceAmount(
     amount: number;
   }>;
 }> {
-  console.log(`[calculateInvoiceAmount] calculating for clientId=${clientId}, selectedServices=`, selectedServices);
-  
+  console.log(
+    `[calculateInvoiceAmount] calculating for clientId=${clientId}, selectedServices=`,
+    selectedServices,
+  );
+
   if (!clientId || selectedServices.length === 0) {
     return { totalAmount: 0, breakdown: [] };
   }
 
   // Load vehicles
-  const qVehicles = query(collection(db, "registry_vehicles_v2"), where("clientId", "==", clientId));
+  const qVehicles = query(
+    collection(db, "registry_vehicles_v2"),
+    where("clientId", "==", clientId),
+  );
   const vehiclesSnap = await getDocs(qVehicles);
-  
-  const vehicles = vehiclesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-  const vehicleIds = vehicles.map(v => v.id);
+
+  const vehicles = vehiclesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+  const vehicleIds = vehicles.map((v) => v.id);
 
   if (vehicleIds.length === 0) {
     return { totalAmount: 0, breakdown: [] };
@@ -253,15 +270,15 @@ export async function calculateInvoiceAmount(
   // Fetch all services, filter in memory by vehicleId
   const servicesSnap = await getDocs(collection(db, "registry_services_v2"));
   const services = servicesSnap.docs
-    .map(d => ({ id: d.id, ...d.data() } as any))
-    .filter(s => vehicleIds.includes(s.vehicleId));
-  
+    .map((d) => ({ id: d.id, ...d.data() }) as any)
+    .filter((s) => vehicleIds.includes(s.vehicleId));
+
   let totalAmount = 0;
   const breakdown: any[] = [];
 
   for (const s of services) {
     if (selectedServices.includes(s.serviceType)) {
-      const v = vehicles.find(veh => veh.id === s.vehicleId);
+      const v = vehicles.find((veh) => veh.id === s.vehicleId);
       const amount = s.serviceAmount ?? 0;
       totalAmount += amount;
       breakdown.push({
@@ -292,7 +309,10 @@ export async function validateBillingPeriodSequence(
   console.log("Parsed End:", endDate);
   console.log("Start Timestamp:", startDate?.getTime());
   console.log("End Timestamp:", endDate?.getTime());
-  console.log("Comparison Result:", startDate && endDate ? startDate.getTime() < endDate.getTime() : null);
+  console.log(
+    "Comparison Result:",
+    startDate && endDate ? startDate.getTime() < endDate.getTime() : null,
+  );
 
   if (!startDate || !endDate) {
     return { valid: false, reason: "Please provide valid billing start and end dates." };
@@ -318,7 +338,10 @@ export async function validateBillingPeriodSequence(
     const existingEnd = normalizeIsoDate(invoice.billingPeriodEnd);
     if (!existingStart || !existingEnd) continue;
 
-    if (startDate.getTime() <= existingEnd.getTime() && endDate.getTime() >= existingStart.getTime()) {
+    if (
+      startDate.getTime() <= existingEnd.getTime() &&
+      endDate.getTime() >= existingStart.getTime()
+    ) {
       return { valid: false, reason: "Billing period overlaps an existing invoice." };
     }
   }
@@ -352,8 +375,14 @@ export async function createInvoice(
   billingPeriodStart: string,
   billingPeriodEnd: string,
   createdBy: string,
+  collectionDate?: string,
+  askBhaylubha?: boolean,
 ): Promise<Invoice> {
-  const validation = await validateBillingPeriodSequence(client.id, billingPeriodStart, billingPeriodEnd);
+  const validation = await validateBillingPeriodSequence(
+    client.id,
+    billingPeriodStart,
+    billingPeriodEnd,
+  );
   if (!validation.valid) {
     throw new Error(validation.reason || "Invalid billing period sequence.");
   }
@@ -391,7 +420,9 @@ export async function createInvoice(
     status: "Pending" as InvoiceStatus,
     services,
     pdfUrl: null,
-  } as const;
+    collectionDate: collectionDate || null,
+    askBhaylubha: askBhaylubha || false,
+  };
 
   const docRef = await addDoc(collection(db, BILLING_INVOICES_COL), invoicePayload as any);
 
@@ -415,13 +446,16 @@ export async function createInvoice(
   };
 }
 
-export function subscribeToClientInvoices(clientId: string, callback: (invoices: Invoice[]) => void) {
+export function subscribeToClientInvoices(
+  clientId: string,
+  callback: (invoices: Invoice[]) => void,
+) {
   const q = query(collection(db, BILLING_INVOICES_COL), where("clientId", "==", clientId));
   return onSnapshot(
     q,
     (snap) => {
       const invoices = snap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Invoice) } as Invoice))
+        .map((d) => ({ id: d.id, ...(d.data() as Invoice) }) as Invoice)
         .sort((a, b) => {
           const dateA = normalizeIsoDate(a.createdAt)?.getTime() ?? 0;
           const dateB = normalizeIsoDate(b.createdAt)?.getTime() ?? 0;
@@ -441,7 +475,7 @@ export function subscribeToAllInvoices(callback: (invoices: Invoice[]) => void) 
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Invoice) } as Invoice)));
+      callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Invoice) }) as Invoice));
     },
     (error) => {
       console.error("[subscribeToAllInvoices]", error);
@@ -492,11 +526,12 @@ export async function updateInvoiceStatus(
 export async function recordInvoicePayment(
   invoiceId: string,
   amount: number,
-  paymentMode: string,
+  paymentMethod: string,
+  receivedInAccount: string,
   receivedBy: string,
-  referenceNumber?: string,
-  notes?: string,
-): Promise<InvoicePayment> {
+  remarks?: string,
+  paymentDate?: string,
+): Promise<any> {
   if (amount <= 0) {
     throw new Error("Payment amount must be greater than zero.");
   }
@@ -506,19 +541,28 @@ export async function recordInvoicePayment(
     throw new Error("Invoice not found.");
   }
 
+  const updatedTotalPaid = (invoice.totalPaid || 0) + amount;
+  const remainingAmount = Math.max(0, invoice.totalAmount - updatedTotalPaid);
+  const updatedStatus: InvoiceStatus =
+    updatedTotalPaid >= invoice.totalAmount ? "Paid" : "Partially Paid";
+
+  const pDate = paymentDate || new Date().toISOString().slice(0, 10);
+
   const paymentPayload = {
     invoiceId,
-    amount,
-    paymentMode,
+    invoiceNumber: invoice.invoiceNumber,
+    invoiceAmount: invoice.totalAmount,
+    amountReceived: amount,
+    remainingAmount,
+    paymentDate: pDate,
+    paymentMethod,
+    receivedInAccount,
     receivedBy,
-    referenceNumber: referenceNumber || null,
-    notes: notes || null,
+    remarks: remarks || "",
     createdAt: new Date().toISOString(),
   };
 
-  const paymentRef = await addDoc(collection(db, BILLING_INVOICE_PAYMENTS_COL), paymentPayload as any);
-  const updatedTotalPaid = invoice.totalPaid + amount;
-  const updatedStatus: InvoiceStatus = updatedTotalPaid >= invoice.totalAmount ? "Paid" : "Partially Paid";
+  const paymentRef = await addDoc(collection(db, BILLING_INVOICE_PAYMENTS_COL), paymentPayload);
 
   await updateDoc(doc(db, BILLING_INVOICES_COL, invoiceId), {
     totalPaid: updatedTotalPaid,
@@ -533,7 +577,7 @@ export async function recordInvoicePayment(
       `Payment recorded for invoice ${invoice.invoiceNumber}: ₹${amount}`,
       "payment",
       null,
-      `₹${amount} via ${paymentMode}`,
+      `₹${amount} via ${paymentMethod}`,
     );
   } catch (err) {
     console.warn("[recordInvoicePayment] logClientActivity failed:", err);
@@ -542,10 +586,13 @@ export async function recordInvoicePayment(
   return {
     id: paymentRef.id,
     ...paymentPayload,
-  } as InvoicePayment;
+  };
 }
 
-export function subscribeToInvoicePayments(invoiceId: string, callback: (payments: InvoicePayment[]) => void) {
+export function subscribeToInvoicePayments(
+  invoiceId: string,
+  callback: (payments: InvoicePayment[]) => void,
+) {
   const q = query(
     collection(db, BILLING_INVOICE_PAYMENTS_COL),
     where("invoiceId", "==", invoiceId),
@@ -555,7 +602,9 @@ export function subscribeToInvoicePayments(invoiceId: string, callback: (payment
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as InvoicePayment) } as InvoicePayment)));
+      callback(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as InvoicePayment) }) as InvoicePayment),
+      );
     },
     (error) => {
       console.error("[subscribeToInvoicePayments]", error);
@@ -571,7 +620,9 @@ export async function getInvoicePayments(invoiceId: string): Promise<InvoicePaym
     orderBy("createdAt", "desc"),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as InvoicePayment) } as InvoicePayment));
+  return snap.docs.map(
+    (docSnap) => ({ id: docSnap.id, ...(docSnap.data() as InvoicePayment) }) as InvoicePayment,
+  );
 }
 
 export async function calculateBillingMetrics(): Promise<BillingMetrics> {
@@ -593,7 +644,11 @@ export async function calculateBillingMetrics(): Promise<BillingMetrics> {
     totalCollected += invoice.totalPaid || 0;
 
     const invoiceDate = normalizeIsoDate(invoice.invoiceDate);
-    if (invoiceDate && invoiceDate.getUTCMonth() === currentMonth && invoiceDate.getUTCFullYear() === currentYear) {
+    if (
+      invoiceDate &&
+      invoiceDate.getUTCMonth() === currentMonth &&
+      invoiceDate.getUTCFullYear() === currentYear
+    ) {
       invoicesThisMonth += 1;
     }
 
@@ -632,7 +687,7 @@ export async function getClientBillingSummary(clientId: string) {
   const q = query(collection(db, BILLING_INVOICES_COL), where("clientId", "==", clientId));
   const snap = await getDocs(q);
   const invoices = snap.docs
-    .map((d) => ({ id: d.id, ...(d.data() as Invoice) } as Invoice))
+    .map((d) => ({ id: d.id, ...(d.data() as Invoice) }) as Invoice)
     .sort((a, b) => {
       const dateA = normalizeIsoDate(a.createdAt)?.getTime() ?? 0;
       const dateB = normalizeIsoDate(b.createdAt)?.getTime() ?? 0;
@@ -649,6 +704,41 @@ export async function getClientBillingSummary(clientId: string) {
     totalPaid,
     outstandingAmount,
     recentInvoices: invoices.slice(0, 5),
-    pendingInvoices: invoices.filter((inv) => inv.status === "Pending" || inv.status === "Partially Paid"),
+    pendingInvoices: invoices.filter(
+      (inv) => inv.status === "Pending" || inv.status === "Partially Paid",
+    ),
   };
+}
+
+export async function deleteInvoiceById(
+  invoiceId: string,
+  deletedBy: string,
+  reason: string,
+): Promise<void> {
+  const invoice = await getInvoiceById(invoiceId);
+  if (!invoice) throw new Error("Invoice not found.");
+
+  // Delete associated payments
+  const payments = await getInvoicePayments(invoiceId);
+  for (const pay of payments) {
+    await firestoreDeleteDoc(doc(db, BILLING_INVOICE_PAYMENTS_COL, pay.id));
+  }
+
+  // Delete invoice metadata doc
+  await firestoreDeleteDoc(doc(db, BILLING_INVOICES_COL, invoiceId));
+
+  // Log client activity for deletion audit trail
+  try {
+    await logClientActivity(
+      invoice.clientId,
+      deletedBy,
+      deletedBy,
+      `Invoice deleted: ${invoice.invoiceNumber}. Reason: ${reason}`,
+      "invoice_deleted",
+      null,
+      `Amount: ₹${invoice.totalAmount}`,
+    );
+  } catch (err) {
+    console.warn("[deleteInvoiceById] logClientActivity failed:", err);
+  }
 }

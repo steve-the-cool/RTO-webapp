@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -17,11 +23,19 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { subscribeToClientPayments, addPayment, type ClientPayment } from "@/lib/payments";
 import { formatActivityTime, type ActivityLog, addClientNote } from "@/lib/activity";
-import { getRecordServiceDetails, getRecordServiceAmount, serviceLabel, type RegistryRecord, type ServiceType, saveRecord, type Bucket } from "@/lib/records";
+import {
+  getRecordServiceDetails,
+  getRecordServiceAmount,
+  serviceLabel,
+  type RegistryRecord,
+  type ServiceType,
+  saveRecord,
+  type Bucket,
+} from "@/lib/records";
 import { StructuredDocumentUploader } from "@/components/StructuredDocumentUploader";
 import { InvoiceHistory } from "@/components/InvoiceHistory";
 import { InvoiceViewer } from "@/components/InvoiceViewer";
-import { WhatsAppQuickActions } from "@/components/WhatsAppQuickActions";
+import { WhatsAppMessagePanel } from "@/components/WhatsAppMessagePanel";
 import type { Invoice } from "@/lib/billing";
 import { toast } from "sonner";
 
@@ -29,7 +43,12 @@ function normalizeActivityTimestamp(timestamp: unknown): string {
   if (!timestamp) return "";
   if (typeof timestamp === "string") return timestamp;
   if (timestamp instanceof Date) return timestamp.toISOString();
-  if (typeof timestamp === "object" && timestamp !== null && "toDate" in timestamp && typeof (timestamp as any).toDate === "function") {
+  if (
+    typeof timestamp === "object" &&
+    timestamp !== null &&
+    "toDate" in timestamp &&
+    typeof (timestamp as any).toDate === "function"
+  ) {
     return (timestamp as any).toDate().toISOString();
   }
   return String(timestamp);
@@ -52,6 +71,44 @@ function formatActivityDateParts(timestamp: string) {
   };
 }
 
+function formatTimelineText(a: any): string {
+  const actor = a.actor || "Unknown User";
+  const actionLower = (a.action || "").toLowerCase();
+
+  if (actionLower.includes("created client")) {
+    return `${actor} created client`;
+  }
+  if (actionLower.includes("vehicle added")) {
+    return `${actor} added vehicle ${a.newValue || ""}`;
+  }
+  if (actionLower.includes("vehicle updated")) {
+    return `${actor} updated vehicle details (${a.field || ""})`;
+  }
+  if (actionLower.includes("service added")) {
+    return `${actor} added service ${a.newValue || ""}`;
+  }
+  if (actionLower.includes("service removed")) {
+    return `${actor} removed service ${a.oldValue || ""}`;
+  }
+  if (actionLower.includes("due date changed")) {
+    return `${actor} updated ${a.field || "Service"} Due Date`;
+  }
+  if (actionLower.includes("accounting updated")) {
+    return `${actor} updated ${a.field || "Service"} Accounting`;
+  }
+  if (actionLower.includes("document uploaded")) {
+    return `${actor} uploaded ${a.newValue || "document"}`;
+  }
+  if (actionLower.includes("document removed")) {
+    return `${actor} removed ${a.oldValue || "document"}`;
+  }
+  if (actionLower.includes("updated details") || actionLower.includes("changed")) {
+    return `${actor} updated ${a.field || "client details"}`;
+  }
+
+  return `${actor} performed: ${a.action}`;
+}
+
 interface Props {
   record: RegistryRecord | null;
   open: boolean;
@@ -60,12 +117,27 @@ interface Props {
   bucket?: Bucket;
 }
 
-export function ClientProfile({ record, open, onOpenChange, serviceType, bucket = "clients" }: Props) {
+export function ClientProfile({
+  record,
+  open,
+  onOpenChange,
+  serviceType,
+  bucket = "clients",
+}: Props) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [payments, setPayments] = useState<ClientPayment[]>([]);
   const [showAddPayment, setShowAddPayment] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ serviceId: "", amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
+  const [paymentForm, setPaymentForm] = useState({
+    serviceId: "",
+    amount: "",
+    transactionDate: "",
+    paymentMode: "UPI",
+    accountName: "",
+    receivedBy: "",
+    referenceNumber: "",
+    remarks: "",
+  });
   const [savingPayment, setSavingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -82,7 +154,10 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
   const serviceDetails = useMemo(() => (record ? getRecordServiceDetails(record) : []), [record]);
   const totalServiceAmount = useMemo(() => (record ? getRecordServiceAmount(record) : 0), [record]);
   const totalReceived = useMemo(() => payments.reduce((s, p) => s + p.amount, 0), [payments]);
-  const totalPending = useMemo(() => Math.max(0, totalServiceAmount - totalReceived), [totalServiceAmount, totalReceived]);
+  const totalPending = useMemo(
+    () => Math.max(0, totalServiceAmount - totalReceived),
+    [totalServiceAmount, totalReceived],
+  );
   const nextDueService = useMemo(() => {
     const servicesWithDue = serviceDetails
       .filter((service) => service.dueDate)
@@ -115,13 +190,18 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
         id: "execution",
         title: "Execution",
         description: "Process the service and updates.",
-        status: recordStatus === "In Progress" ? "active" : recordStatus === "Completed" ? "complete" : "pending",
+        status:
+          recordStatus === "In Progress"
+            ? "active"
+            : recordStatus === "Completed"
+              ? "complete"
+              : "pending",
       },
       {
         id: "billing",
         title: "Billing",
         description: "Collect payment and reconcile accounts.",
-        status: paymentSettled ? "complete" : (recordStatus === "Completed" ? "active" : "pending"),
+        status: paymentSettled ? "complete" : recordStatus === "Completed" ? "active" : "pending",
       },
       {
         id: "closure",
@@ -177,12 +257,12 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
             const it = d.data() as any;
             return {
               id: d.id,
-              actor: it.userName ?? it.userId ?? "",
+              actor: it.performedBy || it.userName || it.userId || "Unknown",
               action: it.action ?? "",
-              field: it.field,
-              oldValue: it.oldValue,
-              newValue: it.newValue,
-              timestamp: normalizeActivityTimestamp(it.timestamp),
+              field: it.fieldName || it.field || "",
+              oldValue: it.oldValue || "",
+              newValue: it.newValue || "",
+              timestamp: normalizeActivityTimestamp(it.performedAt || it.timestamp),
             };
           })
           .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -214,7 +294,7 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
   if (!record) return null;
 
   if (serviceType) {
-    const matchingService = serviceDetails.find(s => s.serviceType === serviceType);
+    const matchingService = serviceDetails.find((s) => s.serviceType === serviceType);
     const servicePrice = matchingService?.price ?? 0;
     const serviceReceived = matchingService?.amountReceived ?? 0;
     const servicePending = Math.max(0, servicePrice - serviceReceived);
@@ -225,28 +305,55 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{serviceLabel(serviceType)} Detail — {record.name}</DialogTitle>
+            <DialogTitle>
+              {serviceLabel(serviceType)} Detail — {record.name}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6 p-4">
             {/* Client & Vehicle Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <section className="space-y-3">
-                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">Client Info</h4>
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
+                  Client Info
+                </h4>
                 <div className="text-sm space-y-2">
-                  <div><strong className="text-muted-foreground">Full Name:</strong> <span className="font-medium">{record.name}</span></div>
-                  <div><strong className="text-muted-foreground">Mobile Number:</strong> <span className="font-mono">{record.mo}</span></div>
-                  <div><strong className="text-muted-foreground">Group / Company:</strong> <span>{record.groupName || "—"}</span></div>
-                  <div><strong className="text-muted-foreground">C/O Address:</strong> <span>{record.co || "—"}</span></div>
+                  <div>
+                    <strong className="text-muted-foreground">Full Name:</strong>{" "}
+                    <span className="font-medium">{record.name}</span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">Mobile Number:</strong>{" "}
+                    <span className="font-mono">{record.mo}</span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">Group / Company:</strong>{" "}
+                    <span>{record.groupName || "—"}</span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">C/O Address:</strong>{" "}
+                    <span>{record.co || "—"}</span>
+                  </div>
                 </div>
               </section>
 
               <section className="space-y-3">
-                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">Vehicle Info</h4>
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
+                  Vehicle Info
+                </h4>
                 <div className="text-sm space-y-2">
-                  <div><strong className="text-muted-foreground">Vehicle Number:</strong> <span className="font-mono font-medium">{record.mvNo || "—"}</span></div>
-                  <div><strong className="text-muted-foreground">Chassis Number:</strong> <span className="font-mono">{record.chassisNo || "—"}</span></div>
-                  <div><strong className="text-muted-foreground">Engine Number:</strong> <span className="font-mono">{record.engineNo || "—"}</span></div>
+                  <div>
+                    <strong className="text-muted-foreground">Vehicle Number:</strong>{" "}
+                    <span className="font-mono font-medium">{record.mvNo || "—"}</span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">Chassis Number:</strong>{" "}
+                    <span className="font-mono">{record.chassisNo || "—"}</span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">Engine Number:</strong>{" "}
+                    <span className="font-mono">{record.engineNo || "—"}</span>
+                  </div>
                 </div>
               </section>
             </div>
@@ -256,43 +363,83 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
               <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
                 {serviceType} Service Details
               </h4>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 border rounded-xl bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground uppercase font-medium">Service Amount</div>
-                  <div className="text-2xl font-bold mt-1">₹{servicePrice.toLocaleString("en-IN")}</div>
+                  <div className="text-xs text-muted-foreground uppercase font-medium">
+                    Service Amount
+                  </div>
+                  <div className="text-2xl font-bold mt-1">
+                    ₹{servicePrice.toLocaleString("en-IN")}
+                  </div>
                 </div>
                 <div className="p-4 border rounded-xl bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground uppercase font-medium">Received Amount</div>
-                  <div className="text-2xl font-bold text-green-600 mt-1">₹{serviceReceived.toLocaleString("en-IN")}</div>
+                  <div className="text-xs text-muted-foreground uppercase font-medium">
+                    Received Amount
+                  </div>
+                  <div className="text-2xl font-bold text-green-600 mt-1">
+                    ₹{serviceReceived.toLocaleString("en-IN")}
+                  </div>
                 </div>
                 <div className="p-4 border rounded-xl bg-card shadow-sm">
-                  <div className="text-xs text-muted-foreground uppercase font-medium">Pending Amount</div>
-                  <div className="text-2xl font-bold text-red-600 mt-1">₹{servicePending.toLocaleString("en-IN")}</div>
+                  <div className="text-xs text-muted-foreground uppercase font-medium">
+                    Pending Amount
+                  </div>
+                  <div className="text-2xl font-bold text-red-600 mt-1">
+                    ₹{servicePending.toLocaleString("en-IN")}
+                  </div>
                 </div>
               </div>
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-muted/10 p-4 rounded-xl border border-muted/30">
                 <div className="space-y-2">
-                  <div><strong className="text-muted-foreground">Status:</strong> <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ml-2 font-semibold ${
-                    serviceStatus === "Completed"
-                      ? "bg-green-500/15 text-green-700 border-green-500/30"
-                      : serviceStatus === "In Progress" || serviceStatus === "Active"
-                        ? "bg-blue-500/15 text-blue-700 border-blue-500/30"
-                        : "bg-muted text-muted-foreground border-border"
-                  }`}>{serviceStatus}</span></div>
-                  <div><strong className="text-muted-foreground">Due Date:</strong> <span className="ml-2">{serviceDueDate ? new Date(serviceDueDate).toLocaleDateString("en-IN") : "—"}</span></div>
+                  <div>
+                    <strong className="text-muted-foreground">Status:</strong>{" "}
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ml-2 font-semibold ${
+                        serviceStatus === "Completed"
+                          ? "bg-green-500/15 text-green-700 border-green-500/30"
+                          : serviceStatus === "In Progress" || serviceStatus === "Active"
+                            ? "bg-blue-500/15 text-blue-700 border-blue-500/30"
+                            : "bg-muted text-muted-foreground border-border"
+                      }`}
+                    >
+                      {serviceStatus}
+                    </span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">Due Date:</strong>{" "}
+                    <span className="ml-2">
+                      {serviceDueDate ? new Date(serviceDueDate).toLocaleDateString("en-IN") : "—"}
+                    </span>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <div><strong className="text-muted-foreground">Created Date:</strong> <span className="ml-2">{record.createdAt ? new Date(record.createdAt).toLocaleDateString("en-IN") : record.date || "—"}</span></div>
-                  <div><strong className="text-muted-foreground">Last Updated:</strong> <span className="ml-2">{record.lastUpdatedAt ? new Date(record.lastUpdatedAt).toLocaleString("en-IN") : "—"}</span></div>
+                  <div>
+                    <strong className="text-muted-foreground">Created Date:</strong>{" "}
+                    <span className="ml-2">
+                      {record.createdAt
+                        ? new Date(record.createdAt).toLocaleDateString("en-IN")
+                        : record.date || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <strong className="text-muted-foreground">Last Updated:</strong>{" "}
+                    <span className="ml-2">
+                      {record.lastUpdatedAt
+                        ? new Date(record.lastUpdatedAt).toLocaleString("en-IN")
+                        : "—"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </section>
 
             {/* Documents section specific to this service type */}
             <section className="space-y-3 pt-4 border-t">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">Documents</h4>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
+                Documents
+              </h4>
               <StructuredDocumentUploader
                 customerId={record.id}
                 services={serviceDetails}
@@ -321,27 +468,39 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
           <div className="rounded-2xl border bg-background p-4 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Workflow Status</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Workflow Status
+                </p>
                 <h3 className="text-xl font-semibold">Service Workspace</h3>
-                <p className="text-sm text-muted-foreground">Track the service stage, follow-ups, documents, and billing in one place.</p>
+                <p className="text-sm text-muted-foreground">
+                  Track the service stage, follow-ups, documents, and billing in one place.
+                </p>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
-                <WhatsAppQuickActions mobile={record.mo} name={record.name} />
-                <Button size="sm" onClick={() => setShowAddPayment(true)}>Add Payment</Button>
+                <WhatsAppMessagePanel mobile={record.mo} name={record.name} />
+                <Button size="sm" onClick={() => setShowAddPayment(true)}>
+                  Add Payment
+                </Button>
               </div>
             </div>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
               {workflowStages.map((stage) => (
                 <div key={stage.id} className="rounded-2xl border p-3 bg-muted/5">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase text-muted-foreground">{stage.title}</p>
-                    <span className={`text-[11px] font-semibold rounded-full px-2 py-1 ${
-                      stage.status === "complete"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : stage.status === "active"
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-muted text-muted-foreground"
-                    }`}>{stage.status}</span>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      {stage.title}
+                    </p>
+                    <span
+                      className={`text-[11px] font-semibold rounded-full px-2 py-1 ${
+                        stage.status === "complete"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : stage.status === "active"
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {stage.status}
+                    </span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">{stage.description}</p>
                 </div>
@@ -353,15 +512,33 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
             <section>
               <h4 className="text-sm font-semibold border-b pb-1">Client & Vehicle Details</h4>
               <div className="mt-2 text-sm space-y-1">
-                <div><strong>Full Name:</strong> {record.name}</div>
-                <div><strong>Mobile Number:</strong> {record.mo}</div>
-                <div><strong>Email:</strong> {record.groupName || "—"}</div>
-                <div><strong>Address:</strong> {record.co || "—"}</div>
-                <div><strong>Vehicle Number:</strong> {record.mvNo || "—"}</div>
-                <div><strong>Chassis Number:</strong> {record.chassisNo || "—"}</div>
-                <div><strong>Engine Number:</strong> {record.engineNo || "—"}</div>
-                <div><strong>Created At:</strong> {record.date}</div>
-                <div><strong>Created By:</strong> {record.lastUpdatedBy || "—"}</div>
+                <div>
+                  <strong>Full Name:</strong> {record.name}
+                </div>
+                <div>
+                  <strong>Mobile Number:</strong> {record.mo}
+                </div>
+                <div>
+                  <strong>Email:</strong> {record.groupName || "—"}
+                </div>
+                <div>
+                  <strong>Address:</strong> {record.co || "—"}
+                </div>
+                <div>
+                  <strong>Vehicle Number:</strong> {record.mvNo || "—"}
+                </div>
+                <div>
+                  <strong>Chassis Number:</strong> {record.chassisNo || "—"}
+                </div>
+                <div>
+                  <strong>Engine Number:</strong> {record.engineNo || "—"}
+                </div>
+                <div>
+                  <strong>Created At:</strong> {record.date}
+                </div>
+                <div>
+                  <strong>Created By:</strong> {record.lastUpdatedBy || "—"}
+                </div>
               </div>
             </section>
 
@@ -369,14 +546,18 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold border-b pb-1">Accounting</h4>
                 <div>
-                  <Button size="sm" onClick={() => setShowAddPayment(true)}>Add Payment</Button>
+                  <Button size="sm" onClick={() => setShowAddPayment(true)}>
+                    Add Payment
+                  </Button>
                 </div>
               </div>
 
               <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="p-3 border rounded">
                   <div className="text-xs text-muted-foreground">Total Amount</div>
-                  <div className="text-xl font-bold">₹{totalServiceAmount.toLocaleString("en-IN")}</div>
+                  <div className="text-xl font-bold">
+                    ₹{totalServiceAmount.toLocaleString("en-IN")}
+                  </div>
                 </div>
                 <div className="p-3 border rounded">
                   <div className="text-xs text-muted-foreground">Amount Received</div>
@@ -407,7 +588,11 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                     <tbody>
                       {payments.map((p) => (
                         <tr key={p.id} className="border-t">
-                          <td className="py-2">{p.transactionDate ? new Date(p.transactionDate).toLocaleDateString("en-IN") : "—"}</td>
+                          <td className="py-2">
+                            {p.transactionDate
+                              ? new Date(p.transactionDate).toLocaleDateString("en-IN")
+                              : "—"}
+                          </td>
                           <td>₹{p.amount.toLocaleString("en-IN")}</td>
                           <td>{p.paymentMode}</td>
                           <td>{p.accountName}</td>
@@ -419,7 +604,12 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                       ))}
                       {payments.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="py-4 text-center text-xs text-muted-foreground">No payments yet.</td>
+                          <td
+                            colSpan={8}
+                            className="py-4 text-center text-xs text-muted-foreground"
+                          >
+                            No payments yet.
+                          </td>
                         </tr>
                       )}
                     </tbody>
@@ -433,15 +623,23 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
             <h4 className="text-sm font-semibold border-b pb-1">Service Information</h4>
             <div className="mt-2 space-y-2">
               {serviceDetails.map((service, index) => (
-                <div 
-                  key={index} 
-                  onClick={() => { console.debug("ClientProfile: open service", service); setSelectedService(service); }}
+                <div
+                  key={index}
+                  onClick={() => {
+                    console.debug("ClientProfile: open service", service);
+                    setSelectedService(service);
+                  }}
                   className="text-sm border p-3 rounded bg-muted/10 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center cursor-pointer hover:bg-muted/20 transition-colors"
                 >
                   <div>
                     <span className="font-semibold">{serviceLabel(service.serviceType)}</span>
                     <span className="text-xs text-muted-foreground ml-2">({service.status})</span>
-                    <div className="text-xs text-muted-foreground">Due: {service.dueDate ? new Date(service.dueDate).toLocaleDateString("en-IN") : "—"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Due:{" "}
+                      {service.dueDate
+                        ? new Date(service.dueDate).toLocaleDateString("en-IN")
+                        : "—"}
+                    </div>
                   </div>
                   <div className="text-xs font-mono text-right">
                     Price: ₹{(service.price || 0).toLocaleString("en-IN")}
@@ -449,7 +647,9 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                 </div>
               ))}
               {serviceDetails.length === 0 && (
-                <div className="text-xs text-muted-foreground">No service information available</div>
+                <div className="text-xs text-muted-foreground">
+                  No service information available
+                </div>
               )}
             </div>
           </section>
@@ -457,10 +657,7 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
           <section className="md:col-span-2">
             <h4 className="text-sm font-semibold border-b pb-1">Invoice History</h4>
             <div className="mt-2">
-              <InvoiceHistory
-                clientId={record.id}
-                onViewInvoice={setSelectedInvoice}
-              />
+              <InvoiceHistory clientId={record.id} onViewInvoice={setSelectedInvoice} />
             </div>
           </section>
 
@@ -479,14 +676,21 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
           <section className="md:col-span-2">
             <h4 className="text-sm font-semibold border-b pb-1">Active Tasks</h4>
             <div className="mt-2 space-y-2">
-              {tasks.length === 0 && <div className="text-xs text-muted-foreground">No active tasks.</div>}
+              {tasks.length === 0 && (
+                <div className="text-xs text-muted-foreground">No active tasks.</div>
+              )}
               {tasks.map((t) => (
-                <div key={t.id} className="flex items-center justify-between border p-2 rounded text-sm">
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between border p-2 rounded text-sm"
+                >
                   <div>
                     <div className="font-medium">{t.title}</div>
-                    <div className="text-xs text-muted-foreground">{t.status} • Due: {t.dueDate || '—'}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t.status} • Due: {t.dueDate || "—"}
+                    </div>
                   </div>
-                  <div className="text-xs">{t.assignee || 'Unassigned'}</div>
+                  <div className="text-xs">{t.assignee || "Unassigned"}</div>
                 </div>
               ))}
             </div>
@@ -504,61 +708,68 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                   <h4 className="text-sm font-semibold border-b pb-2 mb-3">Activity Timeline</h4>
                   <div className="text-xs text-muted-foreground">{activities.length} entries</div>
                 </div>
-                <div className="space-y-4 max-h-[360px] overflow-y-auto pr-2">
-                  {activities.length === 0 && <div className="text-xs text-muted-foreground text-center py-4">No activity history yet.</div>}
-                  {[...activities]
-                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                    .map((a, i) => {
-                      const normalizedTimestamp = normalizeActivityTimestamp(a.timestamp);
-                      const { date, time } = formatActivityDateParts(normalizedTimestamp);
-                      return (
-                        <div key={a.id || `${i}-${normalizedTimestamp}`} className="bg-muted/10 p-4 rounded-xl border border-muted/40 shadow-sm">
-                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-6 max-h-[360px] overflow-y-auto pr-2 pt-2">
+                  {activities.length === 0 && (
+                    <div className="text-xs text-muted-foreground text-center py-4">
+                      No activity history yet.
+                    </div>
+                  )}
+                  <div className="relative border-l border-muted pl-4 ml-2 space-y-6">
+                    {[...activities]
+                      .sort(
+                        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+                      )
+                      .map((a, i) => {
+                        const normalizedTimestamp = normalizeActivityTimestamp(a.timestamp);
+                        const { date, time } = formatActivityDateParts(normalizedTimestamp);
+                        const timelineText = formatTimelineText(a);
+
+                        return (
+                          <div key={a.id || `${i}-${normalizedTimestamp}`} className="relative">
+                            {/* Dot indicator */}
+                            <div className="absolute -left-[21px] top-1.5 size-3 rounded-full bg-sky-500 border-2 border-background ring-4 ring-sky-50" />
+
                             <div className="space-y-1">
-                              <div className="text-xs uppercase tracking-wide text-muted-foreground">Updated By</div>
-                              <div className="font-semibold text-sm">{a.actor || "Unknown"}</div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground md:text-right">
-                              <div className="space-y-1">
-                                <div className="uppercase tracking-wide">Date</div>
-                                <div>{date}</div>
+                              <div className="text-xs text-muted-foreground font-semibold">
+                                {date} - {time}
                               </div>
-                              <div className="space-y-1">
-                                <div className="uppercase tracking-wide">Time</div>
-                                <div>{time}</div>
-                              </div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {timelineText}
+                              </p>
+                              {a.field && (
+                                <div className="mt-2 text-xs grid grid-cols-2 gap-3 max-w-md bg-muted/20 p-2 rounded-lg border border-muted-foreground/10">
+                                  <div>
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                                      Old Value
+                                    </span>
+                                    <div className="font-mono text-muted-foreground truncate">
+                                      {a.oldValue || "—"}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                                      New Value
+                                    </span>
+                                    <div className="font-mono text-emerald-600 font-semibold truncate">
+                                      {a.newValue || "—"}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Field Changed</p>
-                              <p className="text-sm font-medium">{a.field || a.action}</p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Activity</p>
-                              <p className="text-sm">{a.action}</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-lg border border-muted-foreground/10 bg-background p-3">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Old Value</p>
-                              <p className="font-mono text-sm text-muted-foreground">{a.oldValue || "—"}</p>
-                            </div>
-                            <div className="rounded-lg border border-muted-foreground/10 bg-background p-3">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">New Value</p>
-                              <p className="font-mono text-sm text-green-700">{a.newValue || "—"}</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                  </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="notes" className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold border-b pb-2 mb-3">Client Notes</h4>
-                  <div className="text-xs text-muted-foreground">{noteEntries.length} note entries</div>
+                  <div className="text-xs text-muted-foreground">
+                    {noteEntries.length} note entries
+                  </div>
                 </div>
                 <div className="space-y-3">
                   <Textarea
@@ -569,12 +780,22 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                   />
                   {noteError && <div className="text-xs text-red-600">{noteError}</div>}
                   <div className="flex justify-end gap-2">
-                    <Button variant="secondary" onClick={() => setNoteDraft("")} disabled={savingNote}>Clear</Button>
-                    <Button onClick={saveNote} disabled={savingNote}>{savingNote ? "Saving…" : "Save Note"}</Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setNoteDraft("")}
+                      disabled={savingNote}
+                    >
+                      Clear
+                    </Button>
+                    <Button onClick={saveNote} disabled={savingNote}>
+                      {savingNote ? "Saving…" : "Save Note"}
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {noteEntries.length === 0 && <div className="text-xs text-muted-foreground">No notes yet.</div>}
+                  {noteEntries.length === 0 && (
+                    <div className="text-xs text-muted-foreground">No notes yet.</div>
+                  )}
                   {noteEntries.map((note) => {
                     const normalizedTimestamp = normalizeActivityTimestamp(note.timestamp);
                     const { date, time } = formatActivityDateParts(normalizedTimestamp);
@@ -582,7 +803,9 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                       <div key={note.id} className="rounded-2xl border p-4 bg-muted/10">
                         <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
                           <span>{note.actor || "Unknown"}</span>
-                          <span>{date} {time}</span>
+                          <span>
+                            {date} {time}
+                          </span>
                         </div>
                         <p className="mt-2 text-sm">{note.newValue || note.action}</p>
                       </div>
@@ -600,40 +823,56 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
 
         {/* Invoice Viewer Modal */}
         {selectedInvoice && (
-          <InvoiceViewer
-            invoice={selectedInvoice}
-            onClose={() => setSelectedInvoice(null)}
-          />
+          <InvoiceViewer invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />
         )}
 
         {/* Service Detail Modal */}
         {selectedService && (
-          <Dialog open={!!selectedService} onOpenChange={(open) => { if (!open) setSelectedService(null); }}>
+          <Dialog
+            open={!!selectedService}
+            onOpenChange={(open) => {
+              if (!open) setSelectedService(null);
+            }}
+          >
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>{serviceLabel(selectedService.serviceType)} — {record.name}</DialogTitle>
+                <DialogTitle>
+                  {serviceLabel(selectedService.serviceType)} — {record.name}
+                </DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 {/* Service Status Overview */}
                 <div className="rounded-lg border p-4 bg-muted/5">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold uppercase text-muted-foreground">Service Status</span>
-                    <span className={`text-xs font-bold rounded-full px-3 py-1 ${
-                      selectedService.status === "Completed"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : selectedService.status === "In Progress"
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-amber-100 text-amber-700"
-                    }`}>{selectedService.status}</span>
+                    <span className="text-xs font-semibold uppercase text-muted-foreground">
+                      Service Status
+                    </span>
+                    <span
+                      className={`text-xs font-bold rounded-full px-3 py-1 ${
+                        selectedService.status === "Completed"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : selectedService.status === "In Progress"
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {selectedService.status}
+                    </span>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Price:</span>
-                      <span className="font-semibold">₹{(selectedService.price || 0).toLocaleString("en-IN")}</span>
+                      <span className="font-semibold">
+                        ₹{(selectedService.price || 0).toLocaleString("en-IN")}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Due Date:</span>
-                      <span className="font-semibold">{selectedService.dueDate ? new Date(selectedService.dueDate).toLocaleDateString("en-IN") : "—"}</span>
+                      <span className="font-semibold">
+                        {selectedService.dueDate
+                          ? new Date(selectedService.dueDate).toLocaleDateString("en-IN")
+                          : "—"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -643,12 +882,28 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                   <h5 className="text-sm font-semibold">Workflow Progress</h5>
                   <div className="space-y-2">
                     {[
-                      { stage: "Intake", active: selectedService.status !== "Pending", completed: selectedService.status !== "Pending" },
-                      { stage: "Execution", active: selectedService.status === "In Progress", completed: selectedService.status === "Completed" || selectedService.status === "In Progress" },
-                      { stage: "Completion", active: false, completed: selectedService.status === "Completed" }
+                      {
+                        stage: "Intake",
+                        active: selectedService.status !== "Pending",
+                        completed: selectedService.status !== "Pending",
+                      },
+                      {
+                        stage: "Execution",
+                        active: selectedService.status === "In Progress",
+                        completed:
+                          selectedService.status === "Completed" ||
+                          selectedService.status === "In Progress",
+                      },
+                      {
+                        stage: "Completion",
+                        active: false,
+                        completed: selectedService.status === "Completed",
+                      },
                     ].map((item, idx) => (
                       <div key={idx} className="flex items-center gap-3">
-                        <div className={`h-3 w-3 rounded-full ${item.completed ? "bg-emerald-500" : item.active ? "bg-sky-500" : "bg-muted"}`} />
+                        <div
+                          className={`h-3 w-3 rounded-full ${item.completed ? "bg-emerald-500" : item.active ? "bg-sky-500" : "bg-muted"}`}
+                        />
                         <span className="text-xs font-medium">{item.stage}</span>
                       </div>
                     ))}
@@ -659,15 +914,25 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                 <div className="grid grid-cols-3 gap-2 text-center p-3 rounded border bg-muted/5">
                   <div>
                     <div className="text-[10px] text-muted-foreground">Amount</div>
-                    <div className="text-sm font-semibold">₹{(selectedService.price || 0).toLocaleString("en-IN")}</div>
+                    <div className="text-sm font-semibold">
+                      ₹{(selectedService.price || 0).toLocaleString("en-IN")}
+                    </div>
                   </div>
                   <div className="border-l border-r">
                     <div className="text-[10px] text-muted-foreground">Paid</div>
-                    <div className="text-sm font-semibold text-green-600">₹{(selectedService.amountReceived || 0).toLocaleString("en-IN")}</div>
+                    <div className="text-sm font-semibold text-green-600">
+                      ₹{(selectedService.amountReceived || 0).toLocaleString("en-IN")}
+                    </div>
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground">Pending</div>
-                    <div className="text-sm font-semibold text-red-600">₹{Math.max(0, (selectedService.price || 0) - (selectedService.amountReceived || 0)).toLocaleString("en-IN")}</div>
+                    <div className="text-sm font-semibold text-red-600">
+                      ₹
+                      {Math.max(
+                        0,
+                        (selectedService.price || 0) - (selectedService.amountReceived || 0),
+                      ).toLocaleString("en-IN")}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -687,13 +952,18 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-medium">Service</label>
-                <Select value={paymentForm.serviceId} onValueChange={(v) => setPaymentForm({ ...paymentForm, serviceId: v })}>
+                <Select
+                  value={paymentForm.serviceId}
+                  onValueChange={(v) => setPaymentForm({ ...paymentForm, serviceId: v })}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a service" />
                   </SelectTrigger>
                   <SelectContent>
                     {services.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{serviceLabel(s.serviceType)}</SelectItem>
+                      <SelectItem key={s.id} value={s.id}>
+                        {serviceLabel(s.serviceType)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -713,13 +983,18 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                 <Input
                   type="date"
                   value={paymentForm.transactionDate}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, transactionDate: e.target.value })}
+                  onChange={(e) =>
+                    setPaymentForm({ ...paymentForm, transactionDate: e.target.value })
+                  }
                 />
               </div>
 
               <div>
                 <label className="text-sm font-medium">Payment Mode</label>
-                <Select value={paymentForm.paymentMode} onValueChange={(v) => setPaymentForm({ ...paymentForm, paymentMode: v })}>
+                <Select
+                  value={paymentForm.paymentMode}
+                  onValueChange={(v) => setPaymentForm({ ...paymentForm, paymentMode: v })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -735,29 +1010,53 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
 
               <div>
                 <label className="text-sm font-medium">Received In (Account)</label>
-                <Input value={paymentForm.accountName} onChange={(e) => setPaymentForm({ ...paymentForm, accountName: e.target.value })} placeholder="Account name" />
+                <Input
+                  value={paymentForm.accountName}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, accountName: e.target.value })}
+                  placeholder="Account name"
+                />
               </div>
 
               <div>
                 <label className="text-sm font-medium">Received By</label>
-                <Input value={paymentForm.receivedBy} onChange={(e) => setPaymentForm({ ...paymentForm, receivedBy: e.target.value })} placeholder="Received by" />
+                <Input
+                  value={paymentForm.receivedBy}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, receivedBy: e.target.value })}
+                  placeholder="Received by"
+                />
               </div>
 
               <div>
                 <label className="text-sm font-medium">Reference / Txn ID</label>
-                <Input value={paymentForm.referenceNumber} onChange={(e) => setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })} placeholder="Reference number" />
+                <Input
+                  value={paymentForm.referenceNumber}
+                  onChange={(e) =>
+                    setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })
+                  }
+                  placeholder="Reference number"
+                />
               </div>
 
               <div>
                 <label className="text-sm font-medium">Remarks</label>
-                <Textarea value={paymentForm.remarks} onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })} placeholder="Optional notes" />
+                <Textarea
+                  value={paymentForm.remarks}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
+                  placeholder="Optional notes"
+                />
               </div>
 
               {paymentError && <div className="text-xs text-red-600">{paymentError}</div>}
             </div>
 
             <div className="flex justify-end gap-2 mt-4">
-              <Button variant="secondary" onClick={() => setShowAddPayment(false)} disabled={savingPayment}>Cancel</Button>
+              <Button
+                variant="secondary"
+                onClick={() => setShowAddPayment(false)}
+                disabled={savingPayment}
+              >
+                Cancel
+              </Button>
               <Button
                 onClick={async () => {
                   setPaymentError(null);
@@ -776,28 +1075,30 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                       clientId: record.id,
                       serviceId: paymentForm.serviceId,
                       amount: amt,
-                      transactionDate: paymentForm.transactionDate ? new Date(paymentForm.transactionDate).toISOString() : new Date().toISOString(),
+                      transactionDate: paymentForm.transactionDate
+                        ? new Date(paymentForm.transactionDate).toISOString()
+                        : new Date().toISOString(),
                       paymentMode: paymentForm.paymentMode as any,
                       accountName: paymentForm.accountName || "",
                       receivedBy: paymentForm.receivedBy || "",
                       referenceNumber: paymentForm.referenceNumber || "",
                       remarks: paymentForm.remarks || "",
                     });
-                    
+
                     // Update the amountReceived for the selected service on the record
-                    const updatedServices = serviceDetails.map(s => {
+                    const updatedServices = serviceDetails.map((s) => {
                       if (s.serviceType === paymentForm.serviceId) {
                         return {
                           ...s,
-                          amountReceived: (s.amountReceived || 0) + amt
+                          amountReceived: (s.amountReceived || 0) + amt,
                         };
                       }
                       return s;
                     });
-                    
+
                     const updatedRecord = {
                       ...record,
-                      services: updatedServices
+                      services: updatedServices,
                     };
 
                     await saveRecord(bucket, updatedRecord, actor);
@@ -808,12 +1109,23 @@ export function ClientProfile({ record, open, onOpenChange, serviceType, bucket 
                       return [saved as ClientPayment, ...prev];
                     });
                     setShowAddPayment(false);
-                    setPaymentForm({ serviceId: "", amount: "", transactionDate: "", paymentMode: "UPI", accountName: "", receivedBy: "", referenceNumber: "", remarks: "" });
+                    setPaymentForm({
+                      serviceId: "",
+                      amount: "",
+                      transactionDate: "",
+                      paymentMode: "UPI",
+                      accountName: "",
+                      receivedBy: "",
+                      referenceNumber: "",
+                      remarks: "",
+                    });
                     toast.success("Payment recorded successfully!");
                   } catch (err) {
                     console.error("Failed to save payment", err);
                     setPaymentError("Failed to save payment. Try again.");
-                    toast.error(`Failed to save payment: ${err instanceof Error ? err.message : String(err)}`);
+                    toast.error(
+                      `Failed to save payment: ${err instanceof Error ? err.message : String(err)}`,
+                    );
                   } finally {
                     setSavingPayment(false);
                   }
