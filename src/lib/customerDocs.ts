@@ -18,6 +18,14 @@ import {
 } from "firebase/storage";
 import { db, storage } from "./firebase";
 import { removeUndefined } from "./records";
+import { toast } from "sonner";
+
+export function handleFirestoreError(err: any, context: string) {
+  console.error(`[Firestore Error: ${context}]`, err);
+  if (err && (err.code === "failed-precondition" || err.message?.includes("index"))) {
+    toast.error("Database index is being prepared. Please try again shortly.");
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,7 +77,7 @@ export function subscribeToDocsFor(
       cb(docs);
     },
     (error) => {
-      console.error("[subscribeToDocsFor] Subscription error for customer:", customerId, error);
+      handleFirestoreError(error, "subscribeToDocsFor");
     },
   );
 
@@ -81,10 +89,17 @@ export function subscribeToDocsFor(
  */
 export function subscribeToAllDocs(cb: (docs: CustomerDoc[]) => void): () => void {
   const q = query(collection(db, COL), orderBy("addedAt", "desc"));
-  return onSnapshot(q, (snap) => {
-    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CustomerDoc);
-    cb(docs);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CustomerDoc);
+      cb(docs);
+    },
+    (err) => {
+      handleFirestoreError(err, "subscribeToAllDocs");
+      cb([]);
+    }
+  );
 }
 
 /**

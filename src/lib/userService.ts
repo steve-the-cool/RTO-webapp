@@ -126,7 +126,15 @@ export async function setUserStatus(userId: string, status: UserRecord['status']
 /** Fetch all users */
 export async function fetchAllUsers() {
   const snap = await getDocs(USERS_COL);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      uid: d.id,
+      userId: d.id,
+      ...data,
+    } as any;
+  });
 }
 
 export const toggleUserStatus = setUserStatus;

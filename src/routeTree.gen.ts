@@ -28,13 +28,6 @@ import { Route as DashboardAccountingRouteImport } from './routes/dashboard.acco
 import { Route as DashboardSettingsUsersRouteImport } from './routes/dashboard.settings.users'
 import { Route as DashboardSettingsMigrationRouteImport } from './routes/dashboard.settings.migration'
 import { Route as DashboardServiceServiceTypeRouteImport } from './routes/dashboard.service.$serviceType'
-import { Route as DashboardFinanceReportsRouteImport } from './routes/dashboard.finance.reports'
-import { Route as DashboardFinancePaymentsRouteImport } from './routes/dashboard.finance.payments'
-import { Route as DashboardFinanceOutstandingRouteImport } from './routes/dashboard.finance.outstanding'
-import { Route as DashboardFinanceLedgerRouteImport } from './routes/dashboard.finance.ledger'
-import { Route as DashboardFinanceDashboardRouteImport } from './routes/dashboard.finance.dashboard'
-import { Route as DashboardFinanceCollectionsRouteImport } from './routes/dashboard.finance.collections'
-import { Route as DashboardFinanceCalendarRouteImport } from './routes/dashboard.finance.calendar'
 import { Route as DashboardSettingsMigrationAccountingRouteImport } from './routes/dashboard.settings.migration.accounting'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -135,46 +128,6 @@ const DashboardServiceServiceTypeRoute =
     path: '/service/$serviceType',
     getParentRoute: () => DashboardRoute,
   } as any)
-const DashboardFinanceReportsRoute = DashboardFinanceReportsRouteImport.update({
-  id: '/finance/reports',
-  path: '/finance/reports',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardFinancePaymentsRoute =
-  DashboardFinancePaymentsRouteImport.update({
-    id: '/finance/payments',
-    path: '/finance/payments',
-    getParentRoute: () => DashboardRoute,
-  } as any)
-const DashboardFinanceOutstandingRoute =
-  DashboardFinanceOutstandingRouteImport.update({
-    id: '/finance/outstanding',
-    path: '/finance/outstanding',
-    getParentRoute: () => DashboardRoute,
-  } as any)
-const DashboardFinanceLedgerRoute = DashboardFinanceLedgerRouteImport.update({
-  id: '/finance/ledger',
-  path: '/finance/ledger',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardFinanceDashboardRoute =
-  DashboardFinanceDashboardRouteImport.update({
-    id: '/finance/dashboard',
-    path: '/finance/dashboard',
-    getParentRoute: () => DashboardRoute,
-  } as any)
-const DashboardFinanceCollectionsRoute =
-  DashboardFinanceCollectionsRouteImport.update({
-    id: '/finance/collections',
-    path: '/finance/collections',
-    getParentRoute: () => DashboardRoute,
-  } as any)
-const DashboardFinanceCalendarRoute =
-  DashboardFinanceCalendarRouteImport.update({
-    id: '/finance/calendar',
-    path: '/finance/calendar',
-    getParentRoute: () => DashboardRoute,
-  } as any)
 const DashboardSettingsMigrationAccountingRoute =
   DashboardSettingsMigrationAccountingRouteImport.update({
     id: '/accounting',
@@ -199,13 +152,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/task-templates': typeof DashboardTaskTemplatesRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
-  '/dashboard/finance/calendar': typeof DashboardFinanceCalendarRoute
-  '/dashboard/finance/collections': typeof DashboardFinanceCollectionsRoute
-  '/dashboard/finance/dashboard': typeof DashboardFinanceDashboardRoute
-  '/dashboard/finance/ledger': typeof DashboardFinanceLedgerRoute
-  '/dashboard/finance/outstanding': typeof DashboardFinanceOutstandingRoute
-  '/dashboard/finance/payments': typeof DashboardFinancePaymentsRoute
-  '/dashboard/finance/reports': typeof DashboardFinanceReportsRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
   '/dashboard/settings/migration': typeof DashboardSettingsMigrationRouteWithChildren
   '/dashboard/settings/users': typeof DashboardSettingsUsersRoute
@@ -227,13 +173,6 @@ export interface FileRoutesByTo {
   '/dashboard/task-templates': typeof DashboardTaskTemplatesRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard': typeof DashboardIndexRoute
-  '/dashboard/finance/calendar': typeof DashboardFinanceCalendarRoute
-  '/dashboard/finance/collections': typeof DashboardFinanceCollectionsRoute
-  '/dashboard/finance/dashboard': typeof DashboardFinanceDashboardRoute
-  '/dashboard/finance/ledger': typeof DashboardFinanceLedgerRoute
-  '/dashboard/finance/outstanding': typeof DashboardFinanceOutstandingRoute
-  '/dashboard/finance/payments': typeof DashboardFinancePaymentsRoute
-  '/dashboard/finance/reports': typeof DashboardFinanceReportsRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
   '/dashboard/settings/migration': typeof DashboardSettingsMigrationRouteWithChildren
   '/dashboard/settings/users': typeof DashboardSettingsUsersRoute
@@ -257,13 +196,6 @@ export interface FileRoutesById {
   '/dashboard/task-templates': typeof DashboardTaskTemplatesRoute
   '/dashboard/tasks': typeof DashboardTasksRoute
   '/dashboard/': typeof DashboardIndexRoute
-  '/dashboard/finance/calendar': typeof DashboardFinanceCalendarRoute
-  '/dashboard/finance/collections': typeof DashboardFinanceCollectionsRoute
-  '/dashboard/finance/dashboard': typeof DashboardFinanceDashboardRoute
-  '/dashboard/finance/ledger': typeof DashboardFinanceLedgerRoute
-  '/dashboard/finance/outstanding': typeof DashboardFinanceOutstandingRoute
-  '/dashboard/finance/payments': typeof DashboardFinancePaymentsRoute
-  '/dashboard/finance/reports': typeof DashboardFinanceReportsRoute
   '/dashboard/service/$serviceType': typeof DashboardServiceServiceTypeRoute
   '/dashboard/settings/migration': typeof DashboardSettingsMigrationRouteWithChildren
   '/dashboard/settings/users': typeof DashboardSettingsUsersRoute
@@ -288,13 +220,6 @@ export interface FileRouteTypes {
     | '/dashboard/task-templates'
     | '/dashboard/tasks'
     | '/dashboard/'
-    | '/dashboard/finance/calendar'
-    | '/dashboard/finance/collections'
-    | '/dashboard/finance/dashboard'
-    | '/dashboard/finance/ledger'
-    | '/dashboard/finance/outstanding'
-    | '/dashboard/finance/payments'
-    | '/dashboard/finance/reports'
     | '/dashboard/service/$serviceType'
     | '/dashboard/settings/migration'
     | '/dashboard/settings/users'
@@ -316,13 +241,6 @@ export interface FileRouteTypes {
     | '/dashboard/task-templates'
     | '/dashboard/tasks'
     | '/dashboard'
-    | '/dashboard/finance/calendar'
-    | '/dashboard/finance/collections'
-    | '/dashboard/finance/dashboard'
-    | '/dashboard/finance/ledger'
-    | '/dashboard/finance/outstanding'
-    | '/dashboard/finance/payments'
-    | '/dashboard/finance/reports'
     | '/dashboard/service/$serviceType'
     | '/dashboard/settings/migration'
     | '/dashboard/settings/users'
@@ -345,13 +263,6 @@ export interface FileRouteTypes {
     | '/dashboard/task-templates'
     | '/dashboard/tasks'
     | '/dashboard/'
-    | '/dashboard/finance/calendar'
-    | '/dashboard/finance/collections'
-    | '/dashboard/finance/dashboard'
-    | '/dashboard/finance/ledger'
-    | '/dashboard/finance/outstanding'
-    | '/dashboard/finance/payments'
-    | '/dashboard/finance/reports'
     | '/dashboard/service/$serviceType'
     | '/dashboard/settings/migration'
     | '/dashboard/settings/users'
@@ -498,55 +409,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardServiceServiceTypeRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/finance/reports': {
-      id: '/dashboard/finance/reports'
-      path: '/finance/reports'
-      fullPath: '/dashboard/finance/reports'
-      preLoaderRoute: typeof DashboardFinanceReportsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/finance/payments': {
-      id: '/dashboard/finance/payments'
-      path: '/finance/payments'
-      fullPath: '/dashboard/finance/payments'
-      preLoaderRoute: typeof DashboardFinancePaymentsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/finance/outstanding': {
-      id: '/dashboard/finance/outstanding'
-      path: '/finance/outstanding'
-      fullPath: '/dashboard/finance/outstanding'
-      preLoaderRoute: typeof DashboardFinanceOutstandingRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/finance/ledger': {
-      id: '/dashboard/finance/ledger'
-      path: '/finance/ledger'
-      fullPath: '/dashboard/finance/ledger'
-      preLoaderRoute: typeof DashboardFinanceLedgerRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/finance/dashboard': {
-      id: '/dashboard/finance/dashboard'
-      path: '/finance/dashboard'
-      fullPath: '/dashboard/finance/dashboard'
-      preLoaderRoute: typeof DashboardFinanceDashboardRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/finance/collections': {
-      id: '/dashboard/finance/collections'
-      path: '/finance/collections'
-      fullPath: '/dashboard/finance/collections'
-      preLoaderRoute: typeof DashboardFinanceCollectionsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/finance/calendar': {
-      id: '/dashboard/finance/calendar'
-      path: '/finance/calendar'
-      fullPath: '/dashboard/finance/calendar'
-      preLoaderRoute: typeof DashboardFinanceCalendarRouteImport
-      parentRoute: typeof DashboardRoute
-    }
     '/dashboard/settings/migration/accounting': {
       id: '/dashboard/settings/migration/accounting'
       path: '/accounting'
@@ -600,13 +462,6 @@ interface DashboardRouteChildren {
   DashboardTaskTemplatesRoute: typeof DashboardTaskTemplatesRoute
   DashboardTasksRoute: typeof DashboardTasksRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
-  DashboardFinanceCalendarRoute: typeof DashboardFinanceCalendarRoute
-  DashboardFinanceCollectionsRoute: typeof DashboardFinanceCollectionsRoute
-  DashboardFinanceDashboardRoute: typeof DashboardFinanceDashboardRoute
-  DashboardFinanceLedgerRoute: typeof DashboardFinanceLedgerRoute
-  DashboardFinanceOutstandingRoute: typeof DashboardFinanceOutstandingRoute
-  DashboardFinancePaymentsRoute: typeof DashboardFinancePaymentsRoute
-  DashboardFinanceReportsRoute: typeof DashboardFinanceReportsRoute
   DashboardServiceServiceTypeRoute: typeof DashboardServiceServiceTypeRoute
 }
 
@@ -625,13 +480,6 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardTaskTemplatesRoute: DashboardTaskTemplatesRoute,
   DashboardTasksRoute: DashboardTasksRoute,
   DashboardIndexRoute: DashboardIndexRoute,
-  DashboardFinanceCalendarRoute: DashboardFinanceCalendarRoute,
-  DashboardFinanceCollectionsRoute: DashboardFinanceCollectionsRoute,
-  DashboardFinanceDashboardRoute: DashboardFinanceDashboardRoute,
-  DashboardFinanceLedgerRoute: DashboardFinanceLedgerRoute,
-  DashboardFinanceOutstandingRoute: DashboardFinanceOutstandingRoute,
-  DashboardFinancePaymentsRoute: DashboardFinancePaymentsRoute,
-  DashboardFinanceReportsRoute: DashboardFinanceReportsRoute,
   DashboardServiceServiceTypeRoute: DashboardServiceServiceTypeRoute,
 }
 

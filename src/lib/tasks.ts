@@ -17,6 +17,15 @@ import {
 import { db } from "./firebase";
 import { saveRecord, type Bucket, type RegistryRecord, type DeleteReason } from "./records";
 import { createActivity, logClientActivity, type ActivityLog } from "./activity";
+import { toast } from "sonner";
+
+export function handleFirestoreError(err: any, context: string) {
+  console.error(`[Firestore Error: ${context}]`, err);
+  if (err && (err.code === "failed-precondition" || err.message?.includes("index"))) {
+    toast.error("Database index is being prepared. Please try again shortly.");
+  }
+}
+
 
 // ─── Re-exports ──────────────────────────────────────────────────────────────
 export type { DeleteReason };
@@ -386,12 +395,19 @@ export async function markTaskAsRead(
  */
 export function subscribeToTasks(cb: (tasks: Task[]) => void): () => void {
   const q = query(collection(db, COL), orderBy("createdAt", "desc"));
-  return onSnapshot(q, (snap) => {
-    const tasks = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as Task)
-      .filter((t) => !t.isDeleted); // Hide soft-deleted tasks
-    cb(tasks);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const tasks = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Task)
+        .filter((t) => !t.isDeleted); // Hide soft-deleted tasks
+      cb(tasks);
+    },
+    (err) => {
+      handleFirestoreError(err, "subscribeToTasks");
+      cb([]);
+    }
+  );
 }
 
 /**
@@ -407,12 +423,19 @@ export function subscribeToTasksForRecord(
     where("recordId", "==", recordId),
     orderBy("createdAt", "desc"),
   );
-  return onSnapshot(q, (snap) => {
-    const tasks = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as Task)
-      .filter((t) => !t.isDeleted);
-    cb(tasks);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const tasks = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Task)
+        .filter((t) => !t.isDeleted);
+      cb(tasks);
+    },
+    (err) => {
+      handleFirestoreError(err, "subscribeToTasksForRecord");
+      cb([]);
+    }
+  );
 }
 
 export interface CreateTaskInput {

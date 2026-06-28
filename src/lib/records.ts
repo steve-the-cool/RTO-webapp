@@ -102,6 +102,7 @@ export const SERVICE_ROUTE_MAP: Record<string, ServiceType> = {
   license: "License New",
   "license-new": "License New",
   "license-renew": "License Renew",
+  "license-renewal": "License Renew",
   "rc-transfer": "RC Transfer",
   "hp-addition": "HP Addition",
   "hp-termination": "HP Termination",

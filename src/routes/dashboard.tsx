@@ -111,18 +111,6 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    heading: "FINANCIAL",
-    items: [
-      { to: "/dashboard/finance/dashboard", label: "Finance Dashboard", icon: LayoutDashboard },
-      { to: "/dashboard/finance/collections", label: "Collections", icon: DollarSign },
-      { to: "/dashboard/finance/outstanding", label: "Outstanding Payments", icon: DollarSign },
-      { to: "/dashboard/finance/payments", label: "Payment Entries", icon: Receipt },
-      { to: "/dashboard/finance/calendar", label: "Collection Calendar", icon: Receipt },
-      { to: "/dashboard/finance/ledger", label: "Accounts Ledger", icon: LineChart },
-      { to: "/dashboard/finance/reports", label: "Finance Reports", icon: BarChart3 },
-    ],
-  },
-  {
     heading: "System",
     items: [{ to: "/dashboard/settings", label: "Settings", icon: SettingsIcon }],
   },

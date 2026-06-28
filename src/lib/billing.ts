@@ -17,6 +17,14 @@ import {
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { logClientActivity } from "./activity";
 import type { RegistryRecord } from "./records";
+import { toast } from "sonner";
+
+export function handleFirestoreError(err: any, context: string) {
+  console.error(`[Firestore Error: ${context}]`, err);
+  if (err && (err.code === "failed-precondition" || err.message?.includes("index"))) {
+    toast.error("Database index is being prepared. Please try again shortly.");
+  }
+}
 
 export type InvoiceServiceItem = {
   serviceId: string;
@@ -464,7 +472,7 @@ export function subscribeToClientInvoices(
       callback(invoices);
     },
     (error) => {
-      console.error("[subscribeToClientInvoices]", error);
+      handleFirestoreError(error, "subscribeToClientInvoices");
       callback([]);
     },
   );
@@ -478,7 +486,7 @@ export function subscribeToAllInvoices(callback: (invoices: Invoice[]) => void) 
       callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Invoice) }) as Invoice));
     },
     (error) => {
-      console.error("[subscribeToAllInvoices]", error);
+      handleFirestoreError(error, "subscribeToAllInvoices");
       callback([]);
     },
   );
@@ -607,7 +615,7 @@ export function subscribeToInvoicePayments(
       );
     },
     (error) => {
-      console.error("[subscribeToInvoicePayments]", error);
+      handleFirestoreError(error, "subscribeToInvoicePayments");
       callback([]);
     },
   );

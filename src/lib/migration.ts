@@ -43,17 +43,21 @@ export async function migrateExistingRecords(): Promise<
       const record = docSnap.data() as RegistryRecord;
       processed++;
 
-      // Skip if already has serviceType
-      if (record.serviceType && record.serviceType.trim()) {
+      // Skip if already has valid serviceType
+      const isValid = record.serviceType && record.serviceType.trim() && SERVICE_TYPES.includes(record.serviceType as any);
+      if (isValid) {
         console.log(
-          `[MIGRATION] ${bucket}/${record.id}: Already has serviceType="${record.serviceType}", skipping`,
+          `[MIGRATION] ${bucket}/${record.id}: Already has valid serviceType="${record.serviceType}", skipping`,
         );
         continue;
       }
 
       try {
-        // Infer serviceType from work/application description
-        const inferredType = inferServiceTypeFromWork(record.work, record.application);
+        // Try normalizing first, then fall back to inference
+        let inferredType = normalizeServiceType(record.serviceType);
+        if (!inferredType) {
+          inferredType = inferServiceTypeFromWork(record.work, record.application) as any;
+        }
 
         if (!inferredType) {
           console.warn(
@@ -103,16 +107,16 @@ function inferServiceTypeFromWork(work?: string, application?: string): string |
 
   // Map of keywords to service types
   const patterns: Array<[string[], string]> = [
-    (["insurance", "policy"], "Insurance"),
-    (["fitness", "emission", "fitness test"], "Fitness"),
-    (["gujarat permit"], "Gujarat Permit"),
-    (["national permit"], "National Permit"),
-    (["tax"], "Tax"),
-    (["puc", "pollution"], "PUC"),
+    [["insurance", "policy"], "Insurance"],
+    [["fitness", "emission", "fitness test"], "Fitness"],
+    [["gujarat permit"], "Gujarat Permit"],
+    [["national permit"], "National Permit"],
+    [["tax"], "Tax"],
+    [["puc", "pollution"], "PUC"],
     // License handled below to distinguish New vs Renew
-    (["rc transfer", "ownership transfer", "transfer"], "RC Transfer"),
-    (["hp addition", "hp add"], "HP Addition"),
-    (["hp termination", "hp term"], "HP Termination"),
+    [["rc transfer", "ownership transfer", "transfer"], "RC Transfer"],
+    [["hp addition", "hp add"], "HP Addition"],
+    [["hp termination", "hp term"], "HP Termination"],
   ];
 
   for (const [keywords, serviceType] of patterns) {
@@ -186,8 +190,9 @@ export async function getUnmigratedRecords(): Promise<
     for (const docSnap of snap.docs) {
       const record = docSnap.data() as RegistryRecord;
 
-      // If serviceType is missing or empty, it needs migration
-      if (!record.serviceType || !record.serviceType.trim()) {
+      // If serviceType is missing, empty, or invalid, it needs migration
+      const isValid = record.serviceType && record.serviceType.trim() && SERVICE_TYPES.includes(record.serviceType as any);
+      if (!isValid) {
         unmigrated.push({
           bucket,
           id: docSnap.id,
@@ -235,7 +240,8 @@ export async function getMigrationStatus(): Promise<{
       const record = docSnap.data() as RegistryRecord;
       totalRecords++;
 
-      if (record.serviceType && record.serviceType.trim()) {
+      const isValid = record.serviceType && record.serviceType.trim() && SERVICE_TYPES.includes(record.serviceType as any);
+      if (isValid) {
         migratedRecords++;
       } else {
         unmigratedDetails.push({

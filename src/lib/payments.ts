@@ -1,6 +1,15 @@
 import { collection, addDoc, query, where, onSnapshot, getDocs, orderBy } from "firebase/firestore";
 import { db } from "./firebase";
 import { logClientActivity } from "./activity";
+import { toast } from "sonner";
+
+export function handleFirestoreError(err: any, context: string) {
+  console.error(`[Firestore Error: ${context}]`, err);
+  if (err && (err.code === "failed-precondition" || err.message?.includes("index"))) {
+    toast.error("Database index is being prepared. Please try again shortly.");
+  }
+}
+
 
 export type PaymentMode = "Cash" | "UPI" | "Bank Transfer" | "Cheque" | "Online Payment";
 export type AccountType = "Main Account" | "Current Account" | "Cash Account" | "Other Accounts";
@@ -69,7 +78,7 @@ export function subscribeToClientPayments(
       cb(items);
     },
     (err) => {
-      console.error("[subscribeToClientPayments]", err);
+      handleFirestoreError(err, "subscribeToClientPayments");
       cb([]);
     },
   );
@@ -84,7 +93,7 @@ export function subscribeToAllPayments(cb: (payments: ClientPayment[]) => void) 
       cb(items);
     },
     (err) => {
-      console.error("[subscribeToAllPayments]", err);
+      handleFirestoreError(err, "subscribeToAllPayments");
       cb([]);
     },
   );

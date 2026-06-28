@@ -16,6 +16,14 @@ import {
 } from "firebase/firestore";
 import { verifyAdminPin } from "./adminSecurity";
 import { subscribeToAllInvoices } from "./billing";
+import { toast } from "sonner";
+
+export function handleFirestoreError(err: any, context: string) {
+  console.error(`[Firestore Error: ${context}]`, err);
+  if (err && (err.code === "failed-precondition" || err.message?.includes("index"))) {
+    toast.error("Database index is being prepared. Please try again shortly.");
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,7 +179,7 @@ export function subscribeFinanceRecords(cb: (records: FinanceRecord[]) => void) 
       });
       cb(list);
     },
-    (err) => console.error("[subscribeFinanceRecords]", err),
+    (err) => handleFirestoreError(err, "subscribeFinanceRecords"),
   );
 }
 
@@ -367,17 +375,24 @@ export async function recordLedgerEntry(entry: Omit<LedgerEntry, "balance">) {
   // To compute the running balance, we query all ledger entries for this account
   const col = collection(db, LEDGER_COL);
   const q = query(col, where("account", "==", entry.account), orderBy("timestamp", "asc"));
-  const snap = await getDocs(q);
-
+  
   let currentBalance = 0;
-  snap.forEach((d) => {
-    const data = d.data() as LedgerEntry;
-    if (data.type === "Debit") {
-      currentBalance += data.amount;
-    } else {
-      currentBalance -= data.amount;
+  try {
+    const snap = await getDocs(q);
+    snap.forEach((d) => {
+      const data = d.data() as LedgerEntry;
+      if (data.type === "Debit") {
+        currentBalance += data.amount;
+      } else {
+        currentBalance -= data.amount;
+      }
+    });
+  } catch (err: any) {
+    console.warn("[recordLedgerEntry] Index query failed, falling back to 0 baseline balance:", err);
+    if (err && (err.code === "failed-precondition" || err.message?.includes("index"))) {
+      toast.error("Database index is being prepared. Ledger running balance may temporarily default to 0.");
     }
-  });
+  }
 
   // Apply this transaction
   if (entry.type === "Debit") {
@@ -402,7 +417,7 @@ export function subscribeLedgerEntries(cb: (entries: LedgerEntry[]) => void) {
       });
       cb(list);
     },
-    (err) => console.error("[subscribeLedgerEntries]", err),
+    (err) => handleFirestoreError(err, "subscribeLedgerEntries"),
   );
 }
 
@@ -418,7 +433,7 @@ export function subscribePaymentHistory(cb: (payments: PaymentHistoryItem[]) => 
       });
       cb(list);
     },
-    (err) => console.error("[subscribePaymentHistory]", err),
+    (err) => handleFirestoreError(err, "subscribePaymentHistory"),
   );
 }
 
@@ -494,7 +509,7 @@ export function subscribeAuditLogs(cb: (logs: FinanceAuditLog[]) => void) {
       });
       cb(list);
     },
-    (err) => console.error("[subscribeAuditLogs]", err),
+    (err) => handleFirestoreError(err, "subscribeAuditLogs"),
   );
 }
 
