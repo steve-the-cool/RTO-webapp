@@ -81,7 +81,8 @@ function EmployeesPage() {
 
   // Modals
   const [showAdd, setShowAdd] = useState(false);
-  const [viewEmployee, setViewEmployee] = useState<UserRecord | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<UserRecord | null>(null);
+  const [viewEmployeeOpen, setViewEmployeeOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [editEmployee, setEditEmployee] = useState<UserRecord | null>(null);
   const [showSuccessCredentials, setShowSuccessCredentials] = useState<{
@@ -92,10 +93,10 @@ function EmployeesPage() {
   } | null>(null);
 
   useEffect(() => {
-    if (!viewEmployee) {
+    if (!selectedEmployee) {
       setShowPassword(false);
     }
-  }, [viewEmployee]);
+  }, [selectedEmployee]);
   
   // Delete PIN verification
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -196,6 +197,27 @@ function EmployeesPage() {
     e.preventDefault();
     if (!addForm.fullName.trim()) return toast.error("Full name is required");
 
+    // Validate email before submitting
+    const email = addForm.email.trim();
+    if (!email) {
+      toast.error("Email is required");
+      return;
+    }
+    if (!email.includes("@")) {
+      toast.error("Invalid email.");
+      return;
+    }
+    const domain = email.split("@")[1];
+    if (!domain || !domain.includes(".")) {
+      toast.error("Invalid email.");
+      return;
+    }
+    const domainParts = domain.split(".");
+    if (domainParts.length < 2 || domainParts.some((part) => !part.trim())) {
+      toast.error("Invalid email.");
+      return;
+    }
+
     try {
       const credentials = await createEmployee(addForm);
       setShowAdd(false);
@@ -217,6 +239,8 @@ function EmployeesPage() {
       });
       toast.success("Employee created successfully!");
     } catch (err: any) {
+      // 6. Log complete error to console
+      console.error("Employee creation failed:", err);
       toast.error(err.message || "Failed to create employee");
     }
   };
@@ -461,7 +485,11 @@ function EmployeesPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setViewEmployee(e)}
+                          onClick={() => {
+                            console.log("Viewing employee", e);
+                            setSelectedEmployee(e);
+                            setViewEmployeeOpen(true);
+                          }}
                           title="View Profile"
                         >
                           <Eye className="size-4 text-sky-600" />
@@ -717,86 +745,74 @@ function EmployeesPage() {
       </Dialog>
 
       {/* View Employee Dialog */}
-      <Dialog open={!!viewEmployee} onOpenChange={() => setViewEmployee(null)}>
+      <Dialog open={viewEmployeeOpen} onOpenChange={setViewEmployeeOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Employee Profile Details</DialogTitle>
           </DialogHeader>
-          {viewEmployee && (
+          {selectedEmployee && (
             <div className="space-y-4">
               <div className="flex items-center gap-4 p-3 bg-muted/40 rounded-xl">
                 <div className="size-12 rounded-full bg-primary/20 flex items-center justify-center font-bold text-lg text-primary">
-                  {viewEmployee.fullName.slice(0, 2).toUpperCase()}
+                  {(selectedEmployee.fullName || selectedEmployee.name || "EE").slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h4 className="font-semibold text-lg">{viewEmployee.fullName}</h4>
-                  <p className="text-xs text-muted-foreground">ID: {viewEmployee.employeeId}</p>
+                  <h4 className="font-semibold text-lg">{selectedEmployee.fullName ?? selectedEmployee.name ?? "N/A"}</h4>
+                  <p className="text-xs text-muted-foreground">ID: {selectedEmployee.employeeId ?? "N/A"}</p>
                 </div>
               </div>
 
               <div className="space-y-2.5 text-sm">
                 <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Employee ID</span>
+                  <span className="font-semibold">{selectedEmployee.employeeId ?? "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Name</span>
+                  <span className="font-medium">{selectedEmployee.fullName ?? selectedEmployee.name ?? "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b py-1">
                   <span className="text-muted-foreground">Username</span>
-                  <span className="font-mono font-medium">{viewEmployee.username}</span>
-                </div>
-                <div className="flex justify-between border-b py-1 items-center">
-                  <span className="text-muted-foreground">Password</span>
-                  <div className="flex items-center gap-1">
-                    <span className="font-mono font-medium">
-                      {showPassword ? viewEmployee.password || "—" : "••••••••"}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 h-7 w-7"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Role</span>
-                  <span className="capitalize font-medium">{viewEmployee.role}</span>
-                </div>
-                <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Status</span>
-                  <Badge variant={viewEmployee.status === "active" ? "outline" : "destructive"} className={viewEmployee.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800" : ""}>
-                    {viewEmployee.status === "active" ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Department</span>
-                  <span className="font-medium">{viewEmployee.department || "—"}</span>
-                </div>
-                <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Designation</span>
-                  <span className="font-medium">{viewEmployee.designation || "—"}</span>
-                </div>
-                <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Mobile</span>
-                  <span className="font-medium">{viewEmployee.mobile || "—"}</span>
+                  <span className="font-mono font-medium">{selectedEmployee.username ?? "N/A"}</span>
                 </div>
                 <div className="flex justify-between border-b py-1">
                   <span className="text-muted-foreground">Email</span>
-                  <span className="font-medium">{viewEmployee.email || "—"}</span>
+                  <span className="font-medium">{selectedEmployee.email ?? "N/A"}</span>
                 </div>
                 <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Joining Date</span>
+                  <span className="text-muted-foreground">Mobile</span>
+                  <span className="font-medium">{selectedEmployee.mobile ?? "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Department</span>
+                  <span className="font-medium">{selectedEmployee.department ?? "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Designation</span>
+                  <span className="font-medium">{selectedEmployee.designation ?? "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Role</span>
+                  <span className="capitalize font-medium">{selectedEmployee.role ?? "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Status</span>
+                  <Badge variant={selectedEmployee.status === "active" ? "outline" : "destructive"} className={selectedEmployee.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800" : ""}>
+                    {selectedEmployee.status ?? "N/A"}
+                  </Badge>
+                </div>
+                <div className="flex justify-between border-b py-1">
+                  <span className="text-muted-foreground">Join Date</span>
                   <span className="font-medium">
-                    {viewEmployee.createdAt
-                      ? new Date(viewEmployee.createdAt).toLocaleDateString()
-                      : "—"}
+                    {selectedEmployee.createdAt
+                      ? new Date(selectedEmployee.createdAt).toLocaleDateString()
+                      : "N/A"}
                   </span>
-                </div>
-                <div className="flex justify-between border-b py-1">
-                  <span className="text-muted-foreground">Last Login</span>
-                  <span className="font-medium">{viewEmployee.lastLogin ? new Date(viewEmployee.lastLogin).toLocaleString() : "—"}</span>
                 </div>
               </div>
 
               <DialogFooter className="pt-2">
-                <Button onClick={() => setViewEmployee(null)}>Close</Button>
+                <Button onClick={() => setViewEmployeeOpen(false)}>Close</Button>
               </DialogFooter>
             </div>
           )}

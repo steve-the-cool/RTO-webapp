@@ -339,6 +339,33 @@ function AccountingDashboardPage() {
     });
   }, [paymentEntries, invoicesMap, financeRecords, clientDetailsMap, searchTerm, filterEmployee, filterService, filterMethod, filterStartDate, filterEndDate]);
 
+  const flattenedPayments = useMemo(() => {
+    const list: any[] = [];
+    filteredPayments.forEach((p) => {
+      if (p.allocations && p.allocations.length > 0) {
+        p.allocations.forEach((alloc) => {
+          list.push({
+            ...p,
+            uniqueKey: `${p.id}-${alloc.invoiceId}`,
+            invoiceId: alloc.invoiceId,
+            invoiceNumber: alloc.invoiceNumber,
+            allocatedAmount: alloc.allocatedAmount,
+          });
+        });
+      } else {
+        // Direct non-invoiced payment or legacy payment without allocations array
+        list.push({
+          ...p,
+          uniqueKey: p.id,
+          invoiceId: p.invoiceId || "non-invoiced",
+          invoiceNumber: p.invoiceId === "non-invoiced" ? "Non-Invoiced (Direct)" : `#${p.invoiceId?.slice(-6).toUpperCase()}`,
+          allocatedAmount: p.amount,
+        });
+      }
+    });
+    return list;
+  }, [filteredPayments]);
+
   const filteredClientSummaries = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return clientSummaries.filter((s) => {
@@ -537,39 +564,73 @@ function AccountingDashboardPage() {
     }
 
     try {
-      if (paymentToDelete.invoiceId === "non-invoiced") {
-        // Delete direct payment
-        await deleteDoc(doc(db, "payment_history", paymentToDelete.id!));
-        toast.success("Direct payment deleted successfully!");
-      } else {
-        const paymentRef = doc(db, "payment_history", paymentToDelete.id!);
+      const batch = writeBatch(db);
+
+      // Revert allocations
+      if (paymentToDelete.allocations && paymentToDelete.allocations.length > 0) {
+        for (const alloc of paymentToDelete.allocations) {
+          const financeRef = doc(db, "finance_records", alloc.invoiceId);
+          const invoiceRef = doc(db, "billing_invoices", alloc.invoiceId);
+
+          const fSnap = await getDoc(financeRef);
+          if (!fSnap.exists()) continue;
+          const fData = fSnap.data() as FinanceRecord;
+
+          const newReceived = Math.max(0, fData.receivedAmount - alloc.allocatedAmount);
+          const newBalance = fData.invoiceAmount - newReceived;
+          const newStatus = newBalance === 0 ? "Paid" : newReceived > 0 ? "Partially Paid" : "Pending";
+
+          batch.update(financeRef, {
+            receivedAmount: newReceived,
+            balanceAmount: newBalance,
+            paymentStatus: newStatus,
+            updatedAt: new Date().toISOString(),
+          });
+
+          batch.update(invoiceRef, {
+            status: newStatus,
+            totalPaid: newReceived,
+          });
+        }
+      } else if (paymentToDelete.invoiceId !== "non-invoiced") {
+        // Fallback for legacy payments without allocations array
         const financeRef = doc(db, "finance_records", paymentToDelete.financeRecordId);
         const invoiceRef = doc(db, "billing_invoices", paymentToDelete.invoiceId);
 
         const fSnap = await getDoc(financeRef);
-        if (!fSnap.exists()) throw new Error("Finance record not found");
-        const fData = fSnap.data() as FinanceRecord;
+        if (fSnap.exists()) {
+          const fData = fSnap.data() as FinanceRecord;
+          const newReceived = Math.max(0, fData.receivedAmount - paymentToDelete.amount);
+          const newBalance = fData.invoiceAmount - newReceived;
+          const newStatus = newBalance === 0 ? "Paid" : newReceived > 0 ? "Partially Paid" : "Pending";
 
-        const newReceived = Math.max(0, fData.receivedAmount - paymentToDelete.amount);
-        const newBalance = fData.invoiceAmount - newReceived;
-        const newStatus = newBalance === 0 ? "Paid" : newReceived > 0 ? "Partially Paid" : "Pending";
+          batch.update(financeRef, {
+            receivedAmount: newReceived,
+            balanceAmount: newBalance,
+            paymentStatus: newStatus,
+            updatedAt: new Date().toISOString(),
+          });
 
-        const batch = writeBatch(db);
-        batch.delete(paymentRef);
-        batch.update(financeRef, {
-          receivedAmount: newReceived,
-          balanceAmount: newBalance,
-          paymentStatus: newStatus,
-          updatedAt: new Date().toISOString(),
-        });
-        batch.update(invoiceRef, {
-          status: newStatus,
-          totalPaid: newReceived,
-        });
-
-        await batch.commit();
-        toast.success("Payment deleted successfully!");
+          batch.update(invoiceRef, {
+            status: newStatus,
+            totalPaid: newReceived,
+          });
+        }
       }
+
+      // Delete payment record
+      batch.delete(doc(db, "payment_history", paymentToDelete.id!));
+
+      // Clean up ledger entries
+      const ledgerSnap = await getDocs(
+        query(collection(db, "accounts_ledger"), where("referenceId", "==", paymentToDelete.id!))
+      );
+      ledgerSnap.forEach((d) => {
+        batch.delete(d.ref);
+      });
+
+      await batch.commit();
+      toast.success("Payment deleted successfully!");
       setPinDialogOpen(false);
       setAdminPin("");
       setPaymentToDelete(null);
@@ -1184,7 +1245,7 @@ function AccountingDashboardPage() {
                 <div className="flex items-center justify-center h-48">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
-              ) : filteredPayments.length === 0 ? (
+              ) : flattenedPayments.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground text-sm">
                   No payment history found.
                 </div>
@@ -1194,10 +1255,11 @@ function AccountingDashboardPage() {
                     <thead>
                       <tr className="border-b bg-slate-50 uppercase text-[9px] font-bold text-muted-foreground">
                         <th className="p-3">Payment Date</th>
+                        <th className="p-3">Payment ID</th>
                         <th className="p-3">Client</th>
                         <th className="p-3">Invoice Number</th>
                         <th className="p-3">Service</th>
-                        <th className="p-3 text-right">Amount</th>
+                        <th className="p-3 text-right">Allocated Amount</th>
                         <th className="p-3">Method</th>
                         <th className="p-3">Received In Account</th>
                         <th className="p-3">Received By</th>
@@ -1206,19 +1268,20 @@ function AccountingDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y text-gray-700">
-                      {filteredPayments.map((p) => {
+                      {flattenedPayments.map((p) => {
                         const inv = invoicesMap.get(p.invoiceId);
                         const r = financeRecords.find((rec) => rec.invoiceId === p.invoiceId);
                         const serviceNames = inv?.services?.map((s) => s.serviceName).join(", ") || "—";
                         const clientName = r?.clientName || p.clientName || "—";
 
                         return (
-                          <tr key={p.id} className="hover:bg-slate-50 transition">
+                          <tr key={p.uniqueKey} className="hover:bg-slate-50 transition">
                             <td className="p-3 font-mono">{p.receivedAt?.slice(0, 10) || "—"}</td>
+                            <td className="p-3 font-semibold text-indigo-600 font-mono">{p.paymentId || "PAY-Legacy"}</td>
                             <td className="p-3 font-semibold text-gray-900">
                               <button
                                 onClick={() => {
-                                  const cId = r?.clientId || (p as any).clientId;
+                                  const cId = r?.clientId || p.clientId;
                                   if (cId) {
                                     setLedgerClientId(cId);
                                     setShowLedgerModal(true);
@@ -1233,11 +1296,11 @@ function AccountingDashboardPage() {
                               {p.invoiceId === "non-invoiced" ? (
                                 <span className="text-slate-500 font-semibold italic">Non-Invoiced (Direct)</span>
                               ) : (
-                                `#${p.invoiceId?.slice(-6).toUpperCase()}`
+                                p.invoiceNumber || `#${p.invoiceId?.slice(-6).toUpperCase()}`
                               )}
                             </td>
                             <td className="p-3 max-w-[150px] truncate" title={serviceNames}>{serviceNames}</td>
-                            <td className="p-3 text-right font-mono font-bold text-emerald-600">₹{p.amount.toLocaleString("en-IN")}</td>
+                            <td className="p-3 text-right font-mono font-bold text-emerald-600">₹{p.allocatedAmount.toLocaleString("en-IN")}</td>
                             <td className="p-3">
                               <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-800">
                                 {p.method}
@@ -1618,98 +1681,92 @@ function AccountingDashboardPage() {
                       <div className="space-y-4">
                         {clientInvoices.map((rec) => {
                           const inv = invoicesMap.get(rec.invoiceId);
-                          const history = paymentEntries.filter((p) => p.invoiceId === rec.invoiceId);
-                          const serviceNames = inv?.services?.map((s) => s.serviceName).join(", ") || "—";
+                          const history = paymentEntries
+                             .filter((p) => p.invoiceId === rec.invoiceId || p.allocations?.some(alloc => alloc.invoiceId === rec.invoiceId))
+                             .map((p) => {
+                               const alloc = p.allocations?.find(a => a.invoiceId === rec.invoiceId);
+                               const allocatedAmt = alloc ? alloc.allocatedAmount : p.amount;
+                               return {
+                                 ...p,
+                                 allocatedAmount: allocatedAmt,
+                               };
+                             });
+                           const serviceNames = inv?.services?.map((s) => s.serviceName).join(", ") || "—";
 
-                          return (
-                            <div key={rec.id} className="border rounded-xl p-4 space-y-3 bg-white hover:shadow-sm transition">
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-2">
-                                <div className="space-y-0.5">
-                                  <h4 className="font-bold text-slate-800">{rec.invoiceNumber}</h4>
-                                  <p className="text-xs text-slate-500">Service: {serviceNames} | Date: {rec.createdAt?.slice(0, 10)}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                                    rec.paymentStatus === "Paid" ? "bg-green-100 text-green-800" :
-                                    rec.paymentStatus === "Partially Paid" ? "bg-amber-100 text-amber-800" : "bg-orange-100 text-orange-800"
-                                  }`}>
-                                    {rec.paymentStatus}
-                                  </span>
-                                  {inv && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setSelectedInvoice(inv)}
-                                        className="h-7 text-xs gap-1"
-                                      >
-                                        <ExternalLink className="size-3" /> View PDF
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => generateInvoicePDF(inv)}
-                                        className="h-7 text-xs gap-1"
-                                      >
-                                        <Download className="size-3" /> Download PDF
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
+                           return (
+                             <div key={rec.id} className="border rounded-xl p-4 space-y-3 bg-white hover:shadow-sm transition">
+                               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-2">
+                                 <div className="space-y-0.5">
+                                   <h4 className="font-bold text-slate-800">{rec.invoiceNumber}</h4>
+                                   <p className="text-xs text-slate-500">Service: {serviceNames} | Date: {rec.createdAt?.slice(0, 10)}</p>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                   <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                     rec.paymentStatus === "Paid" ? "bg-green-100 text-green-800" :
+                                     rec.paymentStatus === "Partially Paid" ? "bg-amber-100 text-amber-800" : "bg-orange-100 text-orange-800"
+                                   }`}>
+                                     {rec.paymentStatus}
+                                   </span>
+                                   {inv && (
+                                     <>
+                                       <Button
+                                         size="sm"
+                                         variant="outline"
+                                         onClick={() => setSelectedInvoice(inv)}
+                                         className="h-7 text-xs gap-1"
+                                       >
+                                         <ExternalLink className="size-3" /> View PDF
+                                       </Button>
+                                       <Button
+                                         size="sm"
+                                         variant="outline"
+                                         onClick={() => generateInvoicePDF(inv)}
+                                         className="h-7 text-xs gap-1"
+                                       >
+                                         <Download className="size-3" /> Download PDF
+                                       </Button>
+                                     </>
+                                   )}
+                                 </div>
+                               </div>
 
-                              {/* Invoice Financial details */}
-                              <div className="grid grid-cols-3 gap-2 text-center text-xs p-2 rounded bg-slate-50">
-                                <div>
-                                  <span className="text-[10px] text-slate-400 font-bold block">Invoice Amount</span>
-                                  <span className="font-bold text-slate-700">₹{rec.invoiceAmount.toLocaleString()}</span>
+                               {/* Invoice Financial details */}
+                               <div className="grid grid-cols-3 gap-2 text-center text-xs p-2 rounded bg-slate-50">
+                                 <div>
+                                   <span className="text-[10px] text-slate-400 font-bold block">Invoice Amount</span>
+                                   <span className="font-bold text-slate-700">₹{rec.invoiceAmount.toLocaleString()}</span>
+                                 </div>
+                                 <div>
+                                   <span className="text-[10px] text-slate-400 font-bold block">Total Received</span>
+                                   <span className="font-bold text-emerald-600">₹{rec.receivedAmount.toLocaleString()}</span>
+                                 </div>
+                                 <div>
+                                   <span className="text-[10px] text-slate-400 font-bold block">Balance</span>
+                                   <span className="font-bold text-rose-600">₹{rec.balanceAmount.toLocaleString()}</span>
+                                 </div>
                                 </div>
-                                <div>
-                                  <span className="text-[10px] text-slate-400 font-bold block">Total Received</span>
-                                  <span className="font-bold text-emerald-600">₹{rec.receivedAmount.toLocaleString()}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[10px] text-slate-400 font-bold block">Balance</span>
-                                  <span className="font-bold text-rose-600">₹{rec.balanceAmount.toLocaleString()}</span>
-                                </div>
-                              </div>
 
-                              {/* Payment History under Invoice */}
-                              <div className="space-y-1">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Payment History</span>
-                                {history.length === 0 ? (
-                                  <p className="text-[11px] text-muted-foreground italic">No payments recorded for this invoice.</p>
-                                ) : (
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-[11px]">
-                                      <thead>
-                                        <tr className="text-slate-400 border-b">
-                                          <th className="py-1">Payment Date</th>
-                                          <th className="py-1 text-right">Amount</th>
-                                          <th className="py-1">Method</th>
-                                          <th className="py-1">Account</th>
-                                          <th className="py-1">Received By</th>
-                                          <th className="py-1">Remarks</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {history.map((p) => (
-                                          <tr key={p.id} className="border-b last:border-0 hover:bg-slate-50/50">
-                                            <td className="py-1.5 font-mono">{p.receivedAt?.slice(0, 10)}</td>
-                                            <td className="py-1.5 text-right font-bold text-emerald-600">₹{p.amount.toLocaleString()}</td>
-                                            <td className="py-1.5">{p.method}</td>
-                                            <td className="py-1.5">{p.accountName}</td>
-                                            <td className="py-1.5 text-slate-600">{p.receivedBy}</td>
-                                            <td className="py-1.5 italic text-slate-500 max-w-[150px] truncate" title={p.remarks}>{p.remarks || "—"}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
+                               {/* Allocated Payments */}
+                               <div className="space-y-1.5 mt-2">
+                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Allocated Payments</span>
+                                 {history.length === 0 ? (
+                                   <p className="text-[11px] text-muted-foreground italic">No allocated payments.</p>
+                                 ) : (
+                                   <div className="space-y-1">
+                                     {history.map((p) => (
+                                       <div key={p.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 border rounded font-mono">
+                                         <div className="flex gap-2">
+                                           <span className="font-bold text-indigo-600">{p.paymentId || "PAY-Legacy"}</span>
+                                           <span className="text-slate-500">{p.receivedAt?.slice(0, 10)}</span>
+                                         </div>
+                                         <span className="font-bold text-emerald-600">₹{p.allocatedAmount.toLocaleString("en-IN")}</span>
+                                       </div>
+                                     ))}
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
+                           );
                         })}
                       </div>
                     )}

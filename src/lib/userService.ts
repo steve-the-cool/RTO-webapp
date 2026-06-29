@@ -143,17 +143,52 @@ export async function createEmployee(input: {
   const tempPassword = `${employeeId}123`;
   const actor = getSession()?.username || 'system';
 
-  // Validate password length is 6+ characters before sending to Firebase
-  if (tempPassword.length < 6) {
-    throw new Error('Generated password is less than 6 characters.');
+  // 1. Validate password before creating user
+  if (!tempPassword || tempPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
   }
 
-  // 1. Create in Firebase Auth using Secondary Auth instance
+  // 2. Validate email
+  const emailStr = (input.email || '').trim();
+  if (!emailStr) {
+    throw new Error('Email is required');
+  }
+  if (!emailStr.includes('@')) {
+    throw new Error('Invalid email.');
+  }
+  const domain = emailStr.split('@')[1];
+  if (!domain || !domain.includes('.')) {
+    throw new Error('Invalid email.');
+  }
+  const domainParts = domain.split('.');
+  if (domainParts.length < 2 || domainParts.some(part => !part.trim())) {
+    throw new Error('Invalid email.');
+  }
+
+  // 3. Create in Firebase Auth using Secondary Auth instance
   const secAuth = getSecondaryAuth();
-  const cred = await secondaryCreate(secAuth, toEmail(username), tempPassword);
+  let cred;
+  try {
+    cred = await secondaryCreate(secAuth, toEmail(username), tempPassword);
+  } catch (error: any) {
+    // 6. Log complete Firebase error to console
+    console.error("Firebase auth error during employee creation:", error);
+    if (error && error.code) {
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error('Email already exists.');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('Invalid email.');
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error('Password must be at least 6 characters.');
+      } else if (error.code === 'auth/network-request-failed') {
+        throw new Error('Network error. Please try again.');
+      }
+    }
+    throw error;
+  }
   await secondarySignOut(secAuth);
 
-  // 2. Save in Firestore users collection
+  // 4. Save in Firestore users collection
   const now = new Date().toISOString();
   const userRecord: UserRecord & { name: string; createdDate: string } = {
     uid: cred.user.uid,
@@ -161,7 +196,7 @@ export async function createEmployee(input: {
     fullName: input.fullName,
     name: input.fullName,
     username,
-    email: input.email || '',
+    email: emailStr,
     mobile: input.mobile || '',
     department: input.department || '',
     designation: input.designation || '',

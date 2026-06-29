@@ -65,6 +65,30 @@ export interface PaymentHistoryItem {
   clientId?: string;
   clientName?: string;
   paymentDate?: string;
+  paymentId?: string;
+  allocations?: {
+    invoiceId: string;
+    invoiceNumber: string;
+    allocatedAmount: number;
+  }[];
+}
+
+/** Generate sequential Payment ID (e.g. PAY-001, PAY-002, etc.) */
+export async function generatePaymentId(): Promise<string> {
+  const col = collection(db, PAYMENTS_COL);
+  const snap = await getDocs(col);
+  let maxNum = 0;
+  snap.forEach((d) => {
+    const data = d.data();
+    if (data.paymentId && data.paymentId.startsWith('PAY-')) {
+      const numPart = parseInt(data.paymentId.replace('PAY-', ''), 10);
+      if (!isNaN(numPart) && numPart > maxNum) {
+        maxNum = numPart;
+      }
+    }
+  });
+  const nextNum = maxNum + 1;
+  return `PAY-${String(nextNum).padStart(3, '0')}`;
 }
 
 export interface LedgerEntry {
@@ -285,7 +309,7 @@ export async function approveRecordBhaylubha(
 
 export async function recordPaymentEntry(
   recordId: string,
-  payment: Omit<PaymentHistoryItem, "financeRecordId" | "invoiceId" | "receivedAt">,
+  payment: Omit<PaymentHistoryItem, "financeRecordId" | "invoiceId" | "receivedAt"> & { paymentDate: string },
 ) {
   const ref = doc(db, FINANCE_COL, recordId);
   const snap = await getDoc(ref);
@@ -318,18 +342,31 @@ export async function recordPaymentEntry(
     newBalance === 0 ? "Paid" : newReceived > 0 ? "Partially Paid" : "Pending";
 
   const timestamp = payment.paymentDate ? new Date(payment.paymentDate).toISOString() : new Date().toISOString();
+  const payId = await generatePaymentId();
 
   // Create payment history doc
   const payCol = collection(db, PAYMENTS_COL);
-  const payDocRef = await addDoc(payCol, {
+  const payDocRef = doc(payCol);
+  
+  const detailedAllocations = [{
+    invoiceId: recordId,
+    invoiceNumber: data.invoiceNumber,
+    allocatedAmount: payment.amount,
+  }];
+
+  await setDoc(payDocRef, {
+    paymentId: payId,
+    clientId: data.clientId,
+    clientName: data.clientName,
     financeRecordId: recordId,
-    invoiceId: data.invoiceId,
+    invoiceId: recordId,
     amount: payment.amount,
     method: payment.method,
     receivedBy: payment.receivedBy,
     receivedAt: timestamp,
     accountName: payment.accountName,
     remarks: payment.remarks,
+    allocations: detailedAllocations,
   });
 
   // Update finance record
@@ -368,7 +405,7 @@ export async function recordPaymentEntry(
     "Payment Added",
     payment.receivedBy,
     recordId,
-    `Added payment of ₹${payment.amount} via ${payment.method} into ${payment.accountName}`,
+    `Added payment of ₹${payment.amount} via ${payment.method} into ${payment.accountName} (ID: ${payId})`,
   );
 }
 
@@ -381,6 +418,14 @@ export async function recordMultiInvoicePayment(
 ) {
   const batch = writeBatch(db);
   const timestamp = new Date(payment.paymentDate).toISOString();
+  const payId = await generatePaymentId();
+
+  // We will store the allocations details in a single payment history document
+  const payCol = collection(db, PAYMENTS_COL);
+  const payDocRef = doc(payCol);
+
+  // We need to fetch the invoice numbers for all allocations to store in the allocations array
+  const detailedAllocations: { invoiceId: string; invoiceNumber: string; allocatedAmount: number }[] = [];
 
   for (const alloc of allocations) {
     if (alloc.amount <= 0) continue;
@@ -392,24 +437,16 @@ export async function recordMultiInvoicePayment(
     if (!fSnap.exists()) continue;
     const fData = fSnap.data() as FinanceRecord;
 
+    detailedAllocations.push({
+      invoiceId: alloc.invoiceId,
+      invoiceNumber: fData.invoiceNumber,
+      allocatedAmount: alloc.amount,
+    });
+
     const newReceived = fData.receivedAmount + alloc.amount;
     const newBalance = fData.invoiceAmount - newReceived;
     const newStatus: FinanceRecord["paymentStatus"] =
       newBalance === 0 ? "Paid" : newReceived > 0 ? "Partially Paid" : "Pending";
-
-    // Create payment history doc
-    const payCol = collection(db, PAYMENTS_COL);
-    const payDocRef = doc(payCol);
-    batch.set(payDocRef, {
-      financeRecordId: alloc.invoiceId,
-      invoiceId: alloc.invoiceId,
-      amount: alloc.amount,
-      method: payment.method,
-      receivedBy: payment.receivedBy,
-      receivedAt: timestamp,
-      accountName: payment.accountName,
-      remarks: (payment.remarks || "") + ` (Allocated to ${fData.invoiceNumber})`,
-    });
 
     // Update finance record
     batch.update(financeRef, {
@@ -433,17 +470,31 @@ export async function recordMultiInvoicePayment(
     const ledgerCol = collection(db, LEDGER_COL);
     const ledgerDocRef = doc(ledgerCol);
     
-    // Calculate running balance logic inside batch isn't easily done synchronously,
-    // so we write the entry and let ledger queries sum them up.
     batch.set(ledgerDocRef, {
       timestamp,
       type: "Debit",
       amount: alloc.amount,
       account: payment.accountName,
       referenceId: payDocRef.id,
-      remarks: `Payment for Invoice ${fData.invoiceNumber}. Recv by ${payment.receivedBy}`,
+      remarks: `Payment allocation for Invoice ${fData.invoiceNumber}. Recv by ${payment.receivedBy}`,
     });
   }
+
+  // Save the single payment record
+  batch.set(payDocRef, {
+    paymentId: payId,
+    clientId,
+    clientName,
+    financeRecordId: allocations.length === 1 ? allocations[0].invoiceId : "multi",
+    invoiceId: allocations.length === 1 ? allocations[0].invoiceId : "multi",
+    amount: payment.amount,
+    method: payment.method,
+    receivedBy: payment.receivedBy,
+    receivedAt: timestamp,
+    accountName: payment.accountName,
+    remarks: payment.remarks || "Multi-invoice Payment Allocation",
+    allocations: detailedAllocations,
+  });
 
   await batch.commit();
 
@@ -451,7 +502,7 @@ export async function recordMultiInvoicePayment(
     "Payment Added",
     payment.receivedBy,
     clientId,
-    `Multi-invoice payment allocated. Total: ₹${allocations.reduce((sum, a) => sum + a.amount, 0)}`,
+    `Multi-invoice payment allocated. Total: ₹${payment.amount} (ID: ${payId})`,
   );
 }
 
@@ -462,11 +513,13 @@ export async function recordDirectPayment(
   payment: Omit<PaymentHistoryItem, "financeRecordId" | "invoiceId" | "receivedAt"> & { paymentDate: string },
 ) {
   const timestamp = new Date(payment.paymentDate).toISOString();
+  const payId = await generatePaymentId();
   
   const payCol = collection(db, PAYMENTS_COL);
   const payDocRef = doc(payCol);
   
   await setDoc(payDocRef, {
+    paymentId: payId,
     clientId,
     clientName,
     financeRecordId: "non-invoiced",
@@ -477,6 +530,7 @@ export async function recordDirectPayment(
     receivedAt: timestamp,
     accountName: payment.accountName,
     remarks: payment.remarks || "Direct Non-Invoiced Payment",
+    allocations: [],
   });
 
   // Create accounts ledger entry
@@ -493,7 +547,7 @@ export async function recordDirectPayment(
     "Payment Added",
     payment.receivedBy,
     "non-invoiced",
-    `Added direct payment of ₹${payment.amount} from ${clientName} via ${payment.method}`,
+    `Added direct payment of ₹${payment.amount} from ${clientName} via ${payment.method} (ID: ${payId})`,
   );
 }
 
@@ -601,11 +655,23 @@ export async function deleteInvoiceSecured(
   });
 
   // 2. Delete payment_history payments
-  const financePaymentsSnap = await getDocs(
-    query(collection(db, PAYMENTS_COL), where("invoiceId", "==", invoiceId)),
-  );
-  financePaymentsSnap.forEach((d) => {
-    batch.delete(d.ref);
+  const paymentsSnap2 = await getDocs(collection(db, PAYMENTS_COL));
+  paymentsSnap2.forEach((d) => {
+    const data = d.data();
+    if (data.invoiceId === invoiceId) {
+      batch.delete(d.ref);
+    } else if (data.allocations?.some((alloc: any) => alloc.invoiceId === invoiceId)) {
+      const updatedAllocations = data.allocations.filter((alloc: any) => alloc.invoiceId !== invoiceId);
+      const newAmount = updatedAllocations.reduce((sum: number, a: any) => sum + a.allocatedAmount, 0);
+      if (updatedAllocations.length === 0) {
+        batch.delete(d.ref);
+      } else {
+        batch.update(d.ref, {
+          amount: newAmount,
+          allocations: updatedAllocations
+        });
+      }
+    }
   });
 
   // 3. Delete finance record
